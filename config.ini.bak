@@ -1,0 +1,72 @@
+[API]
+api_key = 
+api_secret = 
+
+[ENGINE]
+scan_interval = 120
+signal_threshold = 0.5
+max_positions = 5
+timeframes = 15m,1h,4h,1d
+top_symbols = 100
+
+[RISK]
+risk_per_trade = 2.0
+max_leverage = 4
+profile = Aggressive
+use_day_profile = False
+kelly_enabled = True
+kelly_winrate = 0.6000000000000001
+kelly_avg_win_loss = 1.5
+
+[TRADING]
+partial_close = True
+trailing_sl = True
+trailing_distance_pct = 0.4
+partial_close_pct = 65.0
+breakeven = True
+breakeven_atr_mult = 1.0
+slippage_timeout = 10.0
+reinvest_profits = True
+
+[UI]
+language = ru
+theme = dark_teal
+window_width = 1400
+window_height = 900
+
+[LOGGING]
+level = INFO
+retention_days = 30
+color_output = true
+
+[ANTIDETECT]
+min_delay_ms = 200
+max_delay_ms = 800
+night_multiplier = 3.5
+param_variance = 2.0
+
+[DATABASE]
+path = data/trading_bot.db
+balance_snapshot_interval_minutes = 15
+
+[WATCHDOG]
+max_crashes_30min = 5
+restart_delay_seconds = 10
+
+[TELEGRAM]
+enabled = false
+bot_token = 
+chat_id = 
+
+[SOUNDS]
+enabled = true
+profit_sound = sounds/profit.wav
+loss_sound = sounds/loss.wav
+error_sound = sounds/error.wav
+milestone_sound = sounds/milestone.wav
+
+[OPTIMIZER]
+auto_optimize = true
+optimize_interval_hours = 24
+metric = sharpe
+

@@ -1,0 +1,7 @@
+keys.json
+*.log
+data\*.db
+project_base64.txt
+__pycache__/
+*.pyc
+Thumbs.db

@@ -1,0 +1,8 @@
+{
+  "atr_multipliers": {},
+  "kelly": {
+    "enabled": true,
+    "winrate": 0.6000000000000001,
+    "avg_wl": 1.5
+  }
+}
