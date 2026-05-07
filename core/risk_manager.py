@@ -12,6 +12,7 @@ DEFAULT_ATR_MULT_SL = 1.5
 DEFAULT_ATR_MULT_TP = 2.0
 MIN_SL_RATIO_LONG = 0.98
 MIN_SL_RATIO_SHORT = 1.02
+MIN_TP_RATIO = 0.005             # TP не может быть ближе 0.5% от цены
 PROFILE_RISK_ORDER = ['Conservative', 'Balanced', 'Aggressive', 'Adaptive', 'User']
 
 
@@ -30,8 +31,6 @@ class RiskManager:
                 'atr_mult': {'sl': 3.0, 'tp': 5.0},
                 'daily_loss_limit_pct': 2.0,
                 'max_positions': 2,
-                'volume_surge_mult': 1.5,
-                'liquidity_min_ratio': 0.3,
             },
             'Balanced': {
                 'risk_per_trade_pct': 1.5,
@@ -39,8 +38,6 @@ class RiskManager:
                 'atr_mult': {'sl': 2.2, 'tp': 3.8},
                 'daily_loss_limit_pct': 5.0,
                 'max_positions': 2,
-                'volume_surge_mult': 1.0,
-                'liquidity_min_ratio': 0.15,
             },
             'Aggressive': {
                 'risk_per_trade_pct': 3.0,
@@ -48,8 +45,6 @@ class RiskManager:
                 'atr_mult': {'sl': 1.8, 'tp': 3.0},
                 'daily_loss_limit_pct': 8.0,
                 'max_positions': 4,
-                'volume_surge_mult': 0.6,
-                'liquidity_min_ratio': 0.05,
             },
             'Adaptive': {
                 'risk_per_trade_pct': 2.0,
@@ -57,8 +52,6 @@ class RiskManager:
                 'atr_mult': {'sl': 2.0, 'tp': 3.5},
                 'daily_loss_limit_pct': 10.0,
                 'max_positions': 3,
-                'volume_surge_mult': 0.8,
-                'liquidity_min_ratio': 0.1,
             },
             'User': {
                 'risk_per_trade_pct': 2.0,
@@ -66,8 +59,6 @@ class RiskManager:
                 'atr_mult': {'sl': 2.0, 'tp': 3.5},
                 'daily_loss_limit_pct': 10.0,
                 'max_positions': 3,
-                'volume_surge_mult': 0.8,
-                'liquidity_min_ratio': 0.1,
             },
         }
         self._atr_multipliers: Dict[str, Dict[str, float]] = {}
@@ -162,21 +153,26 @@ class RiskManager:
             sl = entry_price + distance
             tp = entry_price - atr * tp_mult
 
-        # Primary negative SL protection
+        # Защита от отрицательного SL
         sl = max(entry_price * 0.001, sl)
         if side == 'BUY' and sl >= entry_price:
             sl = entry_price * 0.999
         elif side == 'SELL' and sl <= entry_price:
             sl = entry_price * 1.001
 
+        # Минимальное расстояние SL (2%)
         if side == 'BUY':
             sl = max(sl, entry_price * MIN_SL_RATIO_LONG)
         else:
             sl = max(sl, entry_price * MIN_SL_RATIO_SHORT)
 
+        # Защита TP: минимум 0.5% от цены входа
+        min_tp_distance = entry_price * MIN_TP_RATIO
         if side == 'BUY':
-            tp = max(tp, entry_price * 1.001)
+            tp = max(tp, entry_price + min_tp_distance)
         else:
+            tp = min(tp, entry_price - min_tp_distance)   # для шорта TP должен быть меньше цены
+            # tp не может быть отрицательным и слишком близким к нулю
             tp = max(tp, entry_price * 0.001)
 
         return {'sl': sl, 'tp': tp, 'tp2': tp}
