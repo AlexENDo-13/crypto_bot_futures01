@@ -1,6 +1,9 @@
 {
   "atr_multipliers": {
-    "__default__": {"sl": 2.5, "tp": 4.5}
+    "__default__": {
+      "sl": 2.0,
+      "tp": 3.5
+    }
   },
   "kelly": {
     "enabled": true,

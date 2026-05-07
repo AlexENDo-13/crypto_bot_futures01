@@ -1,10 +1,10 @@
 """
-Sound Manager – flexible audio notifications with profiles and volume control.
-Now uses text‑to‑speech (pyttsx3) for all events if available.
+Sound Manager – now uses text‑to‑speech (pyttsx3) for all events if available.
+Falls back to WAV files, or beep if nothing else works.
 """
 import logging
 import os
-from typing import Dict, Optional
+from typing import Dict
 
 try:
     import pyttsx3
@@ -44,13 +44,10 @@ PROFILES = {
 
 
 class SoundManager:
-    """Централизованное управление звуками с профилями и голосом."""
-
     def __init__(self, profile: str = 'trader', volume: float = 1.0):
         self._profile = profile
         self._volume = max(0.0, min(1.0, volume))
         self._sounds: Dict[str, str] = {}
-        self._load_defaults()
         self._active_events = set(PROFILES.get(profile, []))
         self._tts_engine = None
 
@@ -68,55 +65,36 @@ class SoundManager:
             except Exception as e:
                 logger.warning(f"TTS init failed: {e}")
 
-    def _load_defaults(self):
         for event, path in DEFAULT_SOUNDS.items():
             self._sounds[event] = path if os.path.exists(path) else ''
-
-    def set_profile(self, profile: str):
-        if profile in PROFILES:
-            self._profile = profile
-            self._active_events = set(PROFILES[profile])
-            logger.info(f"Sound profile set to '{profile}'")
-
-    def set_volume(self, volume: float):
-        self._volume = max(0.0, min(1.0, volume))
-        if self._tts_engine:
-            self._tts_engine.setProperty('volume', self._volume)
-        logger.info(f"Sound volume set to {self._volume:.0%}")
-
-    def set_sound_file(self, event: str, filepath: str):
-        if event in self._sounds:
-            self._sounds[event] = filepath
-
-    def enable_event(self, event: str):
-        self._active_events.add(event)
-
-    def disable_event(self, event: str):
-        self._active_events.discard(event)
 
     def play(self, event: str):
         if event not in self._active_events:
             return
+
+        # 1. TTS
         if self._tts_engine:
             try:
                 phrase = PHRASES.get(event, event)
                 self._tts_engine.say(phrase)
                 self._tts_engine.runAndWait()
-                logger.debug(f"TTS spoken: {phrase}")
                 return
             except Exception as e:
-                logger.debug(f"TTS failed, falling back to WAV: {e}")
-        if not SOUND_AVAILABLE:
-            return
-        path = self._sounds.get(event)
-        if path and os.path.exists(path):
+                logger.debug(f"TTS failed: {e}")
+
+        # 2. WAV-файл
+        if SOUND_AVAILABLE:
+            path = self._sounds.get(event)
+            if path and os.path.exists(path):
+                try:
+                    winsound.PlaySound(path, winsound.SND_ASYNC | winsound.SND_NODEFAULT)
+                    return
+                except Exception:
+                    pass
+
+        # 3. Системный звук (beep), если ничего нет
+        if SOUND_AVAILABLE:
             try:
-                winsound.PlaySound(path, winsound.SND_ASYNC | winsound.SND_NODEFAULT)
+                winsound.Beep(800, 200)
             except Exception:
-                logger.debug(f"Failed to play sound: {path}")
-
-    def get_profile(self) -> str:
-        return self._profile
-
-    def get_volume(self) -> float:
-        return self._volume
+                pass

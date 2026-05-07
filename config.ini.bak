@@ -10,23 +10,32 @@ timeframes = 15m,1h,4h,1d
 top_symbols = 100
 
 [RISK]
-risk_per_trade = 8.0
-max_leverage = 10
-profile = User
+risk_per_trade = 2.0
+max_leverage = 3
+profile = Adaptive
 use_day_profile = False
 kelly_enabled = True
 kelly_winrate = 0.5
 kelly_avg_win_loss = 2.0
 
 [TRADING]
-partial_close = False
+partial_close = True
 trailing_sl = True
 trailing_distance_pct = 0.7
-partial_close_pct = 65.0
+partial_close_pct = 50.0
 breakeven = True
 breakeven_atr_mult = 1.0
 slippage_timeout = 10.0
 reinvest_profits = True
+
+[MOONSHOT]
+capital_pct = 25.0
+max_risk_pct = 2.0
+scan_interval = 300
+
+[FILTERS]
+volume_surge_min_mult = 0.3
+liquidity_min_ratio = 0.05
 
 [UI]
 language = ru
