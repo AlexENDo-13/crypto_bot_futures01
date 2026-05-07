@@ -1,8 +1,14 @@
 {
-  "atr_multipliers": {},
+  "atr_multipliers": {
+    "__default__": {"sl": 2.2, "tp": 3.8}
+  },
   "kelly": {
     "enabled": true,
-    "winrate": 0.6,
-    "avg_wl": 1.5
+    "winrate": 0.5,
+    "avg_wl": 2.0
+  },
+  "user_params": {
+    "risk_per_trade_pct": 8.0,
+    "max_leverage": 10
   }
 }
