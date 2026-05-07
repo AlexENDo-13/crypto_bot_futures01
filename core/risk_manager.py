@@ -29,37 +29,55 @@ class RiskManager:
                 'max_leverage': 2,
                 'atr_mult': {'sl': 3.0, 'tp': 5.0},
                 'daily_loss_limit_pct': 2.0,
+                'max_positions': 2,
+                'volume_surge_mult': 1.5,
+                'liquidity_min_ratio': 0.3,
             },
             'Balanced': {
                 'risk_per_trade_pct': 1.5,
                 'max_leverage': 3,
                 'atr_mult': {'sl': 2.2, 'tp': 3.8},
                 'daily_loss_limit_pct': 5.0,
+                'max_positions': 2,
+                'volume_surge_mult': 1.0,
+                'liquidity_min_ratio': 0.15,
             },
             'Aggressive': {
                 'risk_per_trade_pct': 3.0,
                 'max_leverage': 5,
                 'atr_mult': {'sl': 1.8, 'tp': 3.0},
                 'daily_loss_limit_pct': 8.0,
+                'max_positions': 4,
+                'volume_surge_mult': 0.6,
+                'liquidity_min_ratio': 0.05,
             },
             'Adaptive': {
                 'risk_per_trade_pct': 2.0,
                 'max_leverage': 3,
                 'atr_mult': {'sl': 2.0, 'tp': 3.5},
                 'daily_loss_limit_pct': 10.0,
+                'max_positions': 3,
+                'volume_surge_mult': 0.8,
+                'liquidity_min_ratio': 0.1,
             },
             'User': {
                 'risk_per_trade_pct': 2.0,
                 'max_leverage': 3,
                 'atr_mult': {'sl': 2.0, 'tp': 3.5},
                 'daily_loss_limit_pct': 10.0,
+                'max_positions': 3,
+                'volume_surge_mult': 0.8,
+                'liquidity_min_ratio': 0.1,
             },
         }
         self._atr_multipliers: Dict[str, Dict[str, float]] = {}
         self._day_profiles = {
-            0: {'risk_pct': 1.5, 'max_lev': 2}, 1: {'risk_pct': 1.5, 'max_lev': 2},
-            2: {'risk_pct': 1.5, 'max_lev': 2}, 3: {'risk_pct': 1.5, 'max_lev': 2},
-            4: {'risk_pct': 1.0, 'max_lev': 1}, 5: {'risk_pct': 1.0, 'max_lev': 1},
+            0: {'risk_pct': 1.5, 'max_lev': 2},
+            1: {'risk_pct': 1.5, 'max_lev': 2},
+            2: {'risk_pct': 1.5, 'max_lev': 2},
+            3: {'risk_pct': 1.5, 'max_lev': 2},
+            4: {'risk_pct': 1.0, 'max_lev': 1},
+            5: {'risk_pct': 1.0, 'max_lev': 1},
             6: {'risk_pct': 1.0, 'max_lev': 1},
         }
         self._kelly_enabled = False
@@ -75,6 +93,7 @@ class RiskManager:
         self._auto_loss_stage = 0
         self._load_state()
 
+    # ---------- Profiles ----------
     def set_profile(self, profile: str):
         if profile not in self._profiles:
             return
@@ -88,10 +107,14 @@ class RiskManager:
             self._atr_multipliers['__default__'] = p['atr_mult']
         logger.info(f"Risk profile switched to: {profile} (risk={self.risk_per_trade_pct}%, max_lev={self.max_leverage})")
 
+    def get_profile_max_positions(self, profile: str = None) -> int:
+        if profile is None:
+            profile = self._current_profile
+        return self._profiles.get(profile, {}).get('max_positions', 3)
+
     def set_user_params(self, risk_pct: float, leverage: int):
         self._profiles['User']['risk_per_trade_pct'] = risk_pct
         self._profiles['User']['max_leverage'] = leverage
-        self._profiles['User']['atr_mult'] = self._atr_multipliers.get('__default__', {'sl': 2.0, 'tp': 3.5})
         self._save_state()
         if self._current_profile == 'User':
             self.set_profile('User')
@@ -115,6 +138,7 @@ class RiskManager:
             self.max_leverage = day_cfg['max_lev']
             logger.info(f"Day-of-week risk applied: {self.risk_per_trade_pct}%, leverage {self.max_leverage}")
 
+    # ---------- ATR multipliers ----------
     def set_atr_multipliers(self, symbol: str, sl_mult: float, tp_mult: float):
         self._atr_multipliers[symbol] = {'sl': sl_mult, 'tp': tp_mult}
         self._save_state()
@@ -137,21 +161,27 @@ class RiskManager:
             distance = max(atr * sl_mult, min_sl_distance)
             sl = entry_price + distance
             tp = entry_price - atr * tp_mult
+
+        # Primary negative SL protection
         sl = max(entry_price * 0.001, sl)
         if side == 'BUY' and sl >= entry_price:
             sl = entry_price * 0.999
         elif side == 'SELL' and sl <= entry_price:
             sl = entry_price * 1.001
+
         if side == 'BUY':
             sl = max(sl, entry_price * MIN_SL_RATIO_LONG)
         else:
             sl = max(sl, entry_price * MIN_SL_RATIO_SHORT)
+
         if side == 'BUY':
             tp = max(tp, entry_price * 1.001)
         else:
             tp = max(tp, entry_price * 0.001)
+
         return {'sl': sl, 'tp': tp, 'tp2': tp}
 
+    # ---------- Leverage by volatility ----------
     def get_optimal_leverage(self, symbol: str, price: float, atr: float) -> int:
         atr_pct = atr / price if price > 0 else 0.02
         if atr_pct > 0.05:
@@ -219,18 +249,25 @@ class RiskManager:
     def can_open_position(self) -> bool:
         return True
 
+    # =================================================================
+    # Multi-step adaptive profile switching
+    # =================================================================
     def update_adaptive_risk(self, trade_pnl: float):
         if not self.adaptive_risk_enabled:
             return
+
         if trade_pnl > 0:
             self.consecutive_wins += 1
             self.consecutive_losses = 0
         else:
             self.consecutive_losses += 1
             self.consecutive_wins = 0
+
         if self._original_profile is None:
             self._original_profile = self._current_profile
+
         current_idx = PROFILE_RISK_ORDER.index(self._current_profile) if self._current_profile in PROFILE_RISK_ORDER else 2
+
         if self.consecutive_losses >= 3:
             if self._current_profile != 'Conservative':
                 logger.warning("3 consecutive losses → switching to Conservative profile")
@@ -242,6 +279,7 @@ class RiskManager:
                     logger.info("2 consecutive losses → switching to Balanced profile")
                     self.set_profile('Balanced')
                     self._auto_loss_stage = 1
+
         if self.consecutive_wins >= 3 and self._auto_loss_stage > 0:
             target_idx = min(current_idx + 1, len(PROFILE_RISK_ORDER) - 1)
             target_profile = PROFILE_RISK_ORDER[target_idx]
@@ -261,6 +299,7 @@ class RiskManager:
                 self._auto_loss_stage = 0
                 self.consecutive_wins = 0
 
+    # ---------- State ----------
     def _save_state(self):
         data = {
             'atr_multipliers': self._atr_multipliers,

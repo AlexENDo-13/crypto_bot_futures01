@@ -1,6 +1,3 @@
-"""
-ATR Filter: blocks signals where ATR is too large relative to price.
-"""
 import logging
 from filters.base import BaseFilter
 from strategies.base import Signal

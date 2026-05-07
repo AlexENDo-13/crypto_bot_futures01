@@ -15,7 +15,6 @@ logger = logging.getLogger(__name__)
 
 
 class ParameterDialog(QDialog):
-    """Диалог редактирования параметров стратегии/индикатора/фильтра."""
     def __init__(self, name, params_config, parent=None):
         super().__init__(parent)
         self.setWindowTitle(f"Параметры: {name}")
@@ -430,6 +429,10 @@ class SettingsTab(QWidget):
 
     def _on_profile_change(self, profile):
         self.engine.risk_manager.set_profile(profile)
+        # Apply max_positions from profile
+        max_pos = self.engine.risk_manager.get_profile_max_positions(profile)
+        self.engine.max_positions = max_pos
+        self.max_positions.setValue(max_pos)
 
     def _reload_modules(self):
         try:
@@ -462,14 +465,14 @@ class SettingsTab(QWidget):
 
     def _save_settings(self):
         try:
-            # Основные параметры
+            # Main params
             self.engine.max_positions = self.max_positions.value()
             self.engine.scan_interval = self.scan_interval.value()
             self.engine.signal_threshold = self.signal_threshold.value()
             self.engine.timeframes = self.timeframes.text().split(',')
             self.engine.top_n_symbols = self.top_symbols.value()
 
-            # Риск-менеджер
+            # Risk manager
             risk_pct = self.risk_per_trade.value()
             leverage = self.max_leverage.value()
             profile = self.risk_profile.currentText()
@@ -486,7 +489,7 @@ class SettingsTab(QWidget):
             self.engine.risk_manager._kelly_winrate = self.kelly_winrate.value()
             self.engine.risk_manager._kelly_avg_win_loss_ratio = self.kelly_avg_win_loss.value()
 
-            # Трейдинг
+            # Trading
             self.engine.trailing_sl_enabled = self.trailing_sl.isChecked()
             self.engine.trailing_distance_pct = self.trailing_distance.value()
             self.engine.partial_close_enabled = self.partial_close.isChecked()
@@ -505,7 +508,7 @@ class SettingsTab(QWidget):
                     self.engine.moonshot.start()
                 logger.info("Moonshot parameters updated")
 
-            # Сохраняем настройки фильтров в config.ini
+            # Save filter params to config.ini
             try:
                 cfg = ConfigParser()
                 cfg.read('config.ini')

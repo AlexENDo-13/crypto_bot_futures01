@@ -82,7 +82,7 @@ class SoundManager:
             except Exception as e:
                 logger.debug(f"TTS failed: {e}")
 
-        # 2. WAV-файл
+        # 2. WAV file
         if SOUND_AVAILABLE:
             path = self._sounds.get(event)
             if path and os.path.exists(path):
@@ -92,7 +92,7 @@ class SoundManager:
                 except Exception:
                     pass
 
-        # 3. Системный звук (beep), если ничего нет
+        # 3. System beep
         if SOUND_AVAILABLE:
             try:
                 winsound.Beep(800, 200)
