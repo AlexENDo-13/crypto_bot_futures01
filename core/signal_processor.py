@@ -72,9 +72,12 @@ class SignalProcessor:
             logger.info(f"Pre-trade check blocked {signal.symbol}: {reason}")
             return
 
+        # Ончейн-фильтр (защита от None)
         onchain_filter = self.engine.filters.get('OnChainFilter')
         if onchain_filter and onchain_filter.enabled:
-            new_conf = onchain_filter.assess(signal, {})
+            new_conf = self._safe_filter_assess(onchain_filter, signal, {})
+            if new_conf is None:               # если фильтр вернул None, пропускаем
+                new_conf = signal.confidence
             if new_conf <= 0:
                 logger.info(f"On-chain filter blocked {signal.symbol}")
                 return
@@ -102,7 +105,9 @@ class SignalProcessor:
             if not getattr(filter_obj, 'enabled', True):
                 continue
             try:
-                new_conf = filter_obj.assess(signal, filter_data)
+                new_conf = self._safe_filter_assess(filter_obj, signal, filter_data)
+                if new_conf is None:
+                    new_conf = signal.confidence
                 if new_conf <= 0:
                     logger.info(f"Filter {filter_name} blocked {signal.symbol}")
                     return
@@ -128,7 +133,6 @@ class SignalProcessor:
 
         # --- Нормализация количества под требования биржи (защита от None) ---
         contract_info = self.engine._contracts_info.get(signal.symbol, {})
-        # Приводим к float, обрабатывая None
         raw_min_qty = contract_info.get('minQty')
         raw_step_size = contract_info.get('stepSize')
 
@@ -148,6 +152,18 @@ class SignalProcessor:
             return
 
         self.engine.executor.execute(signal, price, quantity, leverage, sl_tp['tp2'], sl_tp['sl'])
+
+    def _safe_filter_assess(self, filter_obj, signal, data):
+        """Безопасный вызов assess, возвращает None только при ошибке."""
+        try:
+            result = filter_obj.assess(signal, data)
+            if result is None:
+                logger.debug(f"Filter {filter_obj.NAME} returned None, treating as pass")
+                return signal.confidence
+            return float(result)
+        except Exception as e:
+            logger.warning(f"Filter {filter_obj.NAME} crashed: {e}", exc_info=True)
+            return signal.confidence
 
     def _apply_tradingview_boost(self, signal: Signal) -> Signal:
         if signal.meta.get('source') == 'tradingview':
