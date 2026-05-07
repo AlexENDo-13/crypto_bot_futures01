@@ -6,6 +6,7 @@ import logging
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
 import csv
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +32,8 @@ class Position:
         self.order_id = order_id
         self.unrealized_pnl = 0.0
         self.pnl_pct = 0.0
-        self.trailing = trailing          # ← новое поле
+        self.trailing = trailing
+        self.creation_time = time.time()  # для защиты от частого усреднения
 
     def to_dict(self) -> dict:
         return {
@@ -47,7 +49,7 @@ class Position:
             'sl_price': self.sl_price,
             'open_time': self.open_time,
             'order_id': self.order_id,
-            'trailing': self.trailing,    # ← теперь передаётся
+            'trailing': self.trailing,
         }
 
 
@@ -76,11 +78,16 @@ class PortfolioManager:
         self._balance = 0.0
         self._equity = 0.0
         self.available_margin = 0.0
+        self.MIN_AVERAGING_INTERVAL = 30  # секунд, защита от дублирования
 
     def add_position(self, position: Position):
         key = f"{position.symbol}_{position.side}"
         if key in self._positions:
             existing = self._positions[key]
+            # Защита от слишком частого усреднения
+            if time.time() - existing.creation_time < self.MIN_AVERAGING_INTERVAL:
+                logger.info(f"Averaging too soon for {key}, ignoring new signal")
+                return
             # Усредняем количество и цену
             total_qty = existing.quantity + position.quantity
             avg_price = (existing.entry_price * existing.quantity + position.entry_price * position.quantity) / total_qty
@@ -91,6 +98,7 @@ class PortfolioManager:
             existing.tp_price = position.tp_price
             existing.sl_price = position.sl_price
             existing.trailing = position.trailing
+            existing.creation_time = time.time()
         else:
             self._positions[key] = position
 

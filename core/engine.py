@@ -1,5 +1,5 @@
 """
-Trading Engine – coordinator. Delegates execution, sync, risk, signals.
+Trading Engine – coordinator.
 """
 import os, sys, time, json, logging, threading, pkgutil, importlib, inspect, shutil
 from collections import deque
@@ -29,6 +29,8 @@ from core.executor import TradeExecutor
 from core.sync_manager import PositionSyncManager
 from core.risk_controller import RiskController
 from core.signal_processor import SignalProcessor
+from core.trailing_tp import TrailingTakeProfit
+from core.sound_manager import SoundManager
 
 logger = logging.getLogger(__name__)
 
@@ -52,16 +54,16 @@ class TradingEngine:
         self.optimizer = StrategyOptimizer()
         self.regime_detector = MarketRegimeDetector()
 
-        # Новые модули
+        self.sound_manager = SoundManager(profile='trader')
         self.executor = TradeExecutor(self)
         self.sync_manager = PositionSyncManager(self)
         self.risk_controller = RiskController(self)
         self.signal_processor = SignalProcessor(self)
+        self.trailing_tp = TrailingTakeProfit(self)
 
         self.strategies: Dict[str, BaseStrategy] = {}
         self.indicators: Dict[str, BaseIndicator] = {}
         self.filters: Dict[str, BaseFilter] = {}
-        self.reporters, self.exporters, self.notifiers = {}, {}, {}
 
         self._running = False
         self._paused = False
@@ -74,16 +76,13 @@ class TradingEngine:
         self._recent_signals = deque(maxlen=50)
         self._strategy_pnl: Dict[str, List[float]] = {}
         self._start_time: Optional[datetime] = None
-        self._strategies_disabled_until: Dict[str, float] = {}
 
-        # Параметры по умолчанию
         self.scan_interval = 60
         self.signal_threshold = 0.5
         self.max_positions = 8
         self.timeframes = ['15m', '1h', '4h']
         self.top_n_symbols = 50
 
-        # Новые параметры
         self.trailing_sl_enabled = True
         self.trailing_distance_pct = 0.5
         self.partial_close_enabled = True
@@ -98,7 +97,6 @@ class TradingEngine:
         self._load_blacklist()
         self._load_state()
 
-    # ================== Config & State ==================
     def _load_config(self):
         cfg = ConfigParser()
         if os.path.exists(CONFIG_FILE):
@@ -182,7 +180,6 @@ class TradingEngine:
             self._strategies_disabled_until = data.get('strategies_disabled', {})
         except Exception as e: logger.error(f"Load state failed: {e}")
 
-    # ================== Init & Load ==================
     def _init_components(self):
         self.scheduler.register_callback('night_mode_on', self._on_night_mode_on)
         self.scheduler.register_callback('night_mode_off', self._on_night_mode_off)
@@ -230,7 +227,6 @@ class TradingEngine:
                     logger.warning(f"  Failed to instantiate {name}: {e}")
         return modules
 
-    # ================== Lifecycle ==================
     def start(self):
         if self._running: return
         if self.auth.demo_mode:
@@ -238,7 +234,8 @@ class TradingEngine:
         self._running = True
         self._paused = False
         self._start_time = datetime.now(timezone.utc)
-        self.sync_manager.full_sync()
+        if not self.auth.demo_mode:
+            self.sync_manager.full_sync()
         self._equity_update_task()
         self.scheduler.start()
         self.watchdog.start()
@@ -248,8 +245,12 @@ class TradingEngine:
             self._load_contracts_info()
         except Exception as e:
             logger.error(f"Initial symbol discovery failed: {e}")
+        # Установка пика эквити после первого обновления
+        if not self.auth.demo_mode:
+            self.risk_controller.peak_equity = self.portfolio._equity
         logger.info("Trading engine started")
-        threading.Thread(target=self.risk_controller.connection_monitor, daemon=True).start()
+        if not self.auth.demo_mode:
+            threading.Thread(target=self.risk_controller.connection_monitor, daemon=True).start()
         threading.Thread(target=self._state_autosave, daemon=True).start()
 
     def stop(self):
@@ -260,23 +261,14 @@ class TradingEngine:
         self._save_state()
         logger.info("Trading engine stopped")
 
-    # ---------- Управление паузой ----------
-    def pause(self):
-        self._paused = True
-        logger.info("Trading paused")
-
-    def resume(self):
-        self._paused = False
-        logger.info("Trading resumed")
-
-    def is_paused(self) -> bool:
-        return self._paused
+    def pause(self): self._paused = True; logger.info("Trading paused")
+    def resume(self): self._paused = False; logger.info("Trading resumed")
+    def is_paused(self) -> bool: return self._paused
 
     def reload_modules(self):
         self.load_all_modules()
         logger.info("Modules reloaded")
 
-    # ================== Update settings ==================
     def update_settings(self, settings: dict):
         old_max = self.max_positions
         if 'max_positions' in settings: self.max_positions = int(settings['max_positions'])
@@ -286,11 +278,9 @@ class TradingEngine:
         if 'max_leverage' in settings: self.risk_manager.max_leverage = int(settings['max_leverage'])
         if 'risk_profile' in settings: self.risk_manager.set_profile(settings['risk_profile'])
         self._save_config()
-        # Если изменился лимит позиций, немедленно применить
         if 'max_positions' in settings and self.max_positions < old_max:
             self.sync_manager._enforce_limit()
 
-    # ================== Tasks ==================
     def _market_scan_task(self):
         if self._paused or not self._running: return
         self.watchdog.heartbeat()
@@ -370,17 +360,17 @@ class TradingEngine:
                 unrealized = float(bal.get('unrealizedProfit', 0))
                 self.portfolio.update_equity(balance, unrealized)
                 self.portfolio.available_margin = available
+                # Обновление защиты от просадки и дневных лимитов
+                self.risk_controller.update_drawdown(self.portfolio._equity)
+                self.risk_controller.check_daily_limits()
         except Exception as e: logger.debug(f"Equity update error: {e}")
 
-    def _sync_positions_task(self):
-        self.sync_manager.background_sync()
-
+    def _sync_positions_task(self): self.sync_manager.background_sync()
     def _heartbeat_task(self): self.watchdog.heartbeat()
     def _update_weights_task(self):
         try: self.voting.update_weights()
         except Exception as e: logger.error(f"Weight update error: {e}")
 
-    # ================== Callbacks ==================
     def _on_watchdog_restart(self):
         logger.warning("Watchdog restart triggered")
         try:
@@ -405,8 +395,11 @@ class TradingEngine:
             self._save_state()
             time.sleep(60)
 
-    # ================== Helpers ==================
     def _load_contracts_info(self):
+        if self.auth.demo_mode:
+            self._contracts_info = {s: {'minQty': 0.001, 'stepSize': 0.001} for s in self._top_symbols}
+            logger.debug("Demo mode: using default contracts info")
+            return
         try:
             contracts = self.api.get_contracts()
             for c in contracts:
@@ -453,7 +446,6 @@ class TradingEngine:
             self._top_symbols = ['BTC-USDT','ETH-USDT','SOL-USDT','XRP-USDT',
                                  'DOGE-USDT','ADA-USDT','AVAX-USDT','DOT-USDT']
 
-    # ================== Blacklist ==================
     def add_to_blacklist(self, symbol, reason="manual"):
         if symbol not in self._blacklist:
             self._blacklist.append(symbol); self._save_blacklist()
@@ -471,9 +463,7 @@ class TradingEngine:
         with open(self.BLACKLIST_FILE, 'w') as f:
             json.dump({'symbols': self._blacklist, 'updated': datetime.now().isoformat()}, f, indent=2)
 
-    # ================== Public API ==================
     def manual_scan(self):
-        """Запускает сканирование рынка в фоновом потоке, чтобы не морозить GUI."""
         if not self._running:
             logger.warning("Engine is not running – cannot scan")
             return
@@ -491,8 +481,10 @@ class TradingEngine:
             else: self.api.close_position(symbol, side)
             self.portfolio.remove_position(symbol, side)
         except Exception as e: logger.error(f"Manual close failed: {e}")
+
     def sync_positions(self):
         self.sync_manager.full_sync()
+
     def get_status(self):
         balance = self.portfolio._balance or 0.0
         equity = self.portfolio._equity or balance
@@ -512,6 +504,7 @@ class TradingEngine:
             'strategy_weights': self.voting.get_weights(),
             'strategy_stats': self._get_strategy_stats(),
         }
+
     def _get_strategy_stats(self):
         stats = {}
         for name, pnl_list in self._strategy_pnl.items():

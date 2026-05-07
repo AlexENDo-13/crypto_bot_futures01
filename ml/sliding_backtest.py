@@ -1,5 +1,6 @@
 """
 Sliding backtest: continuously evaluates current strategy set on recent data.
+Fixed: won't run in demo mode, checks for valid data before updating weights.
 """
 import logging
 import threading
@@ -16,6 +17,10 @@ class SlidingBacktest:
         self._results: Dict[str, Any] = {}
 
     def start(self):
+        # В демо‑режиме не запускаем, чтобы не искажать веса
+        if self.engine.auth.demo_mode:
+            logger.info("Sliding backtest not started (demo mode)")
+            return
         if self._running:
             return
         self._running = True
@@ -26,22 +31,25 @@ class SlidingBacktest:
         self._running = False
 
     def _loop(self):
+        import time
         while self._running:
             try:
                 self._run_backtest()
             except Exception as e:
                 logger.error(f"Backtest error: {e}")
-            import time
             time.sleep(300)  # Каждые 5 минут
 
     def _run_backtest(self):
-        """Запускает бэктест на последних 200 свечах для всех стратегий."""
-        symbol = 'BTC-USDT'  # Пока для одной пары
+        """Запускает бэктест на последних 200 свечах для BTC-USDT, если данные валидны."""
+        symbol = 'BTC-USDT'
         try:
             df = self.engine.api.get_klines_dataframe(symbol, '1h', limit=200)
-            if df.empty:
-                return
-        except:
+        except Exception as e:
+            logger.warning(f"Cannot fetch backtest data: {e}")
+            return
+
+        if df is None or df.empty or len(df) < 100:
+            logger.debug("Skipping backtest: insufficient data")
             return
 
         total_pnl = 0.0
@@ -53,6 +61,7 @@ class SlidingBacktest:
             total_pnl += pnl
 
         logger.info(f"Sliding backtest completed: total PnL={total_pnl:.4f}")
+        self._update_weights()
 
     def _test_strategy(self, strategy, df):
         """Применяет стратегию на исторических данных и возвращает PnL."""
@@ -71,6 +80,17 @@ class SlidingBacktest:
             except:
                 pass
         return pnl
+
+    def _update_weights(self):
+        """Обновляет веса стратегий на основе результатов бэктеста."""
+        for name, pnl in self._results.items():
+            if name in self.engine.strategies:
+                old_weight = getattr(self.engine.strategies[name], 'weight', 1.0)
+                # Плавное изменение веса: при положительном PnL увеличиваем, при отрицательном уменьшаем
+                adjustment = 1.0 + pnl * 0.001
+                new_weight = max(0.1, min(3.0, old_weight * adjustment))
+                self.engine.strategies[name].weight = new_weight
+                logger.debug(f"Backtest weight adjusted for {name}: {old_weight:.2f} -> {new_weight:.2f}")
 
     def get_results(self):
         return self._results.copy()

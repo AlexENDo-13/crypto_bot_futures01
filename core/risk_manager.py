@@ -92,14 +92,19 @@ class RiskManager:
         return DEFAULT_ATR_MULT_SL, DEFAULT_ATR_MULT_TP
 
     def get_sl_tp_levels(self, entry_price: float, side: str, atr: float, symbol: str = None) -> Dict[str, float]:
-        """Расчёт SL/TP с учётом индивидуальных множителей пары."""
+        """Расчёт SL/TP с учётом индивидуальных множителей пары и защитой от отрицательного SL."""
         sl_mult, tp_mult = self.get_atr_multipliers(symbol) if symbol else (DEFAULT_ATR_MULT_SL, DEFAULT_ATR_MULT_TP)
+
+        # Минимальное расстояние SL от входа — 0.5% от цены
+        min_sl_distance = entry_price * 0.005
+
         if side == 'BUY':
-            sl = entry_price - atr * sl_mult
+            sl = entry_price - max(atr * sl_mult, min_sl_distance)
             tp = entry_price + atr * tp_mult
         else:
-            sl = entry_price + atr * sl_mult
+            sl = entry_price + max(atr * sl_mult, min_sl_distance)
             tp = entry_price - atr * tp_mult
+
         return {'sl': sl, 'tp': tp, 'tp2': tp}
 
     # ---------- Плечо по волатильности ----------

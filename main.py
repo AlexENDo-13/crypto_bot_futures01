@@ -1,5 +1,5 @@
-"""BingX Trading Bot v2.0 – Main Entry Point."""
-import os, sys, time, logging, argparse, traceback
+"""BingX Trading Bot v2.0 – Main Entry Point (ALL MODULES ACTIVE)."""
+import os, sys, time, logging, argparse
 from pathlib import Path
 from datetime import datetime, timezone
 
@@ -38,7 +38,43 @@ def main():
     engine = TradingEngine(auth)
     engine.load_all_modules()
 
-    # Запуск дополнительных сервисов
+    try:
+        from core.order_guard import OrderGuard
+        engine.order_guard = OrderGuard(engine)
+        if not auth.demo_mode:
+            engine.order_guard.start()
+            logging.info("OrderGuard started")
+    except Exception as e:
+        logging.warning(f"OrderGuard not started: {e}")
+
+    try:
+        from configparser import ConfigParser
+        cfg = ConfigParser()
+        cfg.read('config.ini')
+        tg_token = cfg.get('TELEGRAM', 'bot_token', fallback='')
+        tg_chat = cfg.get('TELEGRAM', 'chat_id', fallback='')
+        tg_enabled = cfg.getboolean('TELEGRAM', 'enabled', fallback=False)
+
+        if tg_enabled and tg_token and tg_chat:
+            from telegram.bot import TelegramBot
+            engine.telegram = TelegramBot(tg_token, tg_chat, engine)
+            engine.telegram.start()
+            logging.info("Telegram bot started")
+    except Exception as e:
+        logging.warning(f"Telegram bot not started: {e}")
+
+    try:
+        dc_token = cfg.get('DISCORD', 'bot_token', fallback='')
+        dc_channel = cfg.getint('DISCORD', 'channel_id', fallback=0)
+        dc_enabled = cfg.getboolean('DISCORD', 'enabled', fallback=False)
+        if dc_enabled and dc_token and dc_channel:
+            from discord_bot import DiscordBot
+            engine.discord = DiscordBot(dc_token, dc_channel, engine)
+            engine.discord.start()
+            logging.info("Discord bot started")
+    except Exception as e:
+        logging.warning(f"Discord bot not started: {e}")
+
     try:
         from web.tradingview_webhook import TradingViewWebhook
         webhook = TradingViewWebhook(engine, port=8080)
@@ -47,11 +83,108 @@ def main():
         logging.warning(f"TradingView webhook not started: {e}")
 
     try:
+        from web.server import WebServer
+        engine.web_server = WebServer(engine, host="0.0.0.0", port=5000)
+        engine.web_server.start()
+        logging.info("Web dashboard started on http://0.0.0.0:5000")
+    except ImportError:
+        logging.warning("Flask not installed – web dashboard disabled. pip install flask flask-cors")
+    except Exception as e:
+        logging.warning(f"Web dashboard not started: {e}")
+
+    try:
         from ml.sliding_backtest import SlidingBacktest
-        backtest = SlidingBacktest(engine)
-        backtest.start()
+        engine.backtest = SlidingBacktest(engine)
+        if not auth.demo_mode:
+            engine.backtest.start()
     except Exception as e:
         logging.warning(f"Sliding backtest not started: {e}")
+
+    try:
+        from ml.bayesian_optimizer import BayesianOptimizer
+        engine.bayes_opt = BayesianOptimizer(engine)
+        if not auth.demo_mode:
+            engine.bayes_opt.start()
+            logging.info("Bayesian optimizer started")
+    except Exception as e:
+        logging.warning(f"Bayesian optimizer not started: {e}")
+
+    try:
+        from ml.capital_allocator import CapitalAllocator
+        engine.capital_alloc = CapitalAllocator(engine)
+        engine.capital_alloc.start()
+        logging.info("CapitalAllocator started")
+    except Exception as e:
+        logging.warning(f"CapitalAllocator not started: {e}")
+
+    try:
+        from core.tf_selector import TimeframeSelector
+        engine.tf_selector = TimeframeSelector(engine)
+        engine.tf_selector.start()
+        logging.info("TimeframeSelector started")
+    except Exception as e:
+        logging.warning(f"TimeframeSelector not started: {e}")
+
+    try:
+        onchain_enabled = cfg.getboolean('ONCHAIN', 'enabled', fallback=False)
+        if onchain_enabled:
+            glassnode_key = cfg.get('ONCHAIN', 'glassnode_key', fallback='')
+            cryptoquant_key = cfg.get('ONCHAIN', 'cryptoquant_key', fallback='')
+            from ml.onchain_metrics import OnChainMetrics
+            engine.onchain = OnChainMetrics(glassnode_key, cryptoquant_key)
+            engine.onchain.start()
+            logging.info("OnChainMetrics started")
+    except Exception as e:
+        logging.warning(f"OnChainMetrics not started: {e}")
+
+    try:
+        from core.alert_manager import AlertManager
+        engine.alert_mgr = AlertManager(engine)
+        engine.alert_mgr.start()
+        logging.info("AlertManager started")
+    except Exception as e:
+        logging.warning(f"AlertManager not started: {e}")
+
+    try:
+        if tg_enabled:
+            from core.backup_manager import BackupManager
+            engine.backup_mgr = BackupManager(engine)
+            engine.backup_mgr.start()
+            logging.info("BackupManager started")
+    except Exception as e:
+        logging.warning(f"BackupManager not started: {e}")
+
+    try:
+        from core.github_backup import GitHubBackup
+        engine.github_backup = GitHubBackup()
+        engine.github_backup.start()
+        logging.info("GitHubBackup started")
+    except Exception as e:
+        logging.warning(f"GitHubBackup not started: {e}")
+
+    try:
+        from core.moonshot import MoonshotTrader
+        engine.moonshot = MoonshotTrader(engine)
+        engine.moonshot.start()
+        logging.info("MoonshotTrader started")
+    except Exception as e:
+        logging.warning(f"MoonshotTrader not started: {e}")
+
+    try:
+        from ml.portfolio_stress_test import StressTestRunner
+        engine.stress_test = StressTestRunner(engine)
+        engine.stress_test.start()
+        logging.info("StressTestRunner started")
+    except Exception as e:
+        logging.warning(f"StressTestRunner not started: {e}")
+
+    try:
+        from core.voice_alerts import VoiceAlerter
+        engine.voice = VoiceAlerter(engine)
+        engine.voice.start()
+        logging.info("VoiceAlerter started")
+    except Exception as e:
+        logging.warning(f"VoiceAlerter not started: {e}")
 
     if args.console:
         engine.start()

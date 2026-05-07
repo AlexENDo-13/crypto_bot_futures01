@@ -69,14 +69,12 @@ class TradeExecutor:
                         order_type='MARKET', quantity=quantity
                     )
 
-            # === ИЗМЕНЕНИЕ: получаем фактическую цену входа ===
+            # Получаем фактическую цену входа
             actual_entry = entry_price
             try:
-                # Запрашиваем позиции и извлекаем avgPrice/entryPrice
                 positions = self.engine.api.get_positions(signal.symbol)
                 for p in positions:
                     if p.get('symbol') == signal.symbol and p.get('positionSide') == pos_side:
-                        # BingX использует поле avgPrice для средней цены входа
                         actual_entry = float(p.get('avgPrice', p.get('entryPrice', entry_price)))
                         break
             except Exception as e:
@@ -84,19 +82,24 @@ class TradeExecutor:
 
             logger.info(f"Actual entry price for {signal.symbol}: {actual_entry} (requested: {entry_price})")
 
-            # Пересчитываем TP/SL от реальной цены входа
+            # Пересчитываем TP/SL от реальной цены входа с защитой от отрицательного SL
             atr = self.engine._get_current_atr(signal.symbol)
             sl_tp = self.engine.risk_manager.get_sl_tp_levels(actual_entry, side, atr, signal.symbol)
             final_tp = sl_tp['tp2']
             final_sl = sl_tp['sl']
 
-            # Проверка валидности SL относительно направления
-            if pos_side == 'LONG' and final_sl >= actual_entry:
-                logger.warning(f"SL ({final_sl}) >= entry ({actual_entry}) for LONG, adjusting SL to entry * 0.99")
-                final_sl = actual_entry * 0.99
-            elif pos_side == 'SHORT' and final_sl <= actual_entry:
-                logger.warning(f"SL ({final_sl}) <= entry ({actual_entry}) for SHORT, adjusting SL to entry * 1.01")
-                final_sl = actual_entry * 1.01
+            # Жёсткая защита от отрицательного или слишком близкого SL
+            min_sl_distance = actual_entry * 0.005  # минимум 0.5% от цены
+            if pos_side == 'LONG':
+                if final_sl <= 0 or final_sl >= actual_entry:
+                    final_sl = actual_entry - max(atr * 1.5, min_sl_distance)
+                    logger.warning(f"Adjusted invalid LONG SL to {final_sl}")
+                if final_sl <= 0:
+                    final_sl = actual_entry * 0.995
+            else:  # SHORT
+                if final_sl <= 0 or final_sl <= actual_entry:
+                    final_sl = actual_entry + max(atr * 1.5, min_sl_distance)
+                    logger.warning(f"Adjusted invalid SHORT SL to {final_sl}")
 
             # Выставляем TP и SL с актуальными уровнями
             self._place_tpsl_orders(signal.symbol, pos_side, quantity, final_tp, final_sl)
@@ -112,11 +115,10 @@ class TradeExecutor:
             )
             self.engine.portfolio.add_position(position)
 
-            # === FIX 2: Записываем результат в VotingSystem ===
+            # Записываем результат в VotingSystem
             strategy_name = signal.meta.get('strategy', 'Unknown')
             self.engine.voting.record_trade(strategy_name, 0.0)  # placeholder, обновится при закрытии
 
-            # Звук открытия
             self._play_sound('trade_open')
             logger.info(f"Trade executed: {signal.symbol} {side} @ {actual_entry}, TP={final_tp}, SL={final_sl}")
 
@@ -128,11 +130,9 @@ class TradeExecutor:
     # ------------------------------------------------------------------
     def apply_trailing_stop(self, pos, current_price: float):
         """Обновление SL для трейлинг‑стопа с привязкой к ATR."""
-        # === FIX 6: Трейлинг-стоп привязан к ATR ===
         atr = self.engine._get_current_atr(pos.symbol)
         price = current_price or pos.entry_price
 
-        # Динамический trailing distance = ATR * 1.5, минимум 0.4%
         atr_based_pct = (atr / price * 100 * 1.5) if price > 0 else 0.4
         min_pct = getattr(self.engine, 'trailing_distance_pct', 0.4)
         dist_pct = max(min_pct, atr_based_pct) / 100.0
@@ -197,8 +197,6 @@ class TradeExecutor:
                 order_type='TAKE_PROFIT_MARKET', quantity=quantity, stop_price=tp_price
             )
         if sl_price is not None:
-            # Проверка валидности: для LONG sl должен быть < entry_price, для SHORT > entry_price
-            # (дополнительная страховка)
             if pos_side == 'LONG' and sl_price >= tp_price:
                 logger.error(f"Invalid SL for LONG: {sl_price} >= TP {tp_price}, skipping SL order")
                 return

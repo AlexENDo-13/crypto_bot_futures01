@@ -1,8 +1,8 @@
 """
 Position sync manager: synchronises local portfolio with exchange,
-applies trailing/breakeven, partial close, corrects TP/SL orders,
-enforces maximum position limit, records closed trades, and
-supports smart replacement of weakest positions.
+applies trailing/breakeven, partial close, trailing take profit,
+corrects TP/SL orders, enforces maximum position limit, records closed trades,
+and supports smart replacement of weakest positions.
 """
 import logging
 from datetime import datetime, timezone
@@ -39,13 +39,23 @@ class PositionSyncManager:
                 # Логическая проверка
                 tp_price, sl_price = self._logical_check(pos_side, entry, tp_price, sl_price)
 
-                # Если не удалось получить, вычисляем через risk_manager
-                if tp_price is None or sl_price is None:
+                # Если не удалось получить или SL невалиден, вычисляем через risk_manager
+                if tp_price is None or sl_price is None or sl_price <= 0:
                     atr = self.engine._get_current_atr(symbol)
                     trade_side = 'BUY' if pos_side == 'LONG' else 'SELL'
                     sl_tp = self.engine.risk_manager.get_sl_tp_levels(entry, trade_side, atr, symbol)
                     tp_price = tp_price or sl_tp['tp2']
-                    sl_price = sl_price or sl_tp['sl']
+                    sl_price = sl_tp['sl'] if (sl_price is None or sl_price <= 0) else sl_price
+
+                # Дополнительная защита: SL не может быть отрицательным или равным 0
+                if sl_price is None or sl_price <= 0:
+                    atr = self.engine._get_current_atr(symbol)
+                    min_sl_distance = entry * 0.005
+                    if pos_side == 'LONG':
+                        sl_price = entry - max(atr * 1.5, min_sl_distance)
+                    else:
+                        sl_price = entry + max(atr * 1.5, min_sl_distance)
+                    logger.warning(f"Fixed invalid SL for {symbol} {pos_side} to {sl_price}")
 
                 if qty > 0:
                     pos = Position(
@@ -56,11 +66,9 @@ class PositionSyncManager:
                         open_time=datetime.now(timezone.utc).isoformat()
                     )
                     self.engine.portfolio.add_position(pos)
-                    # Обновляем кэш
                     self._tpsl_cache[f"{symbol}_{pos_side}"] = (tp_price, sl_price)
                     logger.info(f"Synced existing position: {symbol} {pos_side} qty={qty} @ {entry} "
                                 f"TP={tp_price} SL={sl_price}")
-            # Применяем лимит сразу после полной синхронизации
             self._enforce_limit()
         except Exception as e:
             logger.error(f"Full sync failed: {e}")
@@ -79,8 +87,7 @@ class PositionSyncManager:
             # Обработка закрытых позиций
             for pos in self.engine.portfolio.get_positions():
                 if f"{pos.symbol}_{pos.side}" not in api_keys:
-                    # Позиция была закрыта – фиксируем сделку
-                    pnl = pos.unrealized_pnl  # последний известный нереализованный PnL
+                    pnl = pos.unrealized_pnl
                     exit_price = (pos.entry_price + (pnl / pos.quantity) if pos.side == 'LONG' 
                                   else pos.entry_price - (pnl / pos.quantity))
                     trade = TradeRecord(
@@ -93,11 +100,8 @@ class PositionSyncManager:
                     )
                     self.engine.portfolio.record_trade(trade)
                     logger.info(f"Position closed: {pos.symbol} {pos.side} PnL={pnl:.4f}")
-                    # === Адаптивный риск по серии ===
                     self.engine.risk_manager.update_adaptive_risk(pnl)
-                    # Удаляем позицию
                     self.engine.portfolio.remove_position(pos.symbol, pos.side)
-                    # Удаляем из кэша TP/SL
                     cache_key = f"{pos.symbol}_{pos.side}"
                     if cache_key in self._tpsl_cache:
                         del self._tpsl_cache[cache_key]
@@ -120,7 +124,6 @@ class PositionSyncManager:
                     if existing.margin > 0:
                         existing.pnl_pct = (unrealized / existing.margin) * 100
 
-                    # Трейлинг‑стоп и безубыток
                     if current_price > 0 and existing.sl_price is not None:
                         if self.engine.trailing_sl_enabled:
                             self.engine.executor.apply_trailing_stop(existing, current_price)
@@ -128,16 +131,25 @@ class PositionSyncManager:
                             atr = self.engine._get_current_atr(symbol)
                             self.engine.executor.apply_breakeven(existing, current_price, atr)
 
+                    # --- Trailing Take Profit ---
+                    if hasattr(self.engine, 'trailing_tp') and self.engine.trailing_tp:
+                        if existing.tp_price and existing.tp_price > 0:
+                            updated = self.engine.trailing_tp.update(existing, current_price)
+                            if updated:
+                                # Синхронизируем новый TP на бирже
+                                self.engine.trailing_tp.sync_order(
+                                    symbol, pos_side, existing.quantity, existing.tp_price
+                                )
+
                     # Частичное закрытие
                     if self.engine.partial_close_enabled and existing.tp_price is not None:
                         self.engine.executor.apply_partial_close(existing, current_price)
 
-                    # Синхронизация ордеров TP/SL на бирже (только если изменились)
+                    # Синхронизация ордеров TP/SL на бирже
                     self._sync_tpsl_orders(symbol, pos_side, existing.quantity,
                                            existing.tp_price, existing.sl_price)
 
                 else:
-                    # Позиция есть на бирже, но не в портфеле — добавляем
                     if len(self.engine.portfolio.get_positions()) >= self.engine.max_positions:
                         continue
                     atr = self.engine._get_current_atr(symbol)
@@ -151,10 +163,8 @@ class PositionSyncManager:
                         open_time=datetime.now(timezone.utc).isoformat()
                     )
                     self.engine.portfolio.add_position(pos)
-                    # Обновляем кэш
                     self._tpsl_cache[f"{symbol}_{pos_side}"] = (sl_tp['tp2'], sl_tp['sl'])
 
-            # Принудительное соблюдение лимита позиций
             self._enforce_limit()
 
         except Exception:
@@ -164,14 +174,12 @@ class PositionSyncManager:
     # Принудительное соблюдение лимита
     # ------------------------------------------------------------------
     def _enforce_limit(self):
-        """Если позиций больше max_positions, закрываем часть самых слабых."""
         positions = self.engine.portfolio.get_positions()
         max_pos = self.engine.max_positions
         if len(positions) <= max_pos:
             return
-        # Сортируем от худшего PnL к лучшему
         positions.sort(key=lambda p: p.unrealized_pnl)
-        to_close = positions[:-max_pos]  # оставляем последние max_pos лучших
+        to_close = positions[:-max_pos]
         for pos in to_close:
             try:
                 logger.info(f"Enforcing limit: closing {pos.symbol} {pos.side} (PnL={pos.unrealized_pnl:.4f})")
@@ -181,30 +189,22 @@ class PositionSyncManager:
                 logger.error(f"Failed to close {pos.symbol} during limit enforcement: {e}")
 
     # ------------------------------------------------------------------
-    # Умная замена позиций (для использования в signal_processor)
+    # Умная замена позиций (для signal_processor)
     # ------------------------------------------------------------------
     def try_replace_weakest(self, new_signal_confidence: float, new_signal_symbol: str) -> bool:
-        """
-        Если все слоты заняты, пытается закрыть самую слабую позицию,
-        чтобы освободить место для нового сигнала.
-        Возвращает True, если слот освобождён или уже было место.
-        """
         positions = self.engine.portfolio.get_positions()
         max_pos = self.engine.max_positions
         if len(positions) < max_pos:
-            return True  # места достаточно
+            return True
 
-        # Оцениваем каждую позицию
         now = datetime.now(timezone.utc)
         scored = []
         for pos in positions:
-            # Время в часах
             try:
                 open_t = datetime.fromisoformat(pos.open_time)
                 hours_held = (now - open_t).total_seconds() / 3600.0
             except Exception:
                 hours_held = 99.0
-            # Прогресс к TP (0 = только открылись, 1 = почти закрылись по TP)
             if pos.tp_price and pos.entry_price:
                 if pos.side == 'LONG' and pos.tp_price != pos.entry_price:
                     progress = (pos.sl_price - pos.entry_price) / (pos.tp_price - pos.entry_price)
@@ -214,13 +214,11 @@ class PositionSyncManager:
                     progress = 0.0
             else:
                 progress = 0.0
-            score = progress * 0.7 - hours_held * 0.02  # чем больше висит, тем хуже
+            score = progress * 0.7 - hours_held * 0.02
             scored.append((pos, score))
 
-        # Худшая позиция
         weakest_pos, weakest_score = min(scored, key=lambda x: x[1])
 
-        # Порог для замены: confidence нового сигнала должна быть выше (с учётом слабости старой позиции)
         if new_signal_confidence > 0.5 and (new_signal_confidence - 0.1) > weakest_score:
             logger.info(f"Smart replace: closing {weakest_pos.symbol} {weakest_pos.side} "
                         f"(score={weakest_score:.3f}) for new signal {new_signal_symbol} "
@@ -238,7 +236,6 @@ class PositionSyncManager:
     # Вспомогательные
     # ------------------------------------------------------------------
     def _fetch_exchange_tpsl(self, symbol: str, pos_side: str):
-        """Получает TP/SL из открытых ордеров."""
         tp_price = None
         sl_price = None
         try:
@@ -259,7 +256,6 @@ class PositionSyncManager:
         return tp_price, sl_price
 
     def _logical_check(self, pos_side, entry, tp, sl):
-        """Корректирует логически неверные TP/SL."""
         if pos_side == 'LONG':
             if tp is not None and tp <= entry:
                 tp = None
@@ -267,7 +263,7 @@ class PositionSyncManager:
                 sl = None
             if tp is not None and sl is not None and tp < sl:
                 tp, sl = sl, tp
-        else:  # SHORT
+        else:
             if tp is not None and tp >= entry:
                 tp = None
             if sl is not None and sl <= entry:
@@ -277,17 +273,14 @@ class PositionSyncManager:
         return tp, sl
 
     def _sync_tpsl_orders(self, symbol, pos_side, quantity, expected_tp, expected_sl):
-        """Отменяет старые и выставляет новые TP/SL ордера, только если они изменились."""
         cache_key = f"{symbol}_{pos_side}"
         cached_tp, cached_sl = self._tpsl_cache.get(cache_key, (None, None))
 
-        # Если ничего не изменилось – выходим
         if cached_tp == expected_tp and cached_sl == expected_sl:
             return
 
         try:
             orders = self.engine.api.get_open_orders(symbol)
-            # Отменяем существующие TP/SL ордера для этой позиции
             for o in orders:
                 if o.get('positionSide') != pos_side:
                     continue
@@ -308,7 +301,6 @@ class PositionSyncManager:
                 )
                 logger.info(f"Set new TP for {symbol} {pos_side}: {expected_tp}")
             if expected_sl is not None:
-                # Проверка валидности
                 if (pos_side == 'LONG' and expected_sl >= expected_tp) or \
                    (pos_side == 'SHORT' and expected_sl <= expected_tp):
                     logger.warning(f"Invalid SL {expected_sl} relative to TP {expected_tp}, skipping SL order")
@@ -320,7 +312,6 @@ class PositionSyncManager:
                     )
                     logger.info(f"Set new SL for {symbol} {pos_side}: {expected_sl}")
 
-            # Обновляем кэш
             self._tpsl_cache[cache_key] = (expected_tp, expected_sl)
         except Exception as e:
             logger.error(f"Failed to sync TP/SL orders for {symbol}: {e}")

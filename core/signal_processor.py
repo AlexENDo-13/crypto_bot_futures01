@@ -18,8 +18,14 @@ class SignalProcessor:
     def process(self, signal: Signal, all_candles: Dict[str, pd.DataFrame]):
         """Полная обработка сигнала с проверками и исполнением."""
 
-        # === FIX 1: Принудительная синхронизация позиций перед проверкой лимита ===
-        # Проблема: портфель пуст, но на бирже есть позиции → бот думает что слоты заняты
+        # --- Дедупликация: не входить в ту же сторону, если позиция уже есть ---
+        current_positions = self.engine.portfolio.get_positions()
+        for pos in current_positions:
+            if pos.symbol == signal.symbol and pos.side == ("LONG" if signal.action == "BUY" else "SHORT"):
+                logger.info(f"Position already exists for {signal.symbol} {pos.side}, skipping duplicate signal")
+                return
+
+        # Принудительная синхронизация позиций перед проверкой лимита
         if not self.engine.auth.demo_mode:
             try:
                 self.engine.sync_manager.background_sync()
@@ -27,9 +33,7 @@ class SignalProcessor:
                 logger.debug(f"Pre-check sync failed: {e}")
 
         # Проверка лимита позиций с умной заменой
-        current_positions = self.engine.portfolio.get_positions()
         if len(current_positions) >= self.engine.max_positions:
-            # Пытаемся заменить самую слабую позицию
             if not self.engine.sync_manager.try_replace_weakest(signal.confidence, signal.symbol):
                 logger.info(f"Max positions reached ({self.engine.max_positions}), skipping {signal.symbol}")
                 return
@@ -43,11 +47,10 @@ class SignalProcessor:
         if price > 0:
             self.engine.risk_manager.adapt_to_volatility(atr_val / price)
 
-        # === FIX 8: Режим рынка фильтрует стратегии ===
+        # --- Фильтрация по рыночному режиму ---
         regime = signal.meta.get('regime', 'unknown')
         strategy_name = signal.meta.get('strategy', '')
 
-        # Блокируем трендовые стратегии в боковике
         trend_strategies = ['TrendFollowing', 'Momentum', 'Ichimoku', 'DualThrust']
         mean_rev_strategies = ['MeanReversion', 'RSIDivergence', 'Squeeze']
 
@@ -58,6 +61,19 @@ class SignalProcessor:
             logger.info(f"Strategy {strategy_name} blocked: market is TRENDING")
             return
 
+        # --- Адаптивный порог уверенности ---
+        threshold = self.engine.signal_threshold
+        if regime in ('HIGH_VOLATILITY', 'TRENDING'):
+            threshold = max(0.3, threshold - 0.15)   # легче войти в тренд
+        elif regime in ('LOW_VOLATILITY', 'RANGE', 'RANGING'):
+            threshold = min(0.8, threshold + 0.2)    # строже в боковике
+        logger.debug(f"Adaptive threshold for {regime}: {threshold:.2f}")
+
+        if signal.confidence < threshold:
+            logger.info(f"Signal confidence {signal.confidence:.2f} below adaptive threshold {threshold:.2f}, skipping {signal.symbol}")
+            return
+
+        # --- Предторговая проверка (спред, ликвидность через фильтр, VaR) ---
         allowed, reason = self.engine.risk_controller.pre_trade_check(
             signal.symbol, signal, all_candles, 0, price
         )
@@ -65,7 +81,7 @@ class SignalProcessor:
             logger.info(f"Pre-trade check blocked {signal.symbol}: {reason}")
             return
 
-        # Ончейн-фильтр получаем динамически
+        # Ончейн-фильтр
         onchain_filter = self.engine.filters.get('OnChainFilter')
         if onchain_filter and onchain_filter.enabled:
             new_conf = onchain_filter.assess(signal, {})
@@ -76,10 +92,11 @@ class SignalProcessor:
 
         signal = self._apply_tradingview_boost(signal)
 
+        # Обновляем данные по текущим позициям
         current_positions = self.engine.portfolio.get_positions()
-        available_margin = self.engine.portfolio.available_margin or self.engine._get_free_margin()
+        available_margin = self.engine.portfolio.available_margin or self._get_free_margin()
 
-        # === FIX 9: Корреляционный анализ перед входом ===
+        # --- Запуск каскада фильтров (включая LiquidityFilter вместо жёсткой проверки) ---
         filter_data = {
             'open_positions': [{'symbol': p.symbol, 'side': p.side} for p in current_positions],
             'current_drawdown_pct': self.engine.portfolio.get_stats().get('current_drawdown_pct', 0.0),
@@ -107,7 +124,7 @@ class SignalProcessor:
         free_margin = available_margin
         sl_tp = self.engine.risk_manager.get_sl_tp_levels(price, signal.action, atr_val, signal.symbol)
 
-        # === FIX 7: Реинвестирование прибыли — используем equity вместо free_margin ===
+        # Реинвестирование прибыли — используем equity вместо free_margin
         equity = self.engine.portfolio._equity or free_margin
         reinvest = getattr(self.engine, 'reinvest_profits', True)
         base_for_calc = equity if reinvest else free_margin
@@ -136,7 +153,6 @@ class SignalProcessor:
         return signal
 
     def _calculate_correlations(self, symbol: str, positions: list, all_candles: dict) -> dict:
-        """Вычисляет корреляцию между новым символом и открытыми позициями."""
         correlations = {}
         if not positions or symbol not in all_candles:
             return correlations
@@ -155,3 +171,10 @@ class SignalProcessor:
         except Exception as e:
             logger.debug(f"Correlation calc failed: {e}")
         return correlations
+
+    def _get_free_margin(self):
+        try:
+            bal = self.engine.api.get_balance().get('data', {}).get('balance', {})
+            return float(bal.get('availableMargin', 0))
+        except Exception:
+            return 0.0

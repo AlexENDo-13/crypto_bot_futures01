@@ -23,16 +23,25 @@ class OnChainFilter(BaseFilter):
         'max_tx_per_hour': 3,                # Максимум крупных транзакций в час
         'use_whale_alert': True,             # Использовать Whale Alert API (без ключа)
         'use_blockchain_com': True,          # Использовать Blockchain.com (без ключа)
-        'cache_seconds': 600                 # Кэш метрик на 10 минут
+        'cache_seconds': 600,                # Кэш метрик на 10 минут
+        'api_timeout': 3,                    # Таймаут запроса, секунды
+        'max_errors': 3,                     # Количество ошибок подряд перед отключением фильтра
+        'disable_minutes': 10                # На сколько минут отключить фильтр при превышении лимита ошибок
     }
 
     def __init__(self, params=None):
         super().__init__(params)
         self._last_check = 0
         self._cached_score = 0
+        self._error_count = 0
+        self._disabled_until = 0  # timestamp или 0, если фильтр активен
 
     def assess(self, signal: Signal, data: Dict[str, Any]) -> float:
         if not self.enabled:
+            return signal.confidence
+
+        # Проверяем, не отключён ли фильтр из-за ошибок
+        if self._disabled_until and time.time() < self._disabled_until:
             return signal.confidence
 
         now = time.time()
@@ -69,25 +78,37 @@ class OnChainFilter(BaseFilter):
                 score += bc_score
                 count += 1
 
-        return score / count if count > 0 else 0.0
+        if count == 0:
+            return 0.0
+
+        avg_score = score / count
+
+        # Если обе проверки вернули None (ошибки), считаем риск 0 и не учитываем ошибки
+        if score == 0 and all(s is None for s in [whale_score, bc_score]):
+            self._error_count = 0
+            return 0.0
+
+        # Если была ошибка – увеличиваем счётчик
+        if score == 0:
+            self._error_count += 1
+            if self._error_count >= self.config['max_errors']:
+                self._disabled_until = time.time() + self.config['disable_minutes'] * 60
+                logger.warning(f"OnChainFilter disabled for {self.config['disable_minutes']} min due to {self._error_count} consecutive errors")
+            return 0.0
+        else:
+            self._error_count = 0
+            if self._disabled_until:
+                self._disabled_until = 0
+                logger.info("OnChainFilter re-enabled after successful response")
+
+        return avg_score
 
     def _check_whale_alert(self) -> Optional[float]:
         """Проверяет последние транзакции китов (Whale Alert)."""
         try:
-            # Бесплатный API без ключа, ограничение 10 запросов/мин
-            url = "https://api.whale-alert.io/v1/transactions"
-            params = {
-                'api_key': 'YOUR_FREE_API_KEY',  # Зарегистрируйтесь на whale-alert.io
-                'min_value': int(self.config['min_btc_amount'] * 1e8),
-                'limit': 50,
-                'from': int(time.time() - 3600)  # За последний час
-            }
-            # Если ключа нет, используем публичный прокси (может не работать, но для примера)
-            # Лучше получить бесплатный ключ на whale-alert.io
-            if params['api_key'] == 'YOUR_FREE_API_KEY':
-                # Используем общедоступный эндпоинт без ключа (ограничен)
-                url = "https://api.whale-alert.io/v1/transactions?limit=50&min_value=50000000"
-            resp = requests.get(url, timeout=10)
+            # Бесплатный API без ключа, теперь с коротким таймаутом
+            url = "https://api.whale-alert.io/v1/transactions?limit=50&min_value=50000000"
+            resp = requests.get(url, timeout=self.config['api_timeout'])
             if resp.status_code == 200:
                 data = resp.json()
                 txs = data.get('transactions', [])
@@ -105,13 +126,10 @@ class OnChainFilter(BaseFilter):
     def _check_blockchain_com(self) -> Optional[float]:
         """Проверяет крупные переводы через Blockchain.com API (публичный)."""
         try:
-            # Получаем список последних блоков
             url = "https://blockchain.info/blocks?format=json"
-            resp = requests.get(url, timeout=10)
+            resp = requests.get(url, timeout=self.config['api_timeout'])
             if resp.status_code == 200:
                 blocks = resp.json()
-                # Упрощённо: подсчитываем блоки с большим количеством транзакций
-                # Реальная логика требует анализа транзакций, но мы используем загрузку блока как индикатор активности
                 total_txs = sum(b.get('tx', 1) for b in blocks)
                 avg_tx_per_block = total_txs / len(blocks) if blocks else 0
                 if avg_tx_per_block > 2000:  # Эмпирический порог

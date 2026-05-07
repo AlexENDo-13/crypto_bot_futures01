@@ -1,5 +1,5 @@
 """
-Main application window with tabbed interface.
+Main application window with all tabs (including orders).
 """
 import sys, os, logging
 from PyQt5.QtWidgets import (
@@ -13,6 +13,7 @@ from ui.styles import theme
 from ui.dashboard import DashboardTab
 from ui.signals import SignalsTab
 from ui.positions import PositionsTab
+from ui.orders_tab import OrdersTab          # новая вкладка
 from ui.settings import SettingsTab
 from ui.logs import LogsTab
 from ui.backtest import BacktestTab
@@ -62,6 +63,7 @@ class MainWindow(QMainWindow):
         self.tab_dashboard = DashboardTab(self.engine)
         self.tab_signals = SignalsTab(self.engine)
         self.tab_positions = PositionsTab(self.engine)
+        self.tab_orders = OrdersTab(self.engine)               # ← новая вкладка
         self.tab_settings = SettingsTab(self.engine)
         self.tab_logs = LogsTab(self.engine)
         self.tab_backtest = BacktestTab(self.engine)
@@ -73,6 +75,7 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.tab_dashboard, "Dashboard")
         self.tabs.addTab(self.tab_signals, "Signals")
         self.tabs.addTab(self.tab_positions, "Positions")
+        self.tabs.addTab(self.tab_orders, "Orders")            # ←
         self.tabs.addTab(self.tab_settings, "Settings")
         self.tabs.addTab(self.tab_logs, "Logs")
         self.tabs.addTab(self.tab_backtest, "Backtest")
@@ -83,6 +86,7 @@ class MainWindow(QMainWindow):
 
         layout.addWidget(self.tabs)
 
+        # Status bar
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
 
@@ -97,6 +101,12 @@ class MainWindow(QMainWindow):
         self.status_bar.addWidget(self.status_bot)
         self.status_bar.addWidget(self.status_positions)
         self.status_bar.addPermanentWidget(self.status_ping)
+
+        # Подключение быстрых действий дашборда
+        self.tab_dashboard.close_all_requested.connect(self._close_all_positions)
+        self.tab_dashboard.close_longs_requested.connect(self._close_longs)
+        self.tab_dashboard.close_shorts_requested.connect(self._close_shorts)
+        self.tab_dashboard.close_50_requested.connect(self._close_50_percent)
 
     def _create_top_bar(self):
         bar = QFrame()
@@ -164,6 +174,8 @@ class MainWindow(QMainWindow):
             pos_data = [p.to_dict() for p in positions]
             self.tab_positions.update_positions(pos_data)
             self.status_positions.setText(f"Positions: {len(positions)}")
+
+            self.tab_orders.update_data()                # обновляем вкладку ордеров
 
             self.tab_strategy_stats.update_data(status)
 
@@ -263,9 +275,9 @@ class MainWindow(QMainWindow):
     def apply_theme(self):
         stylesheet = theme.get_stylesheet()
         QApplication.instance().setStyleSheet(stylesheet)
-        for tab_attr in ['tab_dashboard', 'tab_signals', 'tab_positions', 'tab_settings',
-                         'tab_logs', 'tab_backtest', 'tab_blacklist', 'tab_system',
-                         'tab_chart', 'tab_strategy_stats']:
+        for tab_attr in ['tab_dashboard', 'tab_signals', 'tab_positions', 'tab_orders',
+                         'tab_settings', 'tab_logs', 'tab_backtest', 'tab_blacklist',
+                         'tab_system', 'tab_chart', 'tab_strategy_stats']:
             tab = getattr(self, tab_attr, None)
             if tab and hasattr(tab, 'apply_theme'):
                 tab.apply_theme()
@@ -281,3 +293,22 @@ class MainWindow(QMainWindow):
             event.accept()
         else:
             event.ignore()
+
+    # ---------- Быстрые действия ----------
+    def _close_all_positions(self):
+        for pos in self.engine.portfolio.get_positions():
+            self.engine.close_position_manual(pos.symbol, pos.side)
+
+    def _close_longs(self):
+        for pos in self.engine.portfolio.get_positions():
+            if pos.side == 'LONG':
+                self.engine.close_position_manual(pos.symbol, pos.side)
+
+    def _close_shorts(self):
+        for pos in self.engine.portfolio.get_positions():
+            if pos.side == 'SHORT':
+                self.engine.close_position_manual(pos.symbol, pos.side)
+
+    def _close_50_percent(self):
+        for pos in self.engine.portfolio.get_positions():
+            self.engine.close_position_manual(pos.symbol, pos.side, percent=50.0)
