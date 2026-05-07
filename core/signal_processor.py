@@ -18,11 +18,11 @@ class SignalProcessor:
     def process(self, signal: Signal, all_candles: Dict[str, pd.DataFrame]):
         """Полная обработка сигнала с проверками и исполнением."""
 
-        # --- Дедупликация: не входить в ту же сторону, если позиция уже есть ---
+        # --- Полный запрет на ЛЮБУЮ новую позицию по символу, если уже есть открытая ---
         current_positions = self.engine.portfolio.get_positions()
         for pos in current_positions:
-            if pos.symbol == signal.symbol and pos.side == ("LONG" if signal.action == "BUY" else "SHORT"):
-                logger.info(f"Position already exists for {signal.symbol} {pos.side}, skipping duplicate signal")
+            if pos.symbol == signal.symbol:
+                logger.info(f"Position already exists for {signal.symbol} ({pos.side}), skipping new signal")
                 return
 
         # Принудительная синхронизация позиций перед проверкой лимита
@@ -90,7 +90,7 @@ class SignalProcessor:
         current_positions = self.engine.portfolio.get_positions()
         available_margin = self.engine.portfolio.available_margin or self._get_free_margin()
 
-        # --- Запуск каскада фильтров (включая LiquidityFilter вместо жёсткой проверки) ---
+        # --- Запуск каскада фильтров ---
         filter_data = {
             'open_positions': [{'symbol': p.symbol, 'side': p.side} for p in current_positions],
             'current_drawdown_pct': self.engine.portfolio.get_stats().get('current_drawdown_pct', 0.0),
@@ -102,7 +102,6 @@ class SignalProcessor:
             'correlations': self._calculate_correlations(signal.symbol, current_positions, all_candles),
         }
 
-        # --- ВАЖНО: сначала прогоняем все фильтры, только потом думаем о замене ---
         for filter_name, filter_obj in sorted(self.engine.filters.items(),
                                               key=lambda x: getattr(x[1], 'PRIORITY', 100)):
             if not getattr(filter_obj, 'enabled', True):
@@ -116,7 +115,7 @@ class SignalProcessor:
             except Exception as e:
                 logger.warning(f"Filter {filter_name} error: {e}")
 
-        # --- Проверка лимита позиций с умной заменой (только если сигнал прошёл все фильтры) ---
+        # --- Проверка лимита позиций с умной заменой ---
         if len(current_positions) >= self.engine.max_positions:
             if not self.engine.sync_manager.try_replace_weakest(signal.confidence, signal.symbol):
                 logger.info(f"Max positions reached ({self.engine.max_positions}), skipping {signal.symbol}")

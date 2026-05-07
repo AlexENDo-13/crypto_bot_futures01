@@ -57,6 +57,9 @@ class PositionSyncManager:
                     )
                     self.engine.portfolio.add_position(pos)
                     self._tpsl_cache[f"{symbol}_{pos_side}"] = (tp_price, sl_price)
+
+            # --- Защита от дубликатов на бирже: если есть и LONG, и SHORT по одному символу ---
+            self._remove_duplicate_positions()
             self._enforce_limit()
         except Exception as e:
             logger.error(f"Full sync failed: {e}")
@@ -126,7 +129,6 @@ class PositionSyncManager:
                     self._sync_tpsl_orders(symbol, pos_side, existing.quantity,
                                            existing.tp_price, existing.sl_price)
                 else:
-                    # Всегда добавляем позицию биржи, ограничение применяется после цикла
                     atr = self.engine._get_current_atr(symbol)
                     trade_side = 'BUY' if pos_side == 'LONG' else 'SELL'
                     sl_tp = self.engine.risk_manager.get_sl_tp_levels(entry, trade_side, atr, symbol)
@@ -140,10 +142,30 @@ class PositionSyncManager:
                     self.engine.portfolio.add_position(pos)
                     self._tpsl_cache[f"{symbol}_{pos_side}"] = (sl_tp['tp2'], sl_tp['sl'])
 
+            # --- Убираем дубликаты ---
+            self._remove_duplicate_positions()
             self._enforce_limit()
 
         except Exception:
             logger.exception("Background sync crashed")
+
+    def _remove_duplicate_positions(self):
+        """Если на бирже есть и LONG, и SHORT по одному символу, закрываем одну из них."""
+        positions = self.engine.portfolio.get_positions()
+        symbols_seen = set()
+        for pos in list(positions):
+            if pos.symbol in symbols_seen:
+                logger.warning(f"Duplicate position detected for {pos.symbol}, closing {pos.side}")
+                try:
+                    self.engine.api.close_position(pos.symbol, pos.side)
+                except Exception as e:
+                    logger.error(f"Failed to close duplicate {pos.symbol} {pos.side}: {e}")
+                self.engine.portfolio.remove_position(pos.symbol, pos.side)
+                cache_key = f"{pos.symbol}_{pos.side}"
+                if cache_key in self._tpsl_cache:
+                    del self._tpsl_cache[cache_key]
+            else:
+                symbols_seen.add(pos.symbol)
 
     def _enforce_limit(self):
         positions = self.engine.portfolio.get_positions()
@@ -171,7 +193,7 @@ class PositionSyncManager:
         for pos in positions:
             try:
                 open_t = datetime.fromisoformat(pos.open_time)
-                if (now - open_t).total_seconds() < 300:
+                if (now - open_t).total_seconds() < 60:
                     return False
             except:
                 pass

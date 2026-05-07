@@ -6,14 +6,14 @@ api_secret =
 scan_interval = 120
 signal_threshold = 0.55
 max_positions = 4
-timeframes = 1h,4h
-top_symbols = 30
+timeframes = 15,1h,4h,1d
+top_symbols = 20
 
 [RISK]
-risk_per_trade = 2.0
+risk_per_trade = 1.5
 max_leverage = 3
 profile = Balanced
-use_day_profile = True
+use_day_profile = False
 kelly_enabled = True
 kelly_winrate = 0.5
 kelly_avg_win_loss = 2.0
@@ -34,7 +34,7 @@ max_risk_pct = 0.0
 scan_interval = 300
 
 [FILTERS]
-volume_surge_min_mult = 0.05
+volume_surge_min_mult = 0.1
 liquidity_min_ratio = 0.05
 
 [UI]

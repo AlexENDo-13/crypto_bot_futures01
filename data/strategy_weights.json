@@ -1,6 +1,6 @@
 {
   "AdaptiveCombiner": {
-    "weight": 0.9876543209876544,
+    "weight": 1.3114754098360657,
     "trades": 0,
     "wins": 0,
     "total_pnl": 0.0,
@@ -11,7 +11,7 @@
     "disabled_reason": null
   },
   "DualThrust": {
-    "weight": 0.691358024691358,
+    "weight": 0.9180327868852459,
     "trades": 0,
     "wins": 0,
     "total_pnl": 0.0,
@@ -22,7 +22,7 @@
     "disabled_reason": null
   },
   "Ichimoku": {
-    "weight": 0.9876543209876544,
+    "weight": 1.3114754098360657,
     "trades": 0,
     "wins": 0,
     "total_pnl": 0.0,
@@ -33,30 +33,30 @@
     "disabled_reason": null
   },
   "MeanReversion": {
-    "weight": 0.9876543209876544,
-    "trades": 3,
+    "weight": 0.13114754098360656,
+    "trades": 4,
     "wins": 0,
     "total_pnl": 0.0,
     "avg_pnl": 0.0,
     "winrate": 0.0,
-    "consecutive_losses": 3,
+    "consecutive_losses": 4,
     "disabled": false,
     "disabled_reason": null
   },
   "Momentum": {
-    "weight": 0.0,
-    "trades": 7,
+    "weight": 0.13114754098360656,
+    "trades": 10,
     "wins": 0,
     "total_pnl": 0.0,
     "avg_pnl": 0.0,
     "winrate": 0.0,
-    "consecutive_losses": 7,
+    "consecutive_losses": 10,
     "disabled": true,
     "disabled_reason": "5 consecutive losses",
     "disabled_at": 1778172232.2450664
   },
   "RSIDivergence": {
-    "weight": 0.888888888888889,
+    "weight": 1.1803278688524592,
     "trades": 0,
     "wins": 0,
     "total_pnl": 0.0,
@@ -67,7 +67,7 @@
     "disabled_reason": null
   },
   "Squeeze": {
-    "weight": 0.7901234567901235,
+    "weight": 1.0491803278688525,
     "trades": 0,
     "wins": 0,
     "total_pnl": 0.0,
@@ -78,7 +78,7 @@
     "disabled_reason": null
   },
   "TrendFollowing": {
-    "weight": 1.4814814814814816,
+    "weight": 1.9672131147540985,
     "trades": 0,
     "wins": 0,
     "total_pnl": 0.0,
