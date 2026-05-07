@@ -15,7 +15,7 @@ class MeanReversionStrategy(BaseStrategy):
     VERSION = "1.0.0"
     
     PARAMS = {
-        'enabled': False,            # отключено
+        'enabled': True,            # отключено
         'weight': 1.0,
         'timeframes': ['15m', '1h'],
         'bb_period': 20,

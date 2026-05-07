@@ -15,7 +15,7 @@ class MomentumStrategy(BaseStrategy):
     VERSION = "1.0.0"
     
     PARAMS = {
-        'enabled': False,          # отключено
+        'enabled': True,          # отключено
         'weight': 1.2,
         'timeframes': ['15m', '1h'],
         'rsi_period': 10,
