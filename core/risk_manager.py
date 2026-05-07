@@ -12,6 +12,10 @@ logger = logging.getLogger(__name__)
 DEFAULT_ATR_MULT_SL = 1.5
 DEFAULT_ATR_MULT_TP = 2.0
 
+# Минимальное расстояние SL от цены входа (в долях от цены)
+MIN_SL_RATIO_LONG = 0.98   # SL не ближе 2% снизу
+MIN_SL_RATIO_SHORT = 1.02  # SL не ближе 2% сверху
+
 
 class RiskManager:
     STATE_FILE = 'data/risk_state.json'
@@ -27,29 +31,25 @@ class RiskManager:
             'Aggressive': {'risk_per_trade_pct': 4.0, 'max_leverage': 5},
             'Adaptive': {'risk_per_trade_pct': 2.0, 'max_leverage': 3},
         }
-        # Пользовательские множители ATR на пару (из автотюнинга)
-        self._atr_multipliers: Dict[str, Dict[str, float]] = {}  # symbol -> {sl_mult, tp_mult}
+        self._atr_multipliers: Dict[str, Dict[str, float]] = {}
         self._day_profiles = {
-            0: {'risk_pct': 1.5, 'max_lev': 2},  # Пн
-            1: {'risk_pct': 1.5, 'max_lev': 2},  # Вт
-            2: {'risk_pct': 1.5, 'max_lev': 2},  # Ср
-            3: {'risk_pct': 1.5, 'max_lev': 2},  # Чт
-            4: {'risk_pct': 1.0, 'max_lev': 1},  # Пт (снижаем)
-            5: {'risk_pct': 1.0, 'max_lev': 1},  # Сб
-            6: {'risk_pct': 1.0, 'max_lev': 1},  # Вс
+            0: {'risk_pct': 1.5, 'max_lev': 2},
+            1: {'risk_pct': 1.5, 'max_lev': 2},
+            2: {'risk_pct': 1.5, 'max_lev': 2},
+            3: {'risk_pct': 1.5, 'max_lev': 2},
+            4: {'risk_pct': 1.0, 'max_lev': 1},
+            5: {'risk_pct': 1.0, 'max_lev': 1},
+            6: {'risk_pct': 1.0, 'max_lev': 1},
         }
         self._kelly_enabled = False
         self._kelly_winrate = 0.5
         self._kelly_avg_win_loss_ratio = 2.0
         self.use_day_profile = True
-
-        # === Адаптивное изменение риска по сериям ===
         self.adaptive_risk_enabled = True
         self.consecutive_wins = 0
         self.consecutive_losses = 0
         self._base_risk_pct = self.risk_per_trade_pct
         self._base_leverage = self.max_leverage
-
         self._load_state()
 
     # ---------- Профили ----------
@@ -72,7 +72,6 @@ class RiskManager:
             self.set_profile(self._current_profile)
 
     def apply_day_profile(self):
-        """Применяет профиль риска по текущему дню недели (UTC)."""
         if not self.use_day_profile:
             return
         dow = datetime.now(timezone.utc).weekday()
@@ -88,17 +87,14 @@ class RiskManager:
         self._save_state()
 
     def get_atr_multipliers(self, symbol: str) -> Tuple[float, float]:
-        """Возвращает (sl_mult, tp_mult) для символа, иначе дефолтные."""
         if symbol in self._atr_multipliers:
             m = self._atr_multipliers[symbol]
             return m['sl'], m['tp']
         return DEFAULT_ATR_MULT_SL, DEFAULT_ATR_MULT_TP
 
     def get_sl_tp_levels(self, entry_price: float, side: str, atr: float, symbol: str = None) -> Dict[str, float]:
-        """Расчёт SL/TP с учётом индивидуальных множителей пары и защитой от отрицательного SL."""
         sl_mult, tp_mult = self.get_atr_multipliers(symbol) if symbol else (DEFAULT_ATR_MULT_SL, DEFAULT_ATR_MULT_TP)
 
-        # Минимальное расстояние SL от входа — 0.5% от цены
         min_sl_distance = entry_price * 0.005
 
         if side == 'BUY':
@@ -110,19 +106,24 @@ class RiskManager:
             sl = entry_price + distance
             tp = entry_price - atr * tp_mult
 
-        # Финальная защита: SL никогда не должен быть отрицательным и сильно удалённым от цены
-        sl = max(entry_price * 0.001, sl)      # минимум 0.1% от цены входа
-        # Дополнительно: для лонга SL не может быть выше цены (тогда бы сразу сработал)
+        # Первичная защита от отрицательного SL
+        sl = max(entry_price * 0.001, sl)
+        # Дополнительная логическая проверка
         if side == 'BUY' and sl >= entry_price:
             sl = entry_price * 0.999
         elif side == 'SELL' and sl <= entry_price:
             sl = entry_price * 1.001
 
+        # --- Усиленная защита: SL не может быть экстремально близким к цене ---
+        if side == 'BUY':
+            sl = max(sl, entry_price * MIN_SL_RATIO_LONG)
+        else:
+            sl = max(sl, entry_price * MIN_SL_RATIO_SHORT)
+
         return {'sl': sl, 'tp': tp, 'tp2': tp}
 
     # ---------- Плечо по волатильности ----------
     def get_optimal_leverage(self, symbol: str, price: float, atr: float) -> int:
-        """Автоопределение безопасного плеча исходя из волатильности."""
         atr_pct = atr / price if price > 0 else 0.02
         if atr_pct > 0.05:
             return max(1, self.max_leverage - 2)
@@ -143,7 +144,6 @@ class RiskManager:
             sl_distance = entry_price * 0.01
         quantity = risk_amount / sl_distance
         leverage = self.max_leverage
-        # Kelly adjustment с реальным winrate
         if self._kelly_enabled:
             f = self._kelly_winrate - ((1 - self._kelly_winrate) / self._kelly_avg_win_loss_ratio)
             quantity *= max(0.1, f)
@@ -157,9 +157,7 @@ class RiskManager:
         self._kelly_avg_win_loss_ratio = avg_win_loss_ratio
         self._kelly_enabled = enabled
 
-    # === FIX 3: Обновление Kelly из реальной истории ===
     def update_kelly_from_history(self, portfolio):
-        """Обновляет Kelly параметры из реальной истории сделок."""
         if not self._kelly_enabled:
             return
 
@@ -178,7 +176,6 @@ class RiskManager:
         avg_loss = abs(sum(t.pnl for t in losses) / len(losses)) if losses else 1.0
         avg_wl_ratio = avg_win / avg_loss if avg_loss > 0 else 2.0
 
-        # Плавное обновление (сглаживание)
         self._kelly_winrate = 0.7 * self._kelly_winrate + 0.3 * winrate
         self._kelly_avg_win_loss_ratio = 0.7 * self._kelly_avg_win_loss_ratio + 0.3 * avg_wl_ratio
 
@@ -203,7 +200,6 @@ class RiskManager:
 
     # ---------- Адаптивный риск по сериям ----------
     def update_adaptive_risk(self, trade_pnl: float):
-        """Автоматически меняет риск в зависимости от серии результатов."""
         if not self.adaptive_risk_enabled:
             return
         if trade_pnl > 0:
@@ -213,7 +209,6 @@ class RiskManager:
             self.consecutive_losses += 1
             self.consecutive_wins = 0
 
-        # Корректируем риск
         if self.consecutive_wins >= 3:
             self.risk_per_trade_pct = min(5.0, self._base_risk_pct * (1 + 0.1 * self.consecutive_wins))
             self.max_leverage = min(5, self._base_leverage + 1)
@@ -221,7 +216,6 @@ class RiskManager:
             self.risk_per_trade_pct = max(0.5, self._base_risk_pct * (1 - 0.1 * self.consecutive_losses))
             self.max_leverage = max(1, self._base_leverage - 1)
         else:
-            # Возвращаем к базовым, если серия прервалась
             self.risk_per_trade_pct = self._base_risk_pct
             self.max_leverage = self._base_leverage
 
