@@ -16,16 +16,13 @@ class SignalProcessor:
         self.engine = engine
 
     def process(self, signal: Signal, all_candles: Dict[str, pd.DataFrame]):
-        """Полная обработка сигнала с проверками и исполнением."""
-
-        # --- Полный запрет на ЛЮБУЮ новую позицию по символу, если уже есть открытая ---
+        # --- Запрет на дубликаты позиций по символу ---
         current_positions = self.engine.portfolio.get_positions()
         for pos in current_positions:
             if pos.symbol == signal.symbol:
                 logger.info(f"Position already exists for {signal.symbol} ({pos.side}), skipping new signal")
                 return
 
-        # Принудительная синхронизация позиций перед проверкой лимита
         if not self.engine.auth.demo_mode:
             try:
                 self.engine.sync_manager.background_sync()
@@ -67,7 +64,7 @@ class SignalProcessor:
             logger.info(f"Signal confidence {signal.confidence:.2f} below adaptive threshold {threshold:.2f}, skipping {signal.symbol}")
             return
 
-        # --- Предторговая проверка (спред, ликвидность через фильтр, VaR) ---
+        # --- Предторговая проверка ---
         allowed, reason = self.engine.risk_controller.pre_trade_check(
             signal.symbol, signal, all_candles, 0, price
         )
@@ -75,7 +72,6 @@ class SignalProcessor:
             logger.info(f"Pre-trade check blocked {signal.symbol}: {reason}")
             return
 
-        # Ончейн-фильтр
         onchain_filter = self.engine.filters.get('OnChainFilter')
         if onchain_filter and onchain_filter.enabled:
             new_conf = onchain_filter.assess(signal, {})
@@ -86,11 +82,10 @@ class SignalProcessor:
 
         signal = self._apply_tradingview_boost(signal)
 
-        # Обновляем данные по текущим позициям
         current_positions = self.engine.portfolio.get_positions()
         available_margin = self.engine.portfolio.available_margin or self._get_free_margin()
 
-        # --- Запуск каскада фильтров ---
+        # --- Каскад фильтров ---
         filter_data = {
             'open_positions': [{'symbol': p.symbol, 'side': p.side} for p in current_positions],
             'current_drawdown_pct': self.engine.portfolio.get_stats().get('current_drawdown_pct', 0.0),
@@ -115,16 +110,13 @@ class SignalProcessor:
             except Exception as e:
                 logger.warning(f"Filter {filter_name} error: {e}")
 
-        # --- Проверка лимита позиций с умной заменой ---
+        # Проверка лимита позиций (без умной замены)
         if len(current_positions) >= self.engine.max_positions:
-            if not self.engine.sync_manager.try_replace_weakest(signal.confidence, signal.symbol):
-                logger.info(f"Max positions reached ({self.engine.max_positions}), skipping {signal.symbol}")
-                return
+            logger.info(f"Max positions reached ({self.engine.max_positions}), skipping {signal.symbol}")
+            return
 
         free_margin = available_margin
         sl_tp = self.engine.risk_manager.get_sl_tp_levels(price, signal.action, atr_val, signal.symbol)
-
-        # Реинвестирование прибыли — используем equity вместо free_margin
         equity = self.engine.portfolio._equity or free_margin
         reinvest = getattr(self.engine, 'reinvest_profits', True)
         base_for_calc = equity if reinvest else free_margin
@@ -134,10 +126,17 @@ class SignalProcessor:
         )
         leverage = self.engine.risk_manager.get_optimal_leverage(signal.symbol, price, atr_val)
 
-        min_qty = self.engine._contracts_info.get(signal.symbol, {}).get('minQty', 0)
+        # --- Нормализация количества под требования биржи ---
+        contract_info = self.engine._contracts_info.get(signal.symbol, {})
+        min_qty = contract_info.get('minQty', 0)
+        step_size = contract_info.get('stepSize', 0.001)
+
         if min_qty > 0 and quantity < min_qty:
-            logger.info(f"Quantity {quantity} < minQty {min_qty}, adjusting...")
             quantity = min_qty
+        if step_size > 0:
+            quantity = ((quantity + step_size - 1e-10) // step_size) * step_size
+            if min_qty > 0 and quantity < min_qty:
+                quantity = min_qty
 
         required_margin = (quantity * price) / leverage
         if required_margin > free_margin:
@@ -156,7 +155,6 @@ class SignalProcessor:
         correlations = {}
         if not positions or symbol not in all_candles:
             return correlations
-
         try:
             import numpy as np
             new_closes = all_candles[symbol]['close'].values[-50:]

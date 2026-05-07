@@ -10,19 +10,12 @@ from indicators.base import RSI, EMA, SMA
 
 
 class MomentumStrategy(BaseStrategy):
-    """
-    Momentum strategy using RSI divergence and volume.
-    
-    Entry: RSI momentum with volume confirmation
-    Exit: Momentum exhaustion
-    """
-    
     NAME = "Momentum"
     DESCRIPTION = "RSI momentum with volume confirmation"
     VERSION = "1.0.0"
     
     PARAMS = {
-        'enabled': True,
+        'enabled': False,          # отключено
         'weight': 1.2,
         'timeframes': ['15m', '1h'],
         'rsi_period': 10,
@@ -39,11 +32,10 @@ class MomentumStrategy(BaseStrategy):
         self.price_ema = EMA({'period': 20})
     
     def evaluate(self, symbol: str, timeframe: str, candles: pd.DataFrame) -> Optional[Signal]:
-        """Evaluate momentum signals."""
+        # ... (вся логика без изменений)
         if len(candles) < self.config['volume_ma_period'] + 10:
             return None
         
-        # Calculate indicators
         rsi_values = self.rsi.calculate(candles)
         volume_ma = self.volume_sma.calculate(candles)
         price_ema = self.price_ema.calculate(candles)
@@ -51,23 +43,20 @@ class MomentumStrategy(BaseStrategy):
         current_price = candles['close'].iloc[-1]
         current_volume = candles['volume'].iloc[-1]
         current_rsi = rsi_values.iloc[-1]
-        prev_rsi = rsi_values.iloc[-5]  # 5 bars ago
+        prev_rsi = rsi_values.iloc[-5]
         
         current_vol_ma = volume_ma.iloc[-1]
         volume_ratio = current_volume / current_vol_ma if current_vol_ma > 0 else 1
         
-        # Price vs EMA (trend direction)
         price_above_ema = current_price > price_ema.iloc[-1]
         
-        # BUY: RSI rising above threshold with volume
         if (current_rsi > self.config['rsi_entry_long'] and 
-            prev_rsi < current_rsi and  # Rising momentum
+            prev_rsi < current_rsi and 
             volume_ratio > self.config['min_volume_ratio']):
             
             confidence = self._calculate_confidence(
                 True, current_rsi, prev_rsi, volume_ratio, price_above_ema
             )
-            
             return Signal(
                 symbol=symbol,
                 action='BUY',
@@ -82,15 +71,13 @@ class MomentumStrategy(BaseStrategy):
                 }
             )
         
-        # SELL: RSI falling below threshold with volume
         if (current_rsi < self.config['rsi_entry_short'] and 
-            prev_rsi > current_rsi and  # Falling momentum
+            prev_rsi > current_rsi and 
             volume_ratio > self.config['min_volume_ratio']):
             
             confidence = self._calculate_confidence(
                 False, current_rsi, prev_rsi, volume_ratio, not price_above_ema
             )
-            
             return Signal(
                 symbol=symbol,
                 action='SELL',
@@ -104,27 +91,18 @@ class MomentumStrategy(BaseStrategy):
                     'trend_aligned': not price_above_ema,
                 }
             )
-        
         return None
     
     def _calculate_confidence(self, is_bullish: bool, rsi: float, 
                               prev_rsi: float, volume_ratio: float,
                               trend_aligned: bool) -> float:
-        """Calculate signal confidence."""
-        confidence = 0.45  # Base
-        
-        # RSI momentum strength
+        confidence = 0.45
         rsi_change = abs(rsi - prev_rsi)
         confidence += min(0.2, rsi_change / 50)
-        
-        # Volume confirmation
         if volume_ratio > self.config['min_volume_ratio']:
             confidence += min(0.15, (volume_ratio - 1) * 0.1)
-        
-        # Trend alignment bonus
         if trend_aligned:
             confidence += 0.1
         else:
-            confidence -= 0.05  # Counter-trend penalty
-        
+            confidence -= 0.05
         return min(1.0, max(0.1, confidence))

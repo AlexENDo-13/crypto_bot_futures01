@@ -10,19 +10,12 @@ from indicators.base import BollingerBands, RSI, SMA
 
 
 class MeanReversionStrategy(BaseStrategy):
-    """
-    Mean reversion strategy using Bollinger Bands.
-    
-    Entry: Price touches outer band with RSI confirmation
-    Exit: Price reaches middle band or opposite band
-    """
-    
     NAME = "MeanReversion"
     DESCRIPTION = "Bollinger Bands mean reversion with RSI"
     VERSION = "1.0.0"
     
     PARAMS = {
-        'enabled': True,
+        'enabled': False,            # отключено
         'weight': 1.0,
         'timeframes': ['15m', '1h'],
         'bb_period': 20,
@@ -42,11 +35,9 @@ class MeanReversionStrategy(BaseStrategy):
         self.sma = SMA({'period': self.config['bb_period']})
     
     def evaluate(self, symbol: str, timeframe: str, candles: pd.DataFrame) -> Optional[Signal]:
-        """Evaluate mean reversion signals."""
         if len(candles) < self.config['bb_period'] + 10:
             return None
         
-        # Calculate indicators
         bb_values = self.bb.calculate(candles)
         rsi_values = self.rsi.calculate(candles)
         
@@ -59,19 +50,14 @@ class MeanReversionStrategy(BaseStrategy):
         
         current_rsi = rsi_values.iloc[-1]
         
-        # Check if price is near bands
         band_range = upper - lower
         if band_range == 0:
             return None
         
         position_in_band = (current_price - lower) / band_range
         
-        # BUY: Price near lower band + RSI oversold
         if position_in_band < 0.1 and current_rsi < self.config['rsi_oversold']:
-            confidence = self._calculate_confidence(
-                True, position_in_band, current_rsi
-            )
-            
+            confidence = self._calculate_confidence(True, position_in_band, current_rsi)
             return Signal(
                 symbol=symbol,
                 action='BUY',
@@ -89,12 +75,8 @@ class MeanReversionStrategy(BaseStrategy):
                 suggested_tp=middle
             )
         
-        # SELL: Price near upper band + RSI overbought
         if position_in_band > 0.9 and current_rsi > self.config['rsi_overbought']:
-            confidence = self._calculate_confidence(
-                False, position_in_band, current_rsi
-            )
-            
+            confidence = self._calculate_confidence(False, position_in_band, current_rsi)
             return Signal(
                 symbol=symbol,
                 action='SELL',
@@ -111,24 +93,17 @@ class MeanReversionStrategy(BaseStrategy):
                 suggested_sl=upper + (band_range * 0.1),
                 suggested_tp=middle
             )
-        
         return None
     
     def _calculate_confidence(self, is_bullish: bool, 
                               position_in_band: float, rsi: float) -> float:
-        """Calculate signal confidence."""
-        confidence = 0.4  # Base (mean reversion is inherently risky)
-        
-        # RSI extremity
+        confidence = 0.4
         if is_bullish:
             rsi_factor = (self.config['rsi_oversold'] - rsi) / self.config['rsi_oversold']
             confidence += min(0.3, rsi_factor * 0.3)
-            # Band position (deeper = more confident)
             confidence += min(0.2, (0.1 - position_in_band))
         else:
             rsi_factor = (rsi - self.config['rsi_overbought']) / (100 - self.config['rsi_overbought'])
             confidence += min(0.3, rsi_factor * 0.3)
-            # Band position
             confidence += min(0.2, (position_in_band - 0.9))
-        
-        return min(0.9, max(0.1, confidence))  # Cap at 0.9 for mean reversion
+        return min(0.9, max(0.1, confidence))
