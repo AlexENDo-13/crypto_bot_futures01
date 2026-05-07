@@ -79,7 +79,21 @@ def setup_logging():
     formatter = logging.Formatter('[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s')
     fh = logging.FileHandler(log_file, encoding='utf-8')
     fh.setLevel(logging.DEBUG); fh.setFormatter(formatter)
-    ch = logging.StreamHandler(); ch.setLevel(logging.INFO); ch.setFormatter(formatter)
+
+    # Читаем уровень логирования из config.ini
+    try:
+        from configparser import ConfigParser
+        cfg = ConfigParser()
+        cfg.read('config.ini')
+        log_level_str = cfg.get('LOGGING', 'level', fallback='INFO')
+        log_level = getattr(logging, log_level_str.upper(), logging.INFO)
+    except Exception:
+        log_level = logging.INFO
+
+    ch = logging.StreamHandler()
+    ch.setLevel(log_level)
+    ch.setFormatter(formatter)
+
     root = logging.getLogger(); root.setLevel(logging.DEBUG); root.addHandler(fh); root.addHandler(ch)
     return log_file
 
