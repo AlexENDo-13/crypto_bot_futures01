@@ -1,23 +1,23 @@
 === SYSTEM INFO ===
 {
-  "timestamp": "2026-05-07T00:34:56.807396+00:00",
+  "timestamp": "2026-05-07T15:18:30.661241+00:00",
   "os": "Windows-11-10.0.26100-SP0",
   "python_version": "3.12.13",
   "cpu": {
     "model": "AMD64 Family 23 Model 104 Stepping 1, AuthenticAMD",
     "cores_physical": 4,
     "cores_logical": 8,
-    "usage_percent": 5.6
+    "usage_percent": 10.6
   },
   "memory": {
     "total_gb": 11.35,
-    "available_gb": 4.03,
-    "percent_used": 64.5
+    "available_gb": 4.12,
+    "percent_used": 63.7
   },
   "disk": {
     "total_gb": 238.36,
-    "free_gb": 41.74,
-    "percent_used": 82.5
+    "free_gb": 41.55,
+    "percent_used": 82.6
   }
 }
 
@@ -120,29 +120,38 @@ api_secret =
 
 [ENGINE]
 scan_interval = 120
-signal_threshold = 0.5
-max_positions = 6
+signal_threshold = 0.45
+max_positions = 5
 timeframes = 15m,1h,4h,1d
 top_symbols = 100
 
 [RISK]
-risk_per_trade = 4.0
-max_leverage = 5
-profile = Aggressive
+risk_per_trade = 2.0
+max_leverage = 3
+profile = Adaptive
 use_day_profile = False
 kelly_enabled = True
-kelly_winrate = 0.6
-kelly_avg_win_loss = 1.5
+kelly_winrate = 0.5
+kelly_avg_win_loss = 2.0
 
 [TRADING]
 partial_close = True
 trailing_sl = True
-trailing_distance_pct = 0.4
-partial_close_pct = 65.0
+trailing_distance_pct = 0.8
+partial_close_pct = 50.0
 breakeven = True
 breakeven_atr_mult = 1.0
 slippage_timeout = 10.0
 reinvest_profits = True
+
+[MOONSHOT]
+capital_pct = 25.0
+max_risk_pct = 2.0
+scan_interval = 300
+
+[FILTERS]
+volume_surge_min_mult = 0.3
+liquidity_min_ratio = 0.1
 
 [UI]
 language = ru
@@ -2484,9 +2493,11 @@ class RiskController:
 === END FILE: core\risk_controller.py ===
 
 === BEGIN FILE: core\risk_manager.py ===
-import logging
-import json
-import os
+"""
+Risk Management: position sizing, leverage, SL/TP calculation, Kelly criterion.
+Redesigned profiles for clear risk/reward targets.
+"""
+import logging, json, os
 from datetime import datetime, timezone
 from typing import Dict, Tuple, Optional
 
@@ -2494,6 +2505,10 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_ATR_MULT_SL = 1.5
 DEFAULT_ATR_MULT_TP = 2.0
+MIN_SL_RATIO_LONG = 0.98
+MIN_SL_RATIO_SHORT = 1.02
+MIN_TP_RATIO = 0.005             # TP не может быть ближе 0.5% от цены
+PROFILE_RISK_ORDER = ['Conservative', 'Balanced', 'Aggressive', 'Adaptive', 'User']
 
 
 class RiskManager:
@@ -2505,45 +2520,90 @@ class RiskManager:
         self._night_mode = False
         self._current_profile = 'Adaptive'
         self._profiles = {
-            'Conservative': {'risk_per_trade_pct': 1.0, 'max_leverage': 2},
-            'Balanced': {'risk_per_trade_pct': 2.0, 'max_leverage': 3},
-            'Aggressive': {'risk_per_trade_pct': 4.0, 'max_leverage': 5},
-            'Adaptive': {'risk_per_trade_pct': 2.0, 'max_leverage': 3},
+            'Conservative': {
+                'risk_per_trade_pct': 0.5,
+                'max_leverage': 2,
+                'atr_mult': {'sl': 3.0, 'tp': 5.0},
+                'daily_loss_limit_pct': 2.0,
+                'max_positions': 2,
+            },
+            'Balanced': {
+                'risk_per_trade_pct': 1.5,
+                'max_leverage': 3,
+                'atr_mult': {'sl': 2.2, 'tp': 3.8},
+                'daily_loss_limit_pct': 5.0,
+                'max_positions': 2,
+            },
+            'Aggressive': {
+                'risk_per_trade_pct': 3.0,
+                'max_leverage': 5,
+                'atr_mult': {'sl': 1.8, 'tp': 3.0},
+                'daily_loss_limit_pct': 8.0,
+                'max_positions': 4,
+            },
+            'Adaptive': {
+                'risk_per_trade_pct': 2.0,
+                'max_leverage': 3,
+                'atr_mult': {'sl': 2.0, 'tp': 3.5},
+                'daily_loss_limit_pct': 10.0,
+                'max_positions': 3,
+            },
+            'User': {
+                'risk_per_trade_pct': 2.0,
+                'max_leverage': 3,
+                'atr_mult': {'sl': 2.0, 'tp': 3.5},
+                'daily_loss_limit_pct': 10.0,
+                'max_positions': 3,
+            },
         }
-        # Пользовательские множители ATR на пару (из автотюнинга)
-        self._atr_multipliers: Dict[str, Dict[str, float]] = {}  # symbol -> {sl_mult, tp_mult}
+        self._atr_multipliers: Dict[str, Dict[str, float]] = {}
         self._day_profiles = {
-            0: {'risk_pct': 1.5, 'max_lev': 2},  # Пн
-            1: {'risk_pct': 1.5, 'max_lev': 2},  # Вт
-            2: {'risk_pct': 1.5, 'max_lev': 2},  # Ср
-            3: {'risk_pct': 1.5, 'max_lev': 2},  # Чт
-            4: {'risk_pct': 1.0, 'max_lev': 1},  # Пт (снижаем)
-            5: {'risk_pct': 1.0, 'max_lev': 1},  # Сб
-            6: {'risk_pct': 1.0, 'max_lev': 1},  # Вс
+            0: {'risk_pct': 1.5, 'max_lev': 2},
+            1: {'risk_pct': 1.5, 'max_lev': 2},
+            2: {'risk_pct': 1.5, 'max_lev': 2},
+            3: {'risk_pct': 1.5, 'max_lev': 2},
+            4: {'risk_pct': 1.0, 'max_lev': 1},
+            5: {'risk_pct': 1.0, 'max_lev': 1},
+            6: {'risk_pct': 1.0, 'max_lev': 1},
         }
         self._kelly_enabled = False
         self._kelly_winrate = 0.5
         self._kelly_avg_win_loss_ratio = 2.0
-        self.use_day_profile = True
-
-        # === Адаптивное изменение риска по сериям ===
+        self.use_day_profile = False
         self.adaptive_risk_enabled = True
         self.consecutive_wins = 0
         self.consecutive_losses = 0
         self._base_risk_pct = self.risk_per_trade_pct
         self._base_leverage = self.max_leverage
-
+        self._original_profile = None
+        self._auto_loss_stage = 0
         self._load_state()
 
-    # ---------- Профили ----------
+    # ---------- Profiles ----------
     def set_profile(self, profile: str):
-        if profile in self._profiles:
-            self._current_profile = profile
-            self.risk_per_trade_pct = self._profiles[profile]['risk_per_trade_pct']
-            self.max_leverage = self._profiles[profile]['max_leverage']
-            self._base_risk_pct = self.risk_per_trade_pct
-            self._base_leverage = self.max_leverage
-            logger.info(f"Risk profile switched to: {profile} (risk={self.risk_per_trade_pct}%, max_lev={self.max_leverage})")
+        if profile not in self._profiles:
+            return
+        self._current_profile = profile
+        p = self._profiles[profile]
+        self.risk_per_trade_pct = p['risk_per_trade_pct']
+        self.max_leverage = p['max_leverage']
+        self._base_risk_pct = self.risk_per_trade_pct
+        self._base_leverage = self.max_leverage
+        if 'atr_mult' in p:
+            self._atr_multipliers['__default__'] = p['atr_mult']
+        logger.info(f"Risk profile switched to: {profile} (risk={self.risk_per_trade_pct}%, max_lev={self.max_leverage})")
+
+    def get_profile_max_positions(self, profile: str = None) -> int:
+        if profile is None:
+            profile = self._current_profile
+        return self._profiles.get(profile, {}).get('max_positions', 3)
+
+    def set_user_params(self, risk_pct: float, leverage: int):
+        self._profiles['User']['risk_per_trade_pct'] = risk_pct
+        self._profiles['User']['max_leverage'] = leverage
+        self._save_state()
+        if self._current_profile == 'User':
+            self.set_profile('User')
 
     def set_night_mode(self, enabled: bool):
         self._night_mode = enabled
@@ -2555,7 +2615,6 @@ class RiskManager:
             self.set_profile(self._current_profile)
 
     def apply_day_profile(self):
-        """Применяет профиль риска по текущему дню недели (UTC)."""
         if not self.use_day_profile:
             return
         dow = datetime.now(timezone.utc).weekday()
@@ -2565,37 +2624,56 @@ class RiskManager:
             self.max_leverage = day_cfg['max_lev']
             logger.info(f"Day-of-week risk applied: {self.risk_per_trade_pct}%, leverage {self.max_leverage}")
 
-    # ---------- ATR-множители (индивидуальные для пары) ----------
+    # ---------- ATR multipliers ----------
     def set_atr_multipliers(self, symbol: str, sl_mult: float, tp_mult: float):
         self._atr_multipliers[symbol] = {'sl': sl_mult, 'tp': tp_mult}
         self._save_state()
 
     def get_atr_multipliers(self, symbol: str) -> Tuple[float, float]:
-        """Возвращает (sl_mult, tp_mult) для символа, иначе дефолтные."""
         if symbol in self._atr_multipliers:
             m = self._atr_multipliers[symbol]
             return m['sl'], m['tp']
-        return DEFAULT_ATR_MULT_SL, DEFAULT_ATR_MULT_TP
+        default = self._atr_multipliers.get('__default__', {})
+        return default.get('sl', DEFAULT_ATR_MULT_SL), default.get('tp', DEFAULT_ATR_MULT_TP)
 
     def get_sl_tp_levels(self, entry_price: float, side: str, atr: float, symbol: str = None) -> Dict[str, float]:
-        """Расчёт SL/TP с учётом индивидуальных множителей пары и защитой от отрицательного SL."""
         sl_mult, tp_mult = self.get_atr_multipliers(symbol) if symbol else (DEFAULT_ATR_MULT_SL, DEFAULT_ATR_MULT_TP)
-
-        # Минимальное расстояние SL от входа — 0.5% от цены
         min_sl_distance = entry_price * 0.005
-
         if side == 'BUY':
-            sl = entry_price - max(atr * sl_mult, min_sl_distance)
+            distance = max(atr * sl_mult, min_sl_distance)
+            sl = entry_price - distance
             tp = entry_price + atr * tp_mult
         else:
-            sl = entry_price + max(atr * sl_mult, min_sl_distance)
+            distance = max(atr * sl_mult, min_sl_distance)
+            sl = entry_price + distance
             tp = entry_price - atr * tp_mult
+
+        # Защита от отрицательного SL
+        sl = max(entry_price * 0.001, sl)
+        if side == 'BUY' and sl >= entry_price:
+            sl = entry_price * 0.999
+        elif side == 'SELL' and sl <= entry_price:
+            sl = entry_price * 1.001
+
+        # Минимальное расстояние SL (2%)
+        if side == 'BUY':
+            sl = max(sl, entry_price * MIN_SL_RATIO_LONG)
+        else:
+            sl = max(sl, entry_price * MIN_SL_RATIO_SHORT)
+
+        # Защита TP: минимум 0.5% от цены входа
+        min_tp_distance = entry_price * MIN_TP_RATIO
+        if side == 'BUY':
+            tp = max(tp, entry_price + min_tp_distance)
+        else:
+            tp = min(tp, entry_price - min_tp_distance)   # для шорта TP должен быть меньше цены
+            # tp не может быть отрицательным и слишком близким к нулю
+            tp = max(tp, entry_price * 0.001)
 
         return {'sl': sl, 'tp': tp, 'tp2': tp}
 
-    # ---------- Плечо по волатильности ----------
+    # ---------- Leverage by volatility ----------
     def get_optimal_leverage(self, symbol: str, price: float, atr: float) -> int:
-        """Автоопределение безопасного плеча исходя из волатильности."""
         atr_pct = atr / price if price > 0 else 0.02
         if atr_pct > 0.05:
             return max(1, self.max_leverage - 2)
@@ -2605,7 +2683,6 @@ class RiskManager:
             return min(5, self.max_leverage + 1)
         return self.max_leverage
 
-    # ---------- Позиционирование ----------
     def calculate_position_size(self, free_margin: float, entry_price: float,
                                 sl_price: float, confidence: float) -> Tuple[float, int]:
         if entry_price <= 0 or free_margin <= 0:
@@ -2616,7 +2693,6 @@ class RiskManager:
             sl_distance = entry_price * 0.01
         quantity = risk_amount / sl_distance
         leverage = self.max_leverage
-        # Kelly adjustment с реальным winrate
         if self._kelly_enabled:
             f = self._kelly_winrate - ((1 - self._kelly_winrate) / self._kelly_avg_win_loss_ratio)
             quantity *= max(0.1, f)
@@ -2630,35 +2706,25 @@ class RiskManager:
         self._kelly_avg_win_loss_ratio = avg_win_loss_ratio
         self._kelly_enabled = enabled
 
-    # === FIX 3: Обновление Kelly из реальной истории ===
     def update_kelly_from_history(self, portfolio):
-        """Обновляет Kelly параметры из реальной истории сделок."""
         if not self._kelly_enabled:
             return
-
         trades = getattr(portfolio, '_trades', [])
         if len(trades) < 5:
             logger.debug(f"Not enough trades for Kelly update ({len(trades)} < 5)")
             return
-
         wins = [t for t in trades if t.pnl > 0]
         losses = [t for t in trades if t.pnl <= 0]
-
         total = len(trades)
         winrate = len(wins) / total if total > 0 else 0.5
-
         avg_win = sum(t.pnl for t in wins) / len(wins) if wins else 1.0
         avg_loss = abs(sum(t.pnl for t in losses) / len(losses)) if losses else 1.0
         avg_wl_ratio = avg_win / avg_loss if avg_loss > 0 else 2.0
-
-        # Плавное обновление (сглаживание)
         self._kelly_winrate = 0.7 * self._kelly_winrate + 0.3 * winrate
         self._kelly_avg_win_loss_ratio = 0.7 * self._kelly_avg_win_loss_ratio + 0.3 * avg_wl_ratio
-
         logger.info(f"Kelly updated: winrate={self._kelly_winrate:.3f}, avg_wl={self._kelly_avg_win_loss_ratio:.2f}")
         self._save_state()
 
-    # ---------- Адаптация ----------
     def adapt_to_volatility(self, current_atr_pct: float):
         if self._night_mode:
             return
@@ -2674,11 +2740,13 @@ class RiskManager:
     def can_open_position(self) -> bool:
         return True
 
-    # ---------- Адаптивный риск по сериям ----------
+    # =================================================================
+    # Multi-step adaptive profile switching
+    # =================================================================
     def update_adaptive_risk(self, trade_pnl: float):
-        """Автоматически меняет риск в зависимости от серии результатов."""
         if not self.adaptive_risk_enabled:
             return
+
         if trade_pnl > 0:
             self.consecutive_wins += 1
             self.consecutive_losses = 0
@@ -2686,19 +2754,43 @@ class RiskManager:
             self.consecutive_losses += 1
             self.consecutive_wins = 0
 
-        # Корректируем риск
-        if self.consecutive_wins >= 3:
-            self.risk_per_trade_pct = min(5.0, self._base_risk_pct * (1 + 0.1 * self.consecutive_wins))
-            self.max_leverage = min(5, self._base_leverage + 1)
-        elif self.consecutive_losses >= 2:
-            self.risk_per_trade_pct = max(0.5, self._base_risk_pct * (1 - 0.1 * self.consecutive_losses))
-            self.max_leverage = max(1, self._base_leverage - 1)
-        else:
-            # Возвращаем к базовым, если серия прервалась
-            self.risk_per_trade_pct = self._base_risk_pct
-            self.max_leverage = self._base_leverage
+        if self._original_profile is None:
+            self._original_profile = self._current_profile
 
-    # ---------- Состояние ----------
+        current_idx = PROFILE_RISK_ORDER.index(self._current_profile) if self._current_profile in PROFILE_RISK_ORDER else 2
+
+        if self.consecutive_losses >= 3:
+            if self._current_profile != 'Conservative':
+                logger.warning("3 consecutive losses → switching to Conservative profile")
+                self.set_profile('Conservative')
+                self._auto_loss_stage = 2
+        elif self.consecutive_losses >= 2:
+            if current_idx > PROFILE_RISK_ORDER.index('Balanced'):
+                if self._current_profile != 'Balanced':
+                    logger.info("2 consecutive losses → switching to Balanced profile")
+                    self.set_profile('Balanced')
+                    self._auto_loss_stage = 1
+
+        if self.consecutive_wins >= 3 and self._auto_loss_stage > 0:
+            target_idx = min(current_idx + 1, len(PROFILE_RISK_ORDER) - 1)
+            target_profile = PROFILE_RISK_ORDER[target_idx]
+            if PROFILE_RISK_ORDER.index(self._original_profile) >= target_idx:
+                if self._current_profile != target_profile:
+                    logger.info(f"3 consecutive wins → upgrading to {target_profile}")
+                    self.set_profile(target_profile)
+                    self._auto_loss_stage -= 1
+                    self.consecutive_wins = 0
+                else:
+                    self.consecutive_wins = 0
+            else:
+                if self._current_profile != self._original_profile:
+                    logger.info(f"Adaptation finished, returning to original profile: {self._original_profile}")
+                    self.set_profile(self._original_profile)
+                self._original_profile = None
+                self._auto_loss_stage = 0
+                self.consecutive_wins = 0
+
+    # ---------- State ----------
     def _save_state(self):
         data = {
             'atr_multipliers': self._atr_multipliers,
@@ -2706,7 +2798,8 @@ class RiskManager:
                 'enabled': self._kelly_enabled,
                 'winrate': self._kelly_winrate,
                 'avg_wl': self._kelly_avg_win_loss_ratio
-            }
+            },
+            'user_params': self._profiles.get('User', {'risk_per_trade_pct': 2.0, 'max_leverage': 3})
         }
         try:
             os.makedirs(os.path.dirname(self.STATE_FILE), exist_ok=True)
@@ -2726,6 +2819,11 @@ class RiskManager:
             self._kelly_enabled = k.get('enabled', False)
             self._kelly_winrate = k.get('winrate', 0.5)
             self._kelly_avg_win_loss_ratio = k.get('avg_wl', 2.0)
+            user_params = data.get('user_params', {'risk_per_trade_pct': 2.0, 'max_leverage': 3})
+            self._profiles['User'] = {
+                'risk_per_trade_pct': user_params['risk_per_trade_pct'],
+                'max_leverage': user_params['max_leverage']
+            }
             logger.info("Risk state loaded")
         except Exception as e:
             logger.error(f"Failed to load risk state: {e}")
@@ -2958,12 +3056,6 @@ class SignalProcessor:
             except Exception as e:
                 logger.debug(f"Pre-check sync failed: {e}")
 
-        # Проверка лимита позиций с умной заменой
-        if len(current_positions) >= self.engine.max_positions:
-            if not self.engine.sync_manager.try_replace_weakest(signal.confidence, signal.symbol):
-                logger.info(f"Max positions reached ({self.engine.max_positions}), skipping {signal.symbol}")
-                return
-
         price = self.engine._get_current_price(signal.symbol)
         if price <= 0:
             logger.warning(f"Invalid price for {signal.symbol}")
@@ -2990,9 +3082,9 @@ class SignalProcessor:
         # --- Адаптивный порог уверенности ---
         threshold = self.engine.signal_threshold
         if regime in ('HIGH_VOLATILITY', 'TRENDING'):
-            threshold = max(0.3, threshold - 0.15)   # легче войти в тренд
+            threshold = max(0.3, threshold - 0.15)
         elif regime in ('LOW_VOLATILITY', 'RANGE', 'RANGING'):
-            threshold = min(0.8, threshold + 0.2)    # строже в боковике
+            threshold = min(0.8, threshold + 0.2)
         logger.debug(f"Adaptive threshold for {regime}: {threshold:.2f}")
 
         if signal.confidence < threshold:
@@ -3034,6 +3126,7 @@ class SignalProcessor:
             'correlations': self._calculate_correlations(signal.symbol, current_positions, all_candles),
         }
 
+        # --- ВАЖНО: сначала прогоняем все фильтры, только потом думаем о замене ---
         for filter_name, filter_obj in sorted(self.engine.filters.items(),
                                               key=lambda x: getattr(x[1], 'PRIORITY', 100)):
             if not getattr(filter_obj, 'enabled', True):
@@ -3046,6 +3139,12 @@ class SignalProcessor:
                 signal.confidence = new_conf
             except Exception as e:
                 logger.warning(f"Filter {filter_name} error: {e}")
+
+        # --- Проверка лимита позиций с умной заменой (только если сигнал прошёл все фильтры) ---
+        if len(current_positions) >= self.engine.max_positions:
+            if not self.engine.sync_manager.try_replace_weakest(signal.confidence, signal.symbol):
+                logger.info(f"Max positions reached ({self.engine.max_positions}), skipping {signal.symbol}")
+                return
 
         free_margin = available_margin
         sl_tp = self.engine.risk_manager.get_sl_tp_levels(price, signal.action, atr_val, signal.symbol)
@@ -3109,11 +3208,18 @@ class SignalProcessor:
 
 === BEGIN FILE: core\sound_manager.py ===
 """
-Sound Manager – flexible audio notifications with profiles and volume control.
+Sound Manager – now uses text‑to‑speech (pyttsx3) for all events if available.
+Falls back to WAV files, or beep if nothing else works.
 """
 import logging
 import os
-from typing import Dict, Optional
+from typing import Dict
+
+try:
+    import pyttsx3
+    TTS_AVAILABLE = True
+except ImportError:
+    TTS_AVAILABLE = False
 
 try:
     import winsound
@@ -3131,6 +3237,14 @@ DEFAULT_SOUNDS = {
     'milestone': 'sounds/milestone.wav',
 }
 
+PHRASES = {
+    'trade_open': 'Открыта сделка',
+    'profit': 'Прибыль',
+    'loss': 'Убыток',
+    'error': 'Ошибка',
+    'milestone': 'Достигнут рубеж',
+}
+
 PROFILES = {
     'trader': ['trade_open', 'profit', 'loss', 'error', 'milestone'],
     'critical_only': ['loss', 'error'],
@@ -3139,62 +3253,60 @@ PROFILES = {
 
 
 class SoundManager:
-    """Централизованное управление звуками с профилями и громкостью."""
-
     def __init__(self, profile: str = 'trader', volume: float = 1.0):
         self._profile = profile
         self._volume = max(0.0, min(1.0, volume))
         self._sounds: Dict[str, str] = {}
-        self._load_defaults()
         self._active_events = set(PROFILES.get(profile, []))
+        self._tts_engine = None
 
-    def _load_defaults(self):
+        if TTS_AVAILABLE:
+            try:
+                self._tts_engine = pyttsx3.init()
+                self._tts_engine.setProperty('rate', 180)
+                self._tts_engine.setProperty('volume', self._volume)
+                voices = self._tts_engine.getProperty('voices')
+                for voice in voices:
+                    if 'russian' in voice.name.lower() or 'ru' in voice.id:
+                        self._tts_engine.setProperty('voice', voice.id)
+                        break
+                logger.info("TTS engine initialised for SoundManager")
+            except Exception as e:
+                logger.warning(f"TTS init failed: {e}")
+
         for event, path in DEFAULT_SOUNDS.items():
-            if os.path.exists(path):
-                self._sounds[event] = path
-            else:
-                self._sounds[event] = ''
-
-    def set_profile(self, profile: str):
-        if profile in PROFILES:
-            self._profile = profile
-            self._active_events = set(PROFILES[profile])
-            logger.info(f"Sound profile set to '{profile}'")
-
-    def set_volume(self, volume: float):
-        self._volume = max(0.0, min(1.0, volume))
-        logger.info(f"Sound volume set to {self._volume:.0%}")
-
-    def set_sound_file(self, event: str, filepath: str):
-        if event in self._sounds:
-            self._sounds[event] = filepath
-
-    def enable_event(self, event: str):
-        self._active_events.add(event)
-
-    def disable_event(self, event: str):
-        self._active_events.discard(event)
+            self._sounds[event] = path if os.path.exists(path) else ''
 
     def play(self, event: str):
-        """Воспроизводит звук события, если он разрешён в текущем профиле."""
-        if not SOUND_AVAILABLE:
-            return
         if event not in self._active_events:
             return
-        path = self._sounds.get(event)
-        if not path or not os.path.exists(path):
-            return
-        try:
-            # winsound не поддерживает громкость напрямую, используем SND_ASYNC
-            winsound.PlaySound(path, winsound.SND_ASYNC | winsound.SND_NODEFAULT)
-        except Exception:
-            logger.debug(f"Failed to play sound: {path}")
 
-    def get_profile(self) -> str:
-        return self._profile
+        # 1. TTS
+        if self._tts_engine:
+            try:
+                phrase = PHRASES.get(event, event)
+                self._tts_engine.say(phrase)
+                self._tts_engine.runAndWait()
+                return
+            except Exception as e:
+                logger.debug(f"TTS failed: {e}")
 
-    def get_volume(self) -> float:
-        return self._volume
+        # 2. WAV file
+        if SOUND_AVAILABLE:
+            path = self._sounds.get(event)
+            if path and os.path.exists(path):
+                try:
+                    winsound.PlaySound(path, winsound.SND_ASYNC | winsound.SND_NODEFAULT)
+                    return
+                except Exception:
+                    pass
+
+        # 3. System beep
+        if SOUND_AVAILABLE:
+            try:
+                winsound.Beep(800, 200)
+            except Exception:
+                pass
 
 === END FILE: core\sound_manager.py ===
 
@@ -3927,17 +4039,26 @@ class Watchdog:
   "daily_pnl": 0.0,
   "last_day": 6,
   "strategies_disabled": {},
-  "updated": "2026-05-07T00:34:38.972613+00:00"
+  "updated": "2026-05-07T15:18:14.338846+00:00"
 }
 === END FILE: data\engine_state.json ===
 
 === BEGIN FILE: data\risk_state.json ===
 {
-  "atr_multipliers": {},
+  "atr_multipliers": {
+    "__default__": {
+      "sl": 2.0,
+      "tp": 3.5
+    }
+  },
   "kelly": {
     "enabled": true,
-    "winrate": 0.6,
-    "avg_wl": 1.5
+    "winrate": 0.5,
+    "avg_wl": 2.0
+  },
+  "user_params": {
+    "risk_per_trade_pct": 8.0,
+    "max_leverage": 10
   }
 }
 === END FILE: data\risk_state.json ===
@@ -3945,16 +4066,7 @@ class Watchdog:
 === BEGIN FILE: data\strategy_weights.json ===
 {
   "MeanReversion": {
-    "weight": 1.0,
-    "trades": 0,
-    "wins": 0,
-    "total_pnl": 0.0,
-    "avg_pnl": 0.0,
-    "winrate": 0.0,
-    "consecutive_losses": 0
-  },
-  "Momentum": {
-    "weight": 0.0,
+    "weight": 0.26666666666666666,
     "trades": 5,
     "wins": 0,
     "total_pnl": 0.0,
@@ -3962,19 +4074,35 @@ class Watchdog:
     "winrate": 0.0,
     "consecutive_losses": 5,
     "disabled": true,
-    "disabled_reason": "5 consecutive losses"
+    "disabled_reason": "5 consecutive losses",
+    "disabled_at": 1778149035.1930761
   },
-  "TrendFollowing": {
-    "weight": 1.5,
-    "trades": 3,
+  "Momentum": {
+    "weight": 0.0,
+    "trades": 19,
     "wins": 0,
     "total_pnl": 0.0,
     "avg_pnl": 0.0,
     "winrate": 0.0,
-    "consecutive_losses": 3
+    "consecutive_losses": 1,
+    "disabled": true,
+    "disabled_reason": "winrate 0.0% < 40%",
+    "disabled_at": 1778162409.1689568
+  },
+  "TrendFollowing": {
+    "weight": 0.0,
+    "trades": 5,
+    "wins": 0,
+    "total_pnl": 0.0,
+    "avg_pnl": 0.0,
+    "winrate": 0.0,
+    "consecutive_losses": 0,
+    "disabled": true,
+    "disabled_reason": "winrate 0.0% < 40%",
+    "disabled_at": 1778162409.229661
   },
   "AdaptiveCombiner": {
-    "weight": 1.0,
+    "weight": 2.6666666666666665,
     "trades": 0,
     "wins": 0,
     "total_pnl": 0.0,
@@ -3983,7 +4111,7 @@ class Watchdog:
     "consecutive_losses": 0
   },
   "DualThrust": {
-    "weight": 0.7,
+    "weight": 1.8666666666666665,
     "trades": 0,
     "wins": 0,
     "total_pnl": 0.0,
@@ -3992,25 +4120,28 @@ class Watchdog:
     "consecutive_losses": 0
   },
   "Ichimoku": {
-    "weight": 1.0,
-    "trades": 0,
+    "weight": 0.26666666666666666,
+    "trades": 4,
     "wins": 0,
     "total_pnl": 0.0,
     "avg_pnl": 0.0,
     "winrate": 0.0,
-    "consecutive_losses": 0
+    "consecutive_losses": 4
   },
   "RSIDivergence": {
-    "weight": 0.9,
-    "trades": 0,
+    "weight": 0.26666666666666666,
+    "trades": 5,
     "wins": 0,
     "total_pnl": 0.0,
     "avg_pnl": 0.0,
     "winrate": 0.0,
-    "consecutive_losses": 0
+    "consecutive_losses": 5,
+    "disabled": true,
+    "disabled_reason": "5 consecutive losses",
+    "disabled_at": 1778150938.3917124
   },
   "Squeeze": {
-    "weight": 0.8,
+    "weight": 2.1333333333333333,
     "trades": 0,
     "wins": 0,
     "total_pnl": 0.0,
@@ -4153,6 +4284,41 @@ class DiscordBot:
 === BEGIN FILE: filters\__init__.py ===
 
 === END FILE: filters\__init__.py ===
+
+=== BEGIN FILE: filters\atr_filter.py ===
+import logging
+from filters.base import BaseFilter
+from strategies.base import Signal
+
+logger = logging.getLogger(__name__)
+
+class ATRFilter(BaseFilter):
+    NAME = "ATRFilter"
+    DESCRIPTION = "Blocks symbols with extreme ATR/price ratio"
+    PRIORITY = 8
+    PARAMS = {
+        'enabled': True,
+        'max_atr_ratio': 0.10,
+    }
+
+    def assess(self, signal: Signal, data: dict) -> float:
+        if not self.enabled:
+            return signal.confidence
+
+        current_price = data.get('current_price', 0)
+        current_atr = data.get('current_atr', 0)
+
+        if current_price <= 0 or current_atr <= 0:
+            return signal.confidence
+
+        ratio = current_atr / current_price
+        if ratio > self.config['max_atr_ratio']:
+            logger.info(f"ATRFilter blocked {signal.symbol}: ATR/Price = {ratio:.2%} > {self.config['max_atr_ratio']:.0%}")
+            return 0.0
+
+        return signal.confidence
+
+=== END FILE: filters\atr_filter.py ===
 
 === BEGIN FILE: filters\base.py ===
 """
@@ -4437,10 +4603,12 @@ class DrawdownLimiter(BaseFilter):
 """
 Liquidity filter: blocks signals when recent volume is too low relative to average.
 Now with adaptive threshold – relaxes if no trades were executed for a while.
+Also loads min_volume_ratio from config.ini under [FILTERS] section.
 """
 import logging
 import time
 import pandas as pd
+from configparser import ConfigParser
 from filters.base import BaseFilter
 from strategies.base import Signal
 
@@ -4452,16 +4620,28 @@ class LiquidityFilter(BaseFilter):
     PRIORITY = 15
     PARAMS = {
         'enabled': True,
-        'min_volume_ratio': 0.3,          # было 0.7 – теперь мягче
+        'min_volume_ratio': 0.3,
         'lookback_bars': 20,
         'recent_bars': 5,
-        'adaptive_relax': True,           # автоматически снижать порог при простое
-        'relax_after_seconds': 180,       # через 3 минуты без сделок
+        'adaptive_relax': True,
+        'relax_after_seconds': 180,
     }
 
     def __init__(self, params=None):
         super().__init__(params)
+        self._load_config()
         self._last_trade_time = time.time()
+
+    def _load_config(self):
+        try:
+            cfg = ConfigParser()
+            cfg.read('config.ini')
+            if cfg.has_option('FILTERS', 'liquidity_min_ratio'):
+                val = cfg.getfloat('FILTERS', 'liquidity_min_ratio')
+                self.config['min_volume_ratio'] = val
+                logger.debug(f"Liquidity min_volume_ratio loaded from config: {val}")
+        except Exception as e:
+            logger.debug(f"Could not load Liquidity config: {e}")
 
     def assess(self, signal: Signal, data: dict) -> float:
         if not self.enabled:
@@ -4483,19 +4663,17 @@ class LiquidityFilter(BaseFilter):
 
         ratio = recent_vol / avg_vol
 
-        # Динамическое снижение порога при длительном отсутствии сделок
         threshold = self.config['min_volume_ratio']
         if self.config.get('adaptive_relax'):
             time_since_last_trade = time.time() - self._last_trade_time
             if time_since_last_trade > self.config.get('relax_after_seconds', 180):
-                threshold = max(0.1, threshold * 0.5)
+                threshold = max(0.02, threshold * 0.5)
                 logger.debug(f"Liquidity threshold relaxed to {threshold:.2f}")
 
         if ratio < threshold:
             logger.info(f"Liquidity filter blocked {signal.symbol}: volume ratio {ratio:.2f} < {threshold:.2f}")
             return 0.0
 
-        # Обновляем время последней успешной проверки (можно было бы обновлять при реальной сделке, но пусть будет здесь)
         self._last_trade_time = time.time()
         return signal.confidence
 
@@ -4887,8 +5065,12 @@ class VolumeFilter(BaseFilter):
 """
 Volume Surge Filter.
 Requires signal candle volume to be at least multiplier times average volume.
+Now with adaptive threshold – relaxes if no trades were executed for a while.
+Also loads min_volume_mult from config.ini under [FILTERS] section.
 """
 import logging
+import time
+from configparser import ConfigParser
 from filters.base import BaseFilter
 from strategies.base import Signal
 
@@ -4897,13 +5079,31 @@ logger = logging.getLogger(__name__)
 class VolumeSurgeFilter(BaseFilter):
     NAME = "VolumeSurgeFilter"
     DESCRIPTION = "Blocks signals with low relative volume (no surge)"
-    PRIORITY = 12  # После базовых, до трендовых
+    PRIORITY = 12
     PARAMS = {
         'enabled': True,
-        'min_volume_mult': 1.5,    # минимальное превышение среднего объёма
-        'lookback_bars': 20,       # период усреднения
-        'timeframe': '1h'          # с какого ТФ брать объём (обычно тот же, что у сигнала)
+        'min_volume_mult': 1.5,
+        'lookback_bars': 20,
+        'timeframe': '1h',
+        'adaptive_relax': True,
+        'relax_after_seconds': 180,
     }
+
+    def __init__(self, params=None):
+        super().__init__(params)
+        self._load_config()
+        self._last_trade_time = time.time()
+
+    def _load_config(self):
+        try:
+            cfg = ConfigParser()
+            cfg.read('config.ini')
+            if cfg.has_option('FILTERS', 'volume_surge_min_mult'):
+                val = cfg.getfloat('FILTERS', 'volume_surge_min_mult')
+                self.config['min_volume_mult'] = val
+                logger.debug(f"VolumeSurge min_volume_mult loaded from config: {val}")
+        except Exception as e:
+            logger.debug(f"Could not load VolumeSurge config: {e}")
 
     def assess(self, signal: Signal, data: dict) -> float:
         if not self.enabled:
@@ -4914,8 +5114,10 @@ class VolumeSurgeFilter(BaseFilter):
             return signal.confidence
 
         tf = self.config.get('timeframe', '1h')
+        if isinstance(tf, list):
+            tf = tf[0] if tf else '1h'
+
         if tf not in candle_data:
-            # Пробуем первый доступный таймфрейм
             tf = next(iter(candle_data.keys()), None)
             if not tf:
                 return signal.confidence
@@ -4925,22 +5127,27 @@ class VolumeSurgeFilter(BaseFilter):
         if len(df) < lookback + 1:
             return signal.confidence
 
-        # Объём последней закрытой свечи
         current_volume = df['volume'].iloc[-1]
-        # Средний объём за предыдущие lookback свечей
         avg_volume = df['volume'].iloc[-(lookback+1):-1].mean()
 
         if avg_volume <= 0:
             return signal.confidence
 
         ratio = current_volume / avg_volume
+
         threshold = self.config['min_volume_mult']
+        if self.config.get('adaptive_relax'):
+            time_since_last_trade = time.time() - self._last_trade_time
+            if time_since_last_trade > self.config.get('relax_after_seconds', 180):
+                threshold = max(0.15, threshold * 0.5)
+                logger.debug(f"VolumeSurge threshold relaxed to {threshold:.2f} (inactive {time_since_last_trade:.0f}s)")
 
         if ratio < threshold:
             logger.info(f"VolumeSurge blocked {signal.symbol}: vol ratio {ratio:.2f} < {threshold}")
             return 0.0
 
-        # Пропускаем, можно даже немного повысить уверенность при сильном всплеске
+        self._last_trade_time = time.time()
+
         if ratio > 2.0:
             logger.debug(f"Volume surge boost for {signal.symbol}: ratio {ratio:.2f}")
             return min(1.0, signal.confidence * 1.1)
@@ -5424,7 +5631,7 @@ class VolumeProfile(BaseIndicator):
 
 === BEGIN FILE: main.py ===
 """BingX Trading Bot v2.0 – Main Entry Point (ALL MODULES ACTIVE)."""
-import os, sys, time, logging, argparse
+import os, sys, time, logging, argparse, subprocess, importlib.util
 from pathlib import Path
 from datetime import datetime, timezone
 
@@ -5432,10 +5639,70 @@ project_root = Path(__file__).parent.absolute()
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-from PyQt5.QtWidgets import QApplication
-from ui.styles import theme
+# Попытка импорта PyQt5 – если его нет, будет предложено установить зависимости
+try:
+    from PyQt5.QtWidgets import QApplication
+    from ui.styles import theme
+except ImportError:
+    print("PyQt5 not found. Please install dependencies: pip install -r requirements.txt")
+    sys.exit(1)
 
 __version__ = "2.0.0"
+
+# Функция проверки и установки зависимостей
+def check_and_install_dependencies(auto_install=False):
+    req_file = project_root / 'requirements.txt'
+    if not req_file.exists():
+        logging.warning("requirements.txt not found, skipping dependency check.")
+        return []
+
+    missing = []
+    with open(req_file, 'r') as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            pkg_name = line.split('==')[0].split('>=')[0].split('<=')[0].split('~=')[0].strip()
+            if not pkg_name:
+                continue
+            spec = importlib.util.find_spec(pkg_name)
+            if spec is None:
+                missing.append(line)
+
+    if missing:
+        logging.warning(f"Missing packages: {', '.join(missing)}")
+        if auto_install:
+            logging.info("Attempting to install missing packages...")
+            try:
+                subprocess.check_call([sys.executable, '-m', 'pip', 'install', *missing],
+                                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                logging.info("Dependencies installed successfully.")
+                return []
+            except subprocess.CalledProcessError as e:
+                logging.error(f"Failed to install dependencies: {e}")
+                return missing
+    return missing
+
+def check_for_updates():
+    try:
+        local = subprocess.check_output(
+            ['git', 'rev-parse', 'HEAD'],
+            cwd=project_root, stderr=subprocess.DEVNULL
+        ).decode().strip()
+
+        subprocess.check_call(['git', 'fetch', 'origin'], cwd=project_root,
+                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        remote = subprocess.check_output(
+            ['git', 'rev-parse', 'origin/main'],
+            cwd=project_root, stderr=subprocess.DEVNULL
+        ).decode().strip()
+
+        if local != remote:
+            logging.info("A new version of the bot is available! Consider running 'git pull' to update.")
+        else:
+            logging.info("Bot is up-to-date.")
+    except Exception as e:
+        logging.debug(f"Update check skipped: {e}")
 
 def setup_logging():
     log_dir = Path("logs")
@@ -5450,12 +5717,31 @@ def setup_logging():
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--console', action='store_true')
+    parser.add_argument('--console', action='store_true', help='Run in console mode (no GUI)')
+    parser.add_argument('--auto-install', action='store_true', help='Automatically install missing dependencies')
     args = parser.parse_args()
 
     setup_logging()
     logging.info(f"BingX Trading Bot v{__version__}")
 
+    # Проверка и установка зависимостей
+    missing_pkgs = check_and_install_dependencies(auto_install=args.auto_install)
+    if missing_pkgs:
+        logging.error(f"Missing packages: {', '.join(missing_pkgs)}. Please install them manually or use --auto-install flag.")
+        if not args.console:
+            from PyQt5.QtWidgets import QMessageBox, QApplication as QA
+            app = QA(sys.argv)
+            QMessageBox.critical(None, "Missing Dependencies",
+                                 f"The following packages are missing:\n{', '.join(missing_pkgs)}\n\n"
+                                 "Please install them with: pip install -r requirements.txt")
+            sys.exit(1)
+        else:
+            sys.exit(1)
+
+    # Проверка обновлений
+    check_for_updates()
+
+    # Инициализация ядра бота
     from core.auth import AuthManager
     from core.engine import TradingEngine
 
@@ -5463,6 +5749,7 @@ def main():
     engine = TradingEngine(auth)
     engine.load_all_modules()
 
+    # Запуск дополнительных модулей (OrderGuard, Telegram, Discord, ...)
     try:
         from core.order_guard import OrderGuard
         engine.order_guard = OrderGuard(engine)
@@ -5587,11 +5874,18 @@ def main():
     except Exception as e:
         logging.warning(f"GitHubBackup not started: {e}")
 
+    # ---------- Moonshot с параметрами из конфига ----------
     try:
         from core.moonshot import MoonshotTrader
-        engine.moonshot = MoonshotTrader(engine)
+        moonshot_capital_pct = cfg.getfloat('MOONSHOT', 'capital_pct', fallback=10.0)
+        moonshot_max_risk = cfg.getfloat('MOONSHOT', 'max_risk_pct', fallback=1.0)
+        moonshot_scan = cfg.getint('MOONSHOT', 'scan_interval', fallback=300)
+        engine.moonshot = MoonshotTrader(engine, capital_pct=moonshot_capital_pct,
+                                         max_risk_pct=moonshot_max_risk,
+                                         scan_interval=moonshot_scan)
         engine.moonshot.start()
-        logging.info("MoonshotTrader started")
+        logging.info(f"MoonshotTrader started (capital %.1f%%, max_risk %.1f%%, scan %ds)",
+                     moonshot_capital_pct, moonshot_max_risk, moonshot_scan)
     except Exception as e:
         logging.warning(f"MoonshotTrader not started: {e}")
 
@@ -5893,7 +6187,7 @@ class CapitalAllocator:
     def __init__(self, engine, update_interval_minutes=60, lookback_trades=20):
         self.engine = engine
         self.update_interval = update_interval_minutes * 60
-        self.lookback_trades = lookback_trades  # количество последних сделок для оценки
+        self.lookback_trades = lookback_trades
         self._running = False
         self._thread = None
 
@@ -5920,39 +6214,34 @@ class CapitalAllocator:
 
     def _update_allocations(self):
         voting = self.engine.voting
-        all_weights = voting.get_weights()  # возвращает dict с подробной статистикой
-        if not all_weights:
+        all_stats = voting.get_strategy_stats()
+        if not all_stats:
             return
 
-        # Рассчитываем показатели для каждой стратегии
         scores = {}
-        for name, stats in all_weights.items():
+        for name, stats in all_stats.items():
             trades = stats.get('trades', 0)
-            if trades < 3:  # недостаточно данных – оставляем текущий вес
+            if trades < 3:
                 scores[name] = stats.get('weight', 1.0)
                 continue
 
-            # Используем только последние N сделок, если возможно (достаём из voting weights?)
-            # В нашем VotingSystem мы храним общую статистику, но можно использовать общие метрики
             avg_pnl = stats.get('avg_pnl', 0)
             winrate = stats.get('winrate', 0) / 100.0
-            # Простая оценка: winrate * avg_pnl (нормализовано)
             if avg_pnl <= 0:
-                score = 0.1  # минимальный вес
+                score = 0.1
             else:
                 score = winrate * avg_pnl
             scores[name] = score
 
-        # Нормализуем в веса от 0.1 до 3.0 (максимальный вес)
         total = sum(scores.values())
         if total == 0:
             return
         for name in scores:
-            normalized = scores[name] / total * len(scores)  # масштабируем, чтобы средний = 1
+            normalized = scores[name] / total * len(scores)
             normalized = max(0.1, min(3.0, normalized))
-            # Сохраняем в VotingSystem (обновляем weight в статистике, что повлияет на взвешивание сигналов)
-            voting._weights[name]['weight'] = normalized
-            logger.debug(f"Capital allocation: {name} → {normalized:.2f} (raw score {scores[name]:.4f})")
+            if name in voting._weights:
+                voting._weights[name]['weight'] = normalized
+                logger.debug(f"Capital allocation: {name} → {normalized:.2f} (raw score {scores[name]:.4f})")
 
         logger.info("Capital allocation updated for %d strategies", len(scores))
 
@@ -6883,10 +7172,12 @@ class StrategySandbox:
 """
 Voting System: combines signals from multiple strategies with weighted confidence.
 Auto-disables losing strategies based on winrate and PnL.
+Now with automatic re-enable after timeout (12 hours default).
 """
 import json
 import logging
 import os
+import time
 from typing import Dict, List, Optional
 
 from strategies.base import Signal
@@ -6897,21 +7188,25 @@ logger = logging.getLogger(__name__)
 class VotingSystem:
     WEIGHTS_FILE = 'data/strategy_weights.json'
 
-    # Пороги для автоотключения
-    MIN_WINRATE = 0.40       # Минимальный winrate (40%)
-    MIN_TOTAL_PNL = -100.0   # Максимальный убыток ($)
-    MAX_CONSECUTIVE_LOSSES = 5  # Макс серия убытков
-    WEIGHT_PENALTY = 0.1     # Вес при серии убытков
+    MIN_WINRATE = 0.40
+    MIN_TOTAL_PNL = -100.0
+    MAX_CONSECUTIVE_LOSSES = 5
+    WEIGHT_PENALTY = 0.1
+    DISABLE_TIMEOUT_HOURS = 12
 
     def __init__(self):
         self._weights: Dict[str, dict] = {}
         self._load_weights()
+        self._cleanup_expired_disables()
 
     def _load_weights(self):
         if os.path.exists(self.WEIGHTS_FILE):
             try:
                 with open(self.WEIGHTS_FILE, 'r') as f:
                     self._weights = json.load(f)
+                for stats in self._weights.values():
+                    if 'disabled' in stats and stats['disabled'] and 'disabled_at' not in stats:
+                        stats['disabled_at'] = time.time()
             except Exception as e:
                 logger.error(f"Failed to load weights: {e}")
                 self._weights = {}
@@ -6925,6 +7220,23 @@ class VotingSystem:
                 json.dump(self._weights, f, indent=2)
         except Exception as e:
             logger.error(f"Failed to save weights: {e}")
+
+    def _cleanup_expired_disables(self):
+        now = time.time()
+        timeout_seconds = self.DISABLE_TIMEOUT_HOURS * 3600
+        changed = False
+        for name, stats in self._weights.items():
+            if stats.get('disabled') and 'disabled_at' in stats:
+                if now - stats['disabled_at'] > timeout_seconds:
+                    stats['disabled'] = False
+                    stats['disabled_reason'] = None
+                    stats['consecutive_losses'] = 0
+                    stats['weight'] = 1.0
+                    del stats['disabled_at']
+                    logger.info(f"Strategy {name} re-enabled after timeout")
+                    changed = True
+        if changed:
+            self._save_weights()
 
     def register_strategy(self, name: str, weight: float = 1.0):
         if name not in self._weights:
@@ -6940,14 +7252,12 @@ class VotingSystem:
                 'disabled_reason': None,
             }
         else:
-            # Обновляем вес если стратегия уже зарегистрирована
             self._weights[name]['weight'] = weight
 
     def evaluate_signals(self, signals: List[Signal]) -> Optional[Signal]:
         if not signals:
             return None
 
-        # Группируем по символу и направлению
         by_symbol_action = {}
         for s in signals:
             key = (s.symbol, s.action)
@@ -6964,12 +7274,10 @@ class VotingSystem:
                 strategy = s.meta.get('strategy', 'Unknown')
                 stats = self._weights.get(strategy, {})
 
-                # Пропускаем отключённые стратегии
                 if stats.get('disabled', False):
                     continue
 
                 w = stats.get('weight', 1.0)
-                # Снижаем вес при серии убытков
                 if stats.get('consecutive_losses', 0) >= 3:
                     w = self.WEIGHT_PENALTY
 
@@ -6980,14 +7288,12 @@ class VotingSystem:
                 avg_conf = weighted_conf / total_weight
                 if avg_conf > best_score:
                     best_score = avg_conf
-                    # Берём первый сигнал как базу, обновляем confidence
                     best_signal = sigs[0]
                     best_signal.confidence = min(1.0, avg_conf)
 
         return best_signal
 
     def update_weights(self):
-        """Проверяет статистику стратегий и отключает убыточные."""
         changed = False
         for name, stats in self._weights.items():
             if stats.get('disabled', False):
@@ -6998,11 +7304,10 @@ class VotingSystem:
             total_pnl = stats.get('total_pnl', 0.0)
             consecutive_losses = stats.get('consecutive_losses', 0)
 
-            # Критерии отключения
             disabled = False
             reason = None
 
-            if trades >= 5:  # Минимум сделок для оценки
+            if trades >= 5:
                 if winrate < self.MIN_WINRATE * 100:
                     disabled = True
                     reason = f"winrate {winrate:.1f}% < {self.MIN_WINRATE*100:.0f}%"
@@ -7018,6 +7323,7 @@ class VotingSystem:
                 stats['disabled'] = True
                 stats['disabled_reason'] = reason
                 stats['weight'] = 0.0
+                stats['disabled_at'] = time.time()
                 logger.warning(f"Strategy {name} AUTO-DISABLED: {reason}")
                 changed = True
 
@@ -7025,7 +7331,6 @@ class VotingSystem:
             self._save_weights()
 
     def record_trade(self, strategy_name: str, pnl: float):
-        """Записывает результат сделки для статистики стратегии."""
         if strategy_name not in self._weights:
             return
 
@@ -7044,12 +7349,13 @@ class VotingSystem:
         stats['avg_pnl'] = stats['total_pnl'] / trades if trades > 0 else 0.0
 
         self._save_weights()
-
-        # Проверяем нужно ли отключить
         self.update_weights()
 
     def get_weights(self) -> Dict[str, float]:
         return {name: stats.get('weight', 1.0) for name, stats in self._weights.items()}
+
+    def get_strategy_stats(self) -> Dict[str, dict]:
+        return self._weights.copy()
 
     def is_strategy_disabled(self, name: str) -> bool:
         return self._weights.get(name, {}).get('disabled', False)
@@ -7060,8 +7366,9 @@ class VotingSystem:
             self._weights[name]['disabled_reason'] = None
             self._weights[name]['consecutive_losses'] = 0
             self._weights[name]['weight'] = 1.0
+            self._weights[name].pop('disabled_at', None)
             self._save_weights()
-            logger.info(f"Strategy {name} re-enabled")
+            logger.info(f"Strategy {name} re-enabled manually")
 
 === END FILE: ml\voting.py ===
 
@@ -9554,8 +9861,9 @@ class PositionsTab(QWidget):
 === END FILE: ui\positions.py ===
 
 === BEGIN FILE: ui\settings.py ===
-"""Settings tab: API keys, risk, strategies/indicators/filters configuration."""
+"""Settings tab: API keys, risk, strategies/indicators/filters, Moonshot configuration."""
 import logging
+from configparser import ConfigParser
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
     QComboBox, QCheckBox, QGroupBox, QFormLayout, QMessageBox,
@@ -9570,11 +9878,10 @@ logger = logging.getLogger(__name__)
 
 
 class ParameterDialog(QDialog):
-    """Диалог редактирования параметров стратегии/индикатора/фильтра."""
     def __init__(self, name, params_config, parent=None):
         super().__init__(parent)
         self.setWindowTitle(f"Параметры: {name}")
-        self.params_config = params_config  # оригинальный config (dict)
+        self.params_config = params_config
         self.widgets = {}
         self._setup_ui()
 
@@ -9627,11 +9934,9 @@ class ParameterDialog(QDialog):
                 result[key] = w.value()
             elif isinstance(w, QLineEdit):
                 text = w.text()
-                # Попытка интерпретировать как список
                 if ',' in text:
                     result[key] = [x.strip() for x in text.split(',') if x.strip()]
                 else:
-                    # Попытка конвертировать в число, если возможно
                     try:
                         result[key] = float(text) if '.' in text else int(text)
                     except ValueError:
@@ -9657,20 +9962,17 @@ class SettingsTab(QWidget):
         content = QWidget()
         content_layout = QVBoxLayout(content)
 
-        # === API Keys Section (без изменений) ===
+        # === API Keys ===
         keys_group = QGroupBox("API Keys")
         keys_layout = QFormLayout(keys_group)
-
         self.api_key_input = QLineEdit()
         self.api_key_input.setPlaceholderText("Enter BingX API Key")
         self.api_key_input.setEchoMode(QLineEdit.Password)
         keys_layout.addRow("API Key:", self.api_key_input)
-
         self.api_secret_input = QLineEdit()
         self.api_secret_input.setPlaceholderText("Enter BingX API Secret")
         self.api_secret_input.setEchoMode(QLineEdit.Password)
         keys_layout.addRow("API Secret:", self.api_secret_input)
-
         keys_buttons = QHBoxLayout()
         self.btn_save_keys = QPushButton("Save Keys")
         self.btn_save_keys.clicked.connect(self._save_keys)
@@ -9684,17 +9986,16 @@ class SettingsTab(QWidget):
         keys_buttons.addWidget(self.btn_toggle_visible)
         keys_buttons.addStretch()
         keys_layout.addRow(keys_buttons)
-
         self.lbl_key_status = QLabel("Status: No keys configured (Demo mode)")
         self.lbl_key_status.setStyleSheet(f"color: {theme.colors['warning']};")
         keys_layout.addRow(self.lbl_key_status)
         content_layout.addWidget(keys_group)
 
-        # === Risk Profile Section (без изменений) ===
+        # === Risk Management ===
         risk_group = QGroupBox("Risk Management")
         risk_layout = QFormLayout(risk_group)
         self.risk_profile = QComboBox()
-        self.risk_profile.addItems(["Conservative", "Balanced", "Aggressive", "Adaptive"])
+        self.risk_profile.addItems(["Conservative", "Balanced", "Aggressive", "Adaptive", "User"])
         self.risk_profile.currentTextChanged.connect(self._on_profile_change)
         risk_layout.addRow("Risk Profile:", self.risk_profile)
         self.risk_per_trade = QDoubleSpinBox()
@@ -9732,7 +10033,7 @@ class SettingsTab(QWidget):
         risk_layout.addRow("Kelly Win/Loss ratio:", self.kelly_avg_win_loss)
         content_layout.addWidget(risk_group)
 
-        # === Trading Settings (без изменений) ===
+        # === Trading Settings ===
         trading_group = QGroupBox("Trading Settings")
         trading_layout = QFormLayout(trading_group)
         self.signal_threshold = QDoubleSpinBox()
@@ -9792,7 +10093,32 @@ class SettingsTab(QWidget):
         trading_layout.addRow("Slippage timeout:", self.slippage_timeout)
         content_layout.addWidget(trading_group)
 
-        # === Strategies Group (расширенная) ===
+        # === Moonshot Settings ===
+        moonshot_group = QGroupBox("Moonshot")
+        moonshot_layout = QFormLayout(moonshot_group)
+        self.moonshot_capital_pct = QDoubleSpinBox()
+        self.moonshot_capital_pct.setRange(0.0, 50.0)
+        self.moonshot_capital_pct.setSingleStep(5.0)
+        self.moonshot_capital_pct.setDecimals(1)
+        self.moonshot_capital_pct.setSuffix("%")
+        self.moonshot_capital_pct.setValue(10.0)
+        moonshot_layout.addRow("Capital %:", self.moonshot_capital_pct)
+        self.moonshot_max_risk_pct = QDoubleSpinBox()
+        self.moonshot_max_risk_pct.setRange(0.1, 5.0)
+        self.moonshot_max_risk_pct.setSingleStep(0.1)
+        self.moonshot_max_risk_pct.setDecimals(1)
+        self.moonshot_max_risk_pct.setSuffix("%")
+        self.moonshot_max_risk_pct.setValue(1.0)
+        moonshot_layout.addRow("Max Risk per Trade %:", self.moonshot_max_risk_pct)
+        self.moonshot_scan = QSpinBox()
+        self.moonshot_scan.setRange(60, 600)
+        self.moonshot_scan.setSingleStep(30)
+        self.moonshot_scan.setSuffix(" sec")
+        self.moonshot_scan.setValue(300)
+        moonshot_layout.addRow("Scan Interval:", self.moonshot_scan)
+        content_layout.addWidget(moonshot_group)
+
+        # === Strategies ===
         strat_group = QGroupBox("Strategies")
         strat_layout = QVBoxLayout(strat_group)
         self.strategies_widgets = {}
@@ -9813,7 +10139,7 @@ class SettingsTab(QWidget):
         strat_layout.addWidget(self.btn_reload_modules)
         content_layout.addWidget(strat_group)
 
-        # === Indicators Group (аналогично) ===
+        # === Indicators ===
         ind_group = QGroupBox("Indicators")
         ind_layout = QVBoxLayout(ind_group)
         for name, indicator in self.engine.indicators.items():
@@ -9827,7 +10153,7 @@ class SettingsTab(QWidget):
             ind_layout.addLayout(row)
         content_layout.addWidget(ind_group)
 
-        # === Filters Group ===
+        # === Filters ===
         flt_group = QGroupBox("Filters")
         flt_layout = QVBoxLayout(flt_group)
         for name, filter_obj in self.engine.filters.items():
@@ -9865,13 +10191,12 @@ class SettingsTab(QWidget):
         scroll.setWidget(content)
         layout.addWidget(scroll)
 
+    # ---------- Вспомогательные методы ----------
     def _configure_strategy(self, name):
         strat = self.engine.strategies[name]
         dlg = ParameterDialog(name, strat.config)
         if dlg.exec_() == QDialog.Accepted:
             new_params = dlg.get_values()
-            # Создаём новый экземпляр стратегии с этими параметрами
-            from strategies.base import BaseStrategy
             cls = type(strat)
             new_strat = cls(new_params)
             new_strat.enabled = strat.enabled
@@ -9903,12 +10228,14 @@ class SettingsTab(QWidget):
         if name in self.engine.filters:
             self.engine.filters[name].enabled = (state == Qt.Checked)
 
-    # Остальные методы (загрузка/сохранение) остаются как в предыдущей версии
+    def _toggle_strategy(self, name, state):
+        if name in self.engine.strategies:
+            self.engine.strategies[name].enabled = (state == Qt.Checked)
+
     def _load_settings(self):
         if not self.engine.auth.demo_mode:
             self.lbl_key_status.setText("Status: Keys configured")
             self.lbl_key_status.setStyleSheet(f"color: {theme.colors['success']};")
-
         self.risk_profile.setCurrentText(self.engine.risk_manager._current_profile)
         self.risk_per_trade.setValue(self.engine.risk_manager.risk_per_trade_pct)
         self.max_leverage.setValue(self.engine.risk_manager.max_leverage)
@@ -9917,7 +10244,6 @@ class SettingsTab(QWidget):
         self.scan_interval.setValue(self.engine.scan_interval)
         self.timeframes.setText(','.join(self.engine.timeframes))
         self.top_symbols.setValue(self.engine.top_n_symbols)
-
         self.trailing_sl.setChecked(self.engine.trailing_sl_enabled)
         self.trailing_distance.setValue(self.engine.trailing_distance_pct)
         self.partial_close.setChecked(self.engine.partial_close_enabled)
@@ -9925,15 +10251,14 @@ class SettingsTab(QWidget):
         self.breakeven.setChecked(self.engine.breakeven_enabled)
         self.breakeven_atr_mult.setValue(self.engine.breakeven_atr_mult)
         self.slippage_timeout.setValue(self.engine.slippage_timeout_sec)
-
         self.use_day_profile.setChecked(getattr(self.engine.risk_manager, 'use_day_profile', True))
         self.kelly_enabled.setChecked(self.engine.risk_manager._kelly_enabled)
         self.kelly_winrate.setValue(self.engine.risk_manager._kelly_winrate)
         self.kelly_avg_win_loss.setValue(self.engine.risk_manager._kelly_avg_win_loss_ratio)
-
-    def _toggle_strategy(self, name, state):
-        if name in self.engine.strategies:
-            self.engine.strategies[name].enabled = (state == Qt.Checked)
+        if hasattr(self.engine, 'moonshot') and self.engine.moonshot:
+            self.moonshot_capital_pct.setValue(self.engine.moonshot.capital_pct)
+            self.moonshot_max_risk_pct.setValue(self.engine.moonshot.max_risk_pct)
+            self.moonshot_scan.setValue(self.engine.moonshot.scan_interval)
 
     def _save_keys(self):
         key = self.api_key_input.text().strip()
@@ -9967,18 +10292,10 @@ class SettingsTab(QWidget):
 
     def _on_profile_change(self, profile):
         self.engine.risk_manager.set_profile(profile)
-        if profile == 'Conservative':
-            self.risk_per_trade.setValue(1.0)
-            self.max_leverage.setValue(2)
-            self.max_positions.setValue(3)
-        elif profile == 'Balanced':
-            self.risk_per_trade.setValue(2.0)
-            self.max_leverage.setValue(3)
-            self.max_positions.setValue(5)
-        elif profile == 'Aggressive':
-            self.risk_per_trade.setValue(4.0)
-            self.max_leverage.setValue(5)
-            self.max_positions.setValue(8)
+        # Apply max_positions from profile
+        max_pos = self.engine.risk_manager.get_profile_max_positions(profile)
+        self.engine.max_positions = max_pos
+        self.max_positions.setValue(max_pos)
 
     def _reload_modules(self):
         try:
@@ -10011,18 +10328,31 @@ class SettingsTab(QWidget):
 
     def _save_settings(self):
         try:
-            settings = {
-                'max_positions': self.max_positions.value(),
-                'scan_interval': self.scan_interval.value(),
-                'signal_threshold': self.signal_threshold.value(),
-                'timeframes': self.timeframes.text(),
-                'top_symbols': self.top_symbols.value(),
-                'risk_per_trade': self.risk_per_trade.value(),
-                'max_leverage': self.max_leverage.value(),
-                'risk_profile': self.risk_profile.currentText(),
-            }
+            # Main params
+            self.engine.max_positions = self.max_positions.value()
+            self.engine.scan_interval = self.scan_interval.value()
+            self.engine.signal_threshold = self.signal_threshold.value()
             self.engine.timeframes = self.timeframes.text().split(',')
             self.engine.top_n_symbols = self.top_symbols.value()
+
+            # Risk manager
+            risk_pct = self.risk_per_trade.value()
+            leverage = self.max_leverage.value()
+            profile = self.risk_profile.currentText()
+
+            if profile == 'User':
+                self.engine.risk_manager.set_user_params(risk_pct, leverage)
+            else:
+                self.engine.risk_manager.risk_per_trade_pct = risk_pct
+                self.engine.risk_manager.max_leverage = leverage
+                self.engine.risk_manager.set_profile(profile)
+
+            self.engine.risk_manager.use_day_profile = self.use_day_profile.isChecked()
+            self.engine.risk_manager._kelly_enabled = self.kelly_enabled.isChecked()
+            self.engine.risk_manager._kelly_winrate = self.kelly_winrate.value()
+            self.engine.risk_manager._kelly_avg_win_loss_ratio = self.kelly_avg_win_loss.value()
+
+            # Trading
             self.engine.trailing_sl_enabled = self.trailing_sl.isChecked()
             self.engine.trailing_distance_pct = self.trailing_distance.value()
             self.engine.partial_close_enabled = self.partial_close.isChecked()
@@ -10031,14 +10361,69 @@ class SettingsTab(QWidget):
             self.engine.breakeven_atr_mult = self.breakeven_atr_mult.value()
             self.engine.slippage_timeout_sec = self.slippage_timeout.value()
 
-            self.engine.risk_manager.use_day_profile = self.use_day_profile.isChecked()
-            self.engine.risk_manager._kelly_enabled = self.kelly_enabled.isChecked()
-            self.engine.risk_manager._kelly_winrate = self.kelly_winrate.value()
-            self.engine.risk_manager._kelly_avg_win_loss_ratio = self.kelly_avg_win_loss.value()
+            # Moonshot
+            moonshot_capital = 0.0
+            moonshot_risk = 0.0
+            moonshot_scan = 0
+            if hasattr(self.engine, 'moonshot') and self.engine.moonshot:
+                self.engine.moonshot.capital_pct = self.moonshot_capital_pct.value()
+                self.engine.moonshot.max_risk_pct = self.moonshot_max_risk_pct.value()
+                self.engine.moonshot.scan_interval = self.moonshot_scan.value()
+                if self.engine.moonshot._running:
+                    self.engine.moonshot.stop()
+                    self.engine.moonshot.start()
+                moonshot_capital = self.engine.moonshot.capital_pct
+                moonshot_risk = self.engine.moonshot.max_risk_pct
+                moonshot_scan = self.engine.moonshot.scan_interval
+                logger.info("Moonshot parameters updated")
+
+            # Save filter params to config.ini and collect current values
+            volume_surge_val = 1.5
+            liquidity_val = 0.3
+            try:
+                cfg = ConfigParser()
+                cfg.read('config.ini')
+
+                if not cfg.has_section('FILTERS'):
+                    cfg.add_section('FILTERS')
+
+                volume_surge = self.engine.filters.get('VolumeSurgeFilter')
+                if volume_surge:
+                    val = volume_surge.config.get('min_volume_mult', 1.5)
+                    cfg.set('FILTERS', 'volume_surge_min_mult', str(val))
+                    volume_surge_val = val
+
+                liquidity = self.engine.filters.get('LiquidityFilter')
+                if liquidity:
+                    val = liquidity.config.get('min_volume_ratio', 0.3)
+                    cfg.set('FILTERS', 'liquidity_min_ratio', str(val))
+                    liquidity_val = val
+
+                with open('config.ini', 'w') as f:
+                    cfg.write(f)
+                logger.info("Filter parameters saved to config.ini")
+            except Exception as e:
+                logger.error(f"Failed to save filter settings to config.ini: {e}")
+
             self.engine.risk_manager._save_state()
             self.engine._save_config()
 
-            self.engine.update_settings(settings)
+            # Расширенное логирование
+            logger.info(
+                "Settings saved: risk=%.1f%%, leverage=%dx, positions=%d, profile=%s, "
+                "signal_threshold=%.2f, trailing_distance=%.2f%%, breakeven_atr=%.2f, "
+                "volume_surge_min_mult=%.2f, liquidity_min_ratio=%.2f, "
+                "moonshot_capital=%.1f%%, moonshot_risk=%.1f%%, moonshot_scan=%ds",
+                risk_pct, leverage, self.engine.max_positions, profile,
+                self.engine.signal_threshold,
+                self.engine.trailing_distance_pct,
+                self.engine.breakeven_atr_mult,
+                volume_surge_val,
+                liquidity_val,
+                moonshot_capital,
+                moonshot_risk,
+                moonshot_scan
+            )
             QMessageBox.information(self, "Success", "Settings saved to config.ini")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Save failed: {e}")

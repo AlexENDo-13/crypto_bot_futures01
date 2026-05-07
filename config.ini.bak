@@ -4,8 +4,8 @@ api_secret =
 
 [ENGINE]
 scan_interval = 120
-signal_threshold = 0.55
-max_positions = 3
+signal_threshold = 0.5
+max_positions = 4
 timeframes = 15m,1h,4h,1d
 top_symbols = 100
 
@@ -21,7 +21,7 @@ kelly_avg_win_loss = 2.0
 [TRADING]
 partial_close = True
 trailing_sl = True
-trailing_distance_pct = 0.7999999999999999
+trailing_distance_pct = 0.8
 partial_close_pct = 50.0
 breakeven = True
 breakeven_atr_mult = 1.0
@@ -34,7 +34,7 @@ max_risk_pct = 2.0
 scan_interval = 300
 
 [FILTERS]
-volume_surge_min_mult = 0.4
+volume_surge_min_mult = 0.3
 liquidity_min_ratio = 0.1
 
 [UI]
