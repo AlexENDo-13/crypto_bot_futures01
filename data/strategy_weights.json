@@ -1,15 +1,15 @@
 {
   "MeanReversion": {
-    "weight": 1.0,
-    "trades": 0,
+    "weight": 1.4285714285714286,
+    "trades": 2,
     "wins": 0,
     "total_pnl": 0.0,
     "avg_pnl": 0.0,
     "winrate": 0.0,
-    "consecutive_losses": 0
+    "consecutive_losses": 2
   },
   "Momentum": {
-    "weight": 1.2,
+    "weight": 0.14285714285714288,
     "trades": 7,
     "wins": 0,
     "total_pnl": 0.0,
@@ -21,7 +21,7 @@
     "disabled_at": 1778114524.4936376
   },
   "TrendFollowing": {
-    "weight": 0.0,
+    "weight": 0.14285714285714288,
     "trades": 5,
     "wins": 0,
     "total_pnl": 0.0,
@@ -33,7 +33,7 @@
     "disabled_at": 1778114582.4743986
   },
   "AdaptiveCombiner": {
-    "weight": 1.0,
+    "weight": 1.4285714285714286,
     "trades": 0,
     "wins": 0,
     "total_pnl": 0.0,
@@ -42,15 +42,6 @@
     "consecutive_losses": 0
   },
   "DualThrust": {
-    "weight": 0.7,
-    "trades": 0,
-    "wins": 0,
-    "total_pnl": 0.0,
-    "avg_pnl": 0.0,
-    "winrate": 0.0,
-    "consecutive_losses": 0
-  },
-  "Ichimoku": {
     "weight": 1.0,
     "trades": 0,
     "wins": 0,
@@ -59,8 +50,17 @@
     "winrate": 0.0,
     "consecutive_losses": 0
   },
+  "Ichimoku": {
+    "weight": 1.4285714285714286,
+    "trades": 0,
+    "wins": 0,
+    "total_pnl": 0.0,
+    "avg_pnl": 0.0,
+    "winrate": 0.0,
+    "consecutive_losses": 0
+  },
   "RSIDivergence": {
-    "weight": 0.9,
+    "weight": 1.2857142857142858,
     "trades": 0,
     "wins": 0,
     "total_pnl": 0.0,
@@ -69,7 +69,7 @@
     "consecutive_losses": 0
   },
   "Squeeze": {
-    "weight": 0.8,
+    "weight": 1.142857142857143,
     "trades": 0,
     "wins": 0,
     "total_pnl": 0.0,

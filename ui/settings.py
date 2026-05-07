@@ -18,7 +18,7 @@ class ParameterDialog(QDialog):
     def __init__(self, name, params_config, parent=None):
         super().__init__(parent)
         self.setWindowTitle(f"Параметры: {name}")
-        self.params_config = params_config  # оригинальный config (dict)
+        self.params_config = params_config
         self.widgets = {}
         self._setup_ui()
 
@@ -71,11 +71,9 @@ class ParameterDialog(QDialog):
                 result[key] = w.value()
             elif isinstance(w, QLineEdit):
                 text = w.text()
-                # Попытка интерпретировать как список
                 if ',' in text:
                     result[key] = [x.strip() for x in text.split(',') if x.strip()]
                 else:
-                    # Попытка конвертировать в число, если возможно
                     try:
                         result[key] = float(text) if '.' in text else int(text)
                     except ValueError:
@@ -101,7 +99,7 @@ class SettingsTab(QWidget):
         content = QWidget()
         content_layout = QVBoxLayout(content)
 
-        # === API Keys Section (без изменений) ===
+        # === API Keys Section ===
         keys_group = QGroupBox("API Keys")
         keys_layout = QFormLayout(keys_group)
 
@@ -134,7 +132,7 @@ class SettingsTab(QWidget):
         keys_layout.addRow(self.lbl_key_status)
         content_layout.addWidget(keys_group)
 
-        # === Risk Profile Section (без изменений) ===
+        # === Risk Profile Section ===
         risk_group = QGroupBox("Risk Management")
         risk_layout = QFormLayout(risk_group)
         self.risk_profile = QComboBox()
@@ -176,7 +174,7 @@ class SettingsTab(QWidget):
         risk_layout.addRow("Kelly Win/Loss ratio:", self.kelly_avg_win_loss)
         content_layout.addWidget(risk_group)
 
-        # === Trading Settings (без изменений) ===
+        # === Trading Settings ===
         trading_group = QGroupBox("Trading Settings")
         trading_layout = QFormLayout(trading_group)
         self.signal_threshold = QDoubleSpinBox()
@@ -236,7 +234,7 @@ class SettingsTab(QWidget):
         trading_layout.addRow("Slippage timeout:", self.slippage_timeout)
         content_layout.addWidget(trading_group)
 
-        # === Strategies Group (расширенная) ===
+        # === Strategies Group ===
         strat_group = QGroupBox("Strategies")
         strat_layout = QVBoxLayout(strat_group)
         self.strategies_widgets = {}
@@ -257,7 +255,7 @@ class SettingsTab(QWidget):
         strat_layout.addWidget(self.btn_reload_modules)
         content_layout.addWidget(strat_group)
 
-        # === Indicators Group (аналогично) ===
+        # === Indicators Group ===
         ind_group = QGroupBox("Indicators")
         ind_layout = QVBoxLayout(ind_group)
         for name, indicator in self.engine.indicators.items():
@@ -309,13 +307,12 @@ class SettingsTab(QWidget):
         scroll.setWidget(content)
         layout.addWidget(scroll)
 
+    # ---------- Вспомогательные методы ----------
     def _configure_strategy(self, name):
         strat = self.engine.strategies[name]
         dlg = ParameterDialog(name, strat.config)
         if dlg.exec_() == QDialog.Accepted:
             new_params = dlg.get_values()
-            # Создаём новый экземпляр стратегии с этими параметрами
-            from strategies.base import BaseStrategy
             cls = type(strat)
             new_strat = cls(new_params)
             new_strat.enabled = strat.enabled
@@ -347,7 +344,10 @@ class SettingsTab(QWidget):
         if name in self.engine.filters:
             self.engine.filters[name].enabled = (state == Qt.Checked)
 
-    # Остальные методы (загрузка/сохранение) остаются как в предыдущей версии
+    def _toggle_strategy(self, name, state):
+        if name in self.engine.strategies:
+            self.engine.strategies[name].enabled = (state == Qt.Checked)
+
     def _load_settings(self):
         if not self.engine.auth.demo_mode:
             self.lbl_key_status.setText("Status: Keys configured")
@@ -374,10 +374,6 @@ class SettingsTab(QWidget):
         self.kelly_enabled.setChecked(self.engine.risk_manager._kelly_enabled)
         self.kelly_winrate.setValue(self.engine.risk_manager._kelly_winrate)
         self.kelly_avg_win_loss.setValue(self.engine.risk_manager._kelly_avg_win_loss_ratio)
-
-    def _toggle_strategy(self, name, state):
-        if name in self.engine.strategies:
-            self.engine.strategies[name].enabled = (state == Qt.Checked)
 
     def _save_keys(self):
         key = self.api_key_input.text().strip()
@@ -455,18 +451,25 @@ class SettingsTab(QWidget):
 
     def _save_settings(self):
         try:
-            settings = {
-                'max_positions': self.max_positions.value(),
-                'scan_interval': self.scan_interval.value(),
-                'signal_threshold': self.signal_threshold.value(),
-                'timeframes': self.timeframes.text(),
-                'top_symbols': self.top_symbols.value(),
-                'risk_per_trade': self.risk_per_trade.value(),
-                'max_leverage': self.max_leverage.value(),
-                'risk_profile': self.risk_profile.currentText(),
-            }
+            # ---- Применяем все настройки напрямую ----
+            # Основные параметры
+            self.engine.max_positions = self.max_positions.value()
+            self.engine.scan_interval = self.scan_interval.value()
+            self.engine.signal_threshold = self.signal_threshold.value()
             self.engine.timeframes = self.timeframes.text().split(',')
             self.engine.top_n_symbols = self.top_symbols.value()
+
+            # Риск-менеджер
+            self.engine.risk_manager.risk_per_trade_pct = self.risk_per_trade.value()
+            self.engine.risk_manager.max_leverage = self.max_leverage.value()
+            self.engine.risk_manager.use_day_profile = self.use_day_profile.isChecked()
+            self.engine.risk_manager._kelly_enabled = self.kelly_enabled.isChecked()
+            self.engine.risk_manager._kelly_winrate = self.kelly_winrate.value()
+            self.engine.risk_manager._kelly_avg_win_loss_ratio = self.kelly_avg_win_loss.value()
+            # Профиль уже установлен через комбобокс, но на всякий случай
+            self.engine.risk_manager.set_profile(self.risk_profile.currentText())
+
+            # Трейдинг
             self.engine.trailing_sl_enabled = self.trailing_sl.isChecked()
             self.engine.trailing_distance_pct = self.trailing_distance.value()
             self.engine.partial_close_enabled = self.partial_close.isChecked()
@@ -475,14 +478,14 @@ class SettingsTab(QWidget):
             self.engine.breakeven_atr_mult = self.breakeven_atr_mult.value()
             self.engine.slippage_timeout_sec = self.slippage_timeout.value()
 
-            self.engine.risk_manager.use_day_profile = self.use_day_profile.isChecked()
-            self.engine.risk_manager._kelly_enabled = self.kelly_enabled.isChecked()
-            self.engine.risk_manager._kelly_winrate = self.kelly_winrate.value()
-            self.engine.risk_manager._kelly_avg_win_loss_ratio = self.kelly_avg_win_loss.value()
+            # Сохраняем состояние риск-менеджера и конфиг
             self.engine.risk_manager._save_state()
             self.engine._save_config()
 
-            self.engine.update_settings(settings)
+            logger.info("Settings saved: risk=%.1f%%, leverage=%dx, positions=%d",
+                        self.engine.risk_manager.risk_per_trade_pct,
+                        self.engine.risk_manager.max_leverage,
+                        self.engine.max_positions)
             QMessageBox.information(self, "Success", "Settings saved to config.ini")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Save failed: {e}")
