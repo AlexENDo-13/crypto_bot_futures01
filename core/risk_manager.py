@@ -1,6 +1,6 @@
 """
 Risk Management: position sizing, leverage, SL/TP calculation, Kelly criterion.
-Now with multi-step adaptive profile switching to prevent drawdowns.
+Now with multi-step adaptive profile switching and negative TP protection.
 """
 import logging
 import json
@@ -52,12 +52,11 @@ class RiskManager:
         self._base_leverage = self.max_leverage
 
         self._original_profile = None
-        self._current_auto_profile = None
         self._auto_loss_stage = 0
-        self._auto_win_stage = 0
 
         self._load_state()
 
+    # ---------- Профили ----------
     def set_profile(self, profile: str):
         if profile not in self._profiles:
             return
@@ -94,6 +93,7 @@ class RiskManager:
             self.max_leverage = day_cfg['max_lev']
             logger.info(f"Day-of-week risk applied: {self.risk_per_trade_pct}%, leverage {self.max_leverage}")
 
+    # ---------- ATR-множители ----------
     def set_atr_multipliers(self, symbol: str, sl_mult: float, tp_mult: float):
         self._atr_multipliers[symbol] = {'sl': sl_mult, 'tp': tp_mult}
         self._save_state()
@@ -115,17 +115,29 @@ class RiskManager:
             distance = max(atr * sl_mult, min_sl_distance)
             sl = entry_price + distance
             tp = entry_price - atr * tp_mult
+
+        # Первичная защита от отрицательного SL
         sl = max(entry_price * 0.001, sl)
         if side == 'BUY' and sl >= entry_price:
             sl = entry_price * 0.999
         elif side == 'SELL' and sl <= entry_price:
             sl = entry_price * 1.001
+
+        # Минимальное расстояние SL (2% от цены)
         if side == 'BUY':
             sl = max(sl, entry_price * MIN_SL_RATIO_LONG)
         else:
             sl = max(sl, entry_price * MIN_SL_RATIO_SHORT)
+
+        # Защита TP: для лонга не ниже цены, для шорта не отрицательный
+        if side == 'BUY':
+            tp = max(tp, entry_price * 1.001)
+        else:
+            tp = max(tp, entry_price * 0.001)
+
         return {'sl': sl, 'tp': tp, 'tp2': tp}
 
+    # ---------- Плечо по волатильности ----------
     def get_optimal_leverage(self, symbol: str, price: float, atr: float) -> int:
         atr_pct = atr / price if price > 0 else 0.02
         if atr_pct > 0.05:
@@ -193,6 +205,9 @@ class RiskManager:
     def can_open_position(self) -> bool:
         return True
 
+    # =================================================================
+    #   МНОГОСТУПЕНЧАТАЯ АДАПТАЦИЯ ПРОФИЛЯ ПО СЕРИЯМ
+    # =================================================================
     def update_adaptive_risk(self, trade_pnl: float):
         if not self.adaptive_risk_enabled:
             return
@@ -240,6 +255,7 @@ class RiskManager:
                 self._auto_loss_stage = 0
                 self.consecutive_wins = 0
 
+    # ---------- Состояние ----------
     def _save_state(self):
         data = {
             'atr_multipliers': self._atr_multipliers,
