@@ -1,12 +1,12 @@
 {
   "MeanReversion": {
     "weight": 1.4285714285714286,
-    "trades": 2,
+    "trades": 3,
     "wins": 0,
     "total_pnl": 0.0,
     "avg_pnl": 0.0,
     "winrate": 0.0,
-    "consecutive_losses": 2
+    "consecutive_losses": 3
   },
   "Momentum": {
     "weight": 0.14285714285714288,

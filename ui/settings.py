@@ -1,4 +1,4 @@
-"""Settings tab: API keys, risk, strategies/indicators/filters configuration."""
+"""Settings tab: API keys, risk, strategies/indicators/filters, Moonshot configuration."""
 import logging
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
@@ -99,7 +99,7 @@ class SettingsTab(QWidget):
         content = QWidget()
         content_layout = QVBoxLayout(content)
 
-        # === API Keys Section ===
+        # === API Keys ===
         keys_group = QGroupBox("API Keys")
         keys_layout = QFormLayout(keys_group)
 
@@ -132,11 +132,11 @@ class SettingsTab(QWidget):
         keys_layout.addRow(self.lbl_key_status)
         content_layout.addWidget(keys_group)
 
-        # === Risk Profile Section ===
+        # === Risk Management ===
         risk_group = QGroupBox("Risk Management")
         risk_layout = QFormLayout(risk_group)
         self.risk_profile = QComboBox()
-        self.risk_profile.addItems(["Conservative", "Balanced", "Aggressive", "Adaptive"])
+        self.risk_profile.addItems(["Conservative", "Balanced", "Aggressive", "Adaptive", "User"])
         self.risk_profile.currentTextChanged.connect(self._on_profile_change)
         risk_layout.addRow("Risk Profile:", self.risk_profile)
         self.risk_per_trade = QDoubleSpinBox()
@@ -234,7 +234,32 @@ class SettingsTab(QWidget):
         trading_layout.addRow("Slippage timeout:", self.slippage_timeout)
         content_layout.addWidget(trading_group)
 
-        # === Strategies Group ===
+        # === Moonshot Settings ===
+        moonshot_group = QGroupBox("Moonshot")
+        moonshot_layout = QFormLayout(moonshot_group)
+        self.moonshot_capital_pct = QDoubleSpinBox()
+        self.moonshot_capital_pct.setRange(0.0, 50.0)
+        self.moonshot_capital_pct.setSingleStep(5.0)
+        self.moonshot_capital_pct.setDecimals(1)
+        self.moonshot_capital_pct.setSuffix("%")
+        self.moonshot_capital_pct.setValue(10.0)
+        moonshot_layout.addRow("Capital %:", self.moonshot_capital_pct)
+        self.moonshot_max_risk_pct = QDoubleSpinBox()
+        self.moonshot_max_risk_pct.setRange(0.1, 5.0)
+        self.moonshot_max_risk_pct.setSingleStep(0.1)
+        self.moonshot_max_risk_pct.setDecimals(1)
+        self.moonshot_max_risk_pct.setSuffix("%")
+        self.moonshot_max_risk_pct.setValue(1.0)
+        moonshot_layout.addRow("Max Risk per Trade %:", self.moonshot_max_risk_pct)
+        self.moonshot_scan = QSpinBox()
+        self.moonshot_scan.setRange(60, 600)
+        self.moonshot_scan.setSingleStep(30)
+        self.moonshot_scan.setSuffix(" sec")
+        self.moonshot_scan.setValue(300)
+        moonshot_layout.addRow("Scan Interval:", self.moonshot_scan)
+        content_layout.addWidget(moonshot_group)
+
+        # === Strategies ===
         strat_group = QGroupBox("Strategies")
         strat_layout = QVBoxLayout(strat_group)
         self.strategies_widgets = {}
@@ -255,7 +280,7 @@ class SettingsTab(QWidget):
         strat_layout.addWidget(self.btn_reload_modules)
         content_layout.addWidget(strat_group)
 
-        # === Indicators Group ===
+        # === Indicators ===
         ind_group = QGroupBox("Indicators")
         ind_layout = QVBoxLayout(ind_group)
         for name, indicator in self.engine.indicators.items():
@@ -269,7 +294,7 @@ class SettingsTab(QWidget):
             ind_layout.addLayout(row)
         content_layout.addWidget(ind_group)
 
-        # === Filters Group ===
+        # === Filters ===
         flt_group = QGroupBox("Filters")
         flt_layout = QVBoxLayout(flt_group)
         for name, filter_obj in self.engine.filters.items():
@@ -307,7 +332,7 @@ class SettingsTab(QWidget):
         scroll.setWidget(content)
         layout.addWidget(scroll)
 
-    # ---------- Вспомогательные методы ----------
+    # ---------- Вспомогательные методы (как были ранее) ----------
     def _configure_strategy(self, name):
         strat = self.engine.strategies[name]
         dlg = ParameterDialog(name, strat.config)
@@ -375,6 +400,12 @@ class SettingsTab(QWidget):
         self.kelly_winrate.setValue(self.engine.risk_manager._kelly_winrate)
         self.kelly_avg_win_loss.setValue(self.engine.risk_manager._kelly_avg_win_loss_ratio)
 
+        # Moonshot
+        if hasattr(self.engine, 'moonshot') and self.engine.moonshot:
+            self.moonshot_capital_pct.setValue(self.engine.moonshot.capital_pct)
+            self.moonshot_max_risk_pct.setValue(self.engine.moonshot.max_risk_pct)
+            self.moonshot_scan.setValue(self.engine.moonshot.scan_interval)
+
     def _save_keys(self):
         key = self.api_key_input.text().strip()
         secret = self.api_secret_input.text().strip()
@@ -407,18 +438,6 @@ class SettingsTab(QWidget):
 
     def _on_profile_change(self, profile):
         self.engine.risk_manager.set_profile(profile)
-        if profile == 'Conservative':
-            self.risk_per_trade.setValue(1.0)
-            self.max_leverage.setValue(2)
-            self.max_positions.setValue(3)
-        elif profile == 'Balanced':
-            self.risk_per_trade.setValue(2.0)
-            self.max_leverage.setValue(3)
-            self.max_positions.setValue(5)
-        elif profile == 'Aggressive':
-            self.risk_per_trade.setValue(4.0)
-            self.max_leverage.setValue(5)
-            self.max_positions.setValue(8)
 
     def _reload_modules(self):
         try:
@@ -451,7 +470,6 @@ class SettingsTab(QWidget):
 
     def _save_settings(self):
         try:
-            # ---- Применяем все настройки напрямую ----
             # Основные параметры
             self.engine.max_positions = self.max_positions.value()
             self.engine.scan_interval = self.scan_interval.value()
@@ -460,14 +478,21 @@ class SettingsTab(QWidget):
             self.engine.top_n_symbols = self.top_symbols.value()
 
             # Риск-менеджер
-            self.engine.risk_manager.risk_per_trade_pct = self.risk_per_trade.value()
-            self.engine.risk_manager.max_leverage = self.max_leverage.value()
+            risk_pct = self.risk_per_trade.value()
+            leverage = self.max_leverage.value()
+            profile = self.risk_profile.currentText()
+
+            if profile == 'User':
+                self.engine.risk_manager.set_user_params(risk_pct, leverage)
+            else:
+                self.engine.risk_manager.risk_per_trade_pct = risk_pct
+                self.engine.risk_manager.max_leverage = leverage
+                self.engine.risk_manager.set_profile(profile)
+
             self.engine.risk_manager.use_day_profile = self.use_day_profile.isChecked()
             self.engine.risk_manager._kelly_enabled = self.kelly_enabled.isChecked()
             self.engine.risk_manager._kelly_winrate = self.kelly_winrate.value()
             self.engine.risk_manager._kelly_avg_win_loss_ratio = self.kelly_avg_win_loss.value()
-            # Профиль уже установлен через комбобокс, но на всякий случай
-            self.engine.risk_manager.set_profile(self.risk_profile.currentText())
 
             # Трейдинг
             self.engine.trailing_sl_enabled = self.trailing_sl.isChecked()
@@ -478,14 +503,22 @@ class SettingsTab(QWidget):
             self.engine.breakeven_atr_mult = self.breakeven_atr_mult.value()
             self.engine.slippage_timeout_sec = self.slippage_timeout.value()
 
-            # Сохраняем состояние риск-менеджера и конфиг
+            # Moonshot
+            if hasattr(self.engine, 'moonshot') and self.engine.moonshot:
+                self.engine.moonshot.capital_pct = self.moonshot_capital_pct.value()
+                self.engine.moonshot.max_risk_pct = self.moonshot_max_risk_pct.value()
+                self.engine.moonshot.scan_interval = self.moonshot_scan.value()
+                # Перезапускаем Moonshot с новыми параметрами
+                if self.engine.moonshot._running:
+                    self.engine.moonshot.stop()
+                    self.engine.moonshot.start()
+                logger.info("Moonshot parameters updated")
+
             self.engine.risk_manager._save_state()
             self.engine._save_config()
 
-            logger.info("Settings saved: risk=%.1f%%, leverage=%dx, positions=%d",
-                        self.engine.risk_manager.risk_per_trade_pct,
-                        self.engine.risk_manager.max_leverage,
-                        self.engine.max_positions)
+            logger.info("Settings saved: risk=%.1f%%, leverage=%dx, positions=%d, profile=%s",
+                        risk_pct, leverage, self.engine.max_positions, profile)
             QMessageBox.information(self, "Success", "Settings saved to config.ini")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Save failed: {e}")

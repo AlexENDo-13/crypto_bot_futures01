@@ -1,5 +1,6 @@
 """
 Risk Management: position sizing, leverage, SL/TP calculation, Kelly criterion.
+Now with multi-step adaptive profile switching to prevent drawdowns.
 """
 import logging
 import json
@@ -12,9 +13,11 @@ logger = logging.getLogger(__name__)
 DEFAULT_ATR_MULT_SL = 1.5
 DEFAULT_ATR_MULT_TP = 2.0
 
-# Минимальное расстояние SL от цены входа (в долях от цены)
-MIN_SL_RATIO_LONG = 0.98   # SL не ближе 2% снизу
-MIN_SL_RATIO_SHORT = 1.02  # SL не ближе 2% сверху
+MIN_SL_RATIO_LONG = 0.98
+MIN_SL_RATIO_SHORT = 1.02
+
+# Порядок профилей по уровню риска (от консервативного к агрессивному)
+PROFILE_RISK_ORDER = ['Conservative', 'Balanced', 'Adaptive', 'Aggressive', 'User']
 
 
 class RiskManager:
@@ -27,18 +30,16 @@ class RiskManager:
         self._current_profile = 'Adaptive'
         self._profiles = {
             'Conservative': {'risk_per_trade_pct': 1.0, 'max_leverage': 2},
-            'Balanced': {'risk_per_trade_pct': 2.0, 'max_leverage': 3},
-            'Aggressive': {'risk_per_trade_pct': 4.0, 'max_leverage': 5},
-            'Adaptive': {'risk_per_trade_pct': 2.0, 'max_leverage': 3},
+            'Balanced':     {'risk_per_trade_pct': 2.0, 'max_leverage': 3},
+            'Aggressive':   {'risk_per_trade_pct': 4.0, 'max_leverage': 5},
+            'Adaptive':     {'risk_per_trade_pct': 2.0, 'max_leverage': 3},
+            'User':         {'risk_per_trade_pct': 2.0, 'max_leverage': 3},
         }
         self._atr_multipliers: Dict[str, Dict[str, float]] = {}
         self._day_profiles = {
-            0: {'risk_pct': 1.5, 'max_lev': 2},
-            1: {'risk_pct': 1.5, 'max_lev': 2},
-            2: {'risk_pct': 1.5, 'max_lev': 2},
-            3: {'risk_pct': 1.5, 'max_lev': 2},
-            4: {'risk_pct': 1.0, 'max_lev': 1},
-            5: {'risk_pct': 1.0, 'max_lev': 1},
+            0: {'risk_pct': 1.5, 'max_lev': 2}, 1: {'risk_pct': 1.5, 'max_lev': 2},
+            2: {'risk_pct': 1.5, 'max_lev': 2}, 3: {'risk_pct': 1.5, 'max_lev': 2},
+            4: {'risk_pct': 1.0, 'max_lev': 1}, 5: {'risk_pct': 1.0, 'max_lev': 1},
             6: {'risk_pct': 1.0, 'max_lev': 1},
         }
         self._kelly_enabled = False
@@ -50,17 +51,32 @@ class RiskManager:
         self.consecutive_losses = 0
         self._base_risk_pct = self.risk_per_trade_pct
         self._base_leverage = self.max_leverage
+
+        # Для многоступенчатой адаптации
+        self._original_profile = None          # исходный профиль до автоматического снижения
+        self._current_auto_profile = None      # текущий профиль в цепочке адаптации
+        self._auto_loss_stage = 0              # 0=нет, 1=Balanced, 2=Conservative
+        self._auto_win_stage = 0               # для восстановления
+
         self._load_state()
 
     # ---------- Профили ----------
     def set_profile(self, profile: str):
-        if profile in self._profiles:
-            self._current_profile = profile
-            self.risk_per_trade_pct = self._profiles[profile]['risk_per_trade_pct']
-            self.max_leverage = self._profiles[profile]['max_leverage']
-            self._base_risk_pct = self.risk_per_trade_pct
-            self._base_leverage = self.max_leverage
-            logger.info(f"Risk profile switched to: {profile} (risk={self.risk_per_trade_pct}%, max_lev={self.max_leverage})")
+        if profile not in self._profiles:
+            return
+        self._current_profile = profile
+        self.risk_per_trade_pct = self._profiles[profile]['risk_per_trade_pct']
+        self.max_leverage = self._profiles[profile]['max_leverage']
+        self._base_risk_pct = self.risk_per_trade_pct
+        self._base_leverage = self.max_leverage
+        logger.info(f"Risk profile switched to: {profile} (risk={self.risk_per_trade_pct}%, max_lev={self.max_leverage})")
+
+    def set_user_params(self, risk_pct: float, leverage: int):
+        self._profiles['User']['risk_per_trade_pct'] = risk_pct
+        self._profiles['User']['max_leverage'] = leverage
+        self._save_state()
+        if self._current_profile == 'User':
+            self.set_profile('User')
 
     def set_night_mode(self, enabled: bool):
         self._night_mode = enabled
@@ -81,7 +97,7 @@ class RiskManager:
             self.max_leverage = day_cfg['max_lev']
             logger.info(f"Day-of-week risk applied: {self.risk_per_trade_pct}%, leverage {self.max_leverage}")
 
-    # ---------- ATR-множители (индивидуальные для пары) ----------
+    # ---------- ATR-множители ----------
     def set_atr_multipliers(self, symbol: str, sl_mult: float, tp_mult: float):
         self._atr_multipliers[symbol] = {'sl': sl_mult, 'tp': tp_mult}
         self._save_state()
@@ -94,9 +110,7 @@ class RiskManager:
 
     def get_sl_tp_levels(self, entry_price: float, side: str, atr: float, symbol: str = None) -> Dict[str, float]:
         sl_mult, tp_mult = self.get_atr_multipliers(symbol) if symbol else (DEFAULT_ATR_MULT_SL, DEFAULT_ATR_MULT_TP)
-
         min_sl_distance = entry_price * 0.005
-
         if side == 'BUY':
             distance = max(atr * sl_mult, min_sl_distance)
             sl = entry_price - distance
@@ -105,24 +119,17 @@ class RiskManager:
             distance = max(atr * sl_mult, min_sl_distance)
             sl = entry_price + distance
             tp = entry_price - atr * tp_mult
-
-        # Первичная защита от отрицательного SL
         sl = max(entry_price * 0.001, sl)
-        # Дополнительная логическая проверка
         if side == 'BUY' and sl >= entry_price:
             sl = entry_price * 0.999
         elif side == 'SELL' and sl <= entry_price:
             sl = entry_price * 1.001
-
-        # --- Усиленная защита: SL не может быть экстремально близким к цене ---
         if side == 'BUY':
             sl = max(sl, entry_price * MIN_SL_RATIO_LONG)
         else:
             sl = max(sl, entry_price * MIN_SL_RATIO_SHORT)
-
         return {'sl': sl, 'tp': tp, 'tp2': tp}
 
-    # ---------- Плечо по волатильности ----------
     def get_optimal_leverage(self, symbol: str, price: float, atr: float) -> int:
         atr_pct = atr / price if price > 0 else 0.02
         if atr_pct > 0.05:
@@ -133,7 +140,6 @@ class RiskManager:
             return min(5, self.max_leverage + 1)
         return self.max_leverage
 
-    # ---------- Позиционирование ----------
     def calculate_position_size(self, free_margin: float, entry_price: float,
                                 sl_price: float, confidence: float) -> Tuple[float, int]:
         if entry_price <= 0 or free_margin <= 0:
@@ -160,29 +166,22 @@ class RiskManager:
     def update_kelly_from_history(self, portfolio):
         if not self._kelly_enabled:
             return
-
         trades = getattr(portfolio, '_trades', [])
         if len(trades) < 5:
             logger.debug(f"Not enough trades for Kelly update ({len(trades)} < 5)")
             return
-
         wins = [t for t in trades if t.pnl > 0]
         losses = [t for t in trades if t.pnl <= 0]
-
         total = len(trades)
         winrate = len(wins) / total if total > 0 else 0.5
-
         avg_win = sum(t.pnl for t in wins) / len(wins) if wins else 1.0
         avg_loss = abs(sum(t.pnl for t in losses) / len(losses)) if losses else 1.0
         avg_wl_ratio = avg_win / avg_loss if avg_loss > 0 else 2.0
-
         self._kelly_winrate = 0.7 * self._kelly_winrate + 0.3 * winrate
         self._kelly_avg_win_loss_ratio = 0.7 * self._kelly_avg_win_loss_ratio + 0.3 * avg_wl_ratio
-
         logger.info(f"Kelly updated: winrate={self._kelly_winrate:.3f}, avg_wl={self._kelly_avg_win_loss_ratio:.2f}")
         self._save_state()
 
-    # ---------- Адаптация ----------
     def adapt_to_volatility(self, current_atr_pct: float):
         if self._night_mode:
             return
@@ -198,10 +197,14 @@ class RiskManager:
     def can_open_position(self) -> bool:
         return True
 
-    # ---------- Адаптивный риск по сериям ----------
+    # =================================================================
+    #   МНОГОСТУПЕНЧАТАЯ АДАПТАЦИЯ ПРОФИЛЯ ПО СЕРИЯМ
+    # =================================================================
     def update_adaptive_risk(self, trade_pnl: float):
+        """Автоматическое плавное изменение профиля при серии убытков/прибылей."""
         if not self.adaptive_risk_enabled:
             return
+
         if trade_pnl > 0:
             self.consecutive_wins += 1
             self.consecutive_losses = 0
@@ -209,15 +212,50 @@ class RiskManager:
             self.consecutive_losses += 1
             self.consecutive_wins = 0
 
-        if self.consecutive_wins >= 3:
-            self.risk_per_trade_pct = min(5.0, self._base_risk_pct * (1 + 0.1 * self.consecutive_wins))
-            self.max_leverage = min(5, self._base_leverage + 1)
+        # Если ещё не начали адаптацию – запоминаем исходный профиль
+        if self._original_profile is None:
+            self._original_profile = self._current_profile
+
+        current_idx = PROFILE_RISK_ORDER.index(self._current_profile) if self._current_profile in PROFILE_RISK_ORDER else 2
+
+        # === Реакция на убытки ===
+        if self.consecutive_losses >= 3:
+            # переход на Conservative (если ещё не там)
+            if self._current_profile != 'Conservative':
+                logger.warning("3 consecutive losses → switching to Conservative profile")
+                self.set_profile('Conservative')
+                self._auto_loss_stage = 2
         elif self.consecutive_losses >= 2:
-            self.risk_per_trade_pct = max(0.5, self._base_risk_pct * (1 - 0.1 * self.consecutive_losses))
-            self.max_leverage = max(1, self._base_leverage - 1)
-        else:
-            self.risk_per_trade_pct = self._base_risk_pct
-            self.max_leverage = self._base_leverage
+            # переход на Balanced (только если были агрессивнее)
+            if current_idx > PROFILE_RISK_ORDER.index('Balanced'):
+                if self._current_profile != 'Balanced':
+                    logger.info("2 consecutive losses → switching to Balanced profile")
+                    self.set_profile('Balanced')
+                    self._auto_loss_stage = 1
+
+        # === Реакция на прибыли (восстановление) ===
+        if self.consecutive_wins >= 3 and self._auto_loss_stage > 0:
+            # Поднимаемся на одну ступень вверх
+            target_idx = min(current_idx + 1, len(PROFILE_RISK_ORDER) - 1)
+            target_profile = PROFILE_RISK_ORDER[target_idx]
+            # Не поднимаемся выше исходного профиля (если он был агрессивнее)
+            if PROFILE_RISK_ORDER.index(self._original_profile) >= target_idx:
+                if self._current_profile != target_profile:
+                    logger.info(f"3 consecutive wins → upgrading to {target_profile}")
+                    self.set_profile(target_profile)
+                    self._auto_loss_stage -= 1
+                    self.consecutive_wins = 0  # сбрасываем счётчик побед
+                else:
+                    # уже на нужном профиле
+                    self.consecutive_wins = 0
+            else:
+                # Вернулись к исходному или выше – завершаем адаптацию
+                if self._current_profile != self._original_profile:
+                    logger.info(f"Adaptation finished, returning to original profile: {self._original_profile}")
+                    self.set_profile(self._original_profile)
+                self._original_profile = None
+                self._auto_loss_stage = 0
+                self.consecutive_wins = 0
 
     # ---------- Состояние ----------
     def _save_state(self):
@@ -227,7 +265,8 @@ class RiskManager:
                 'enabled': self._kelly_enabled,
                 'winrate': self._kelly_winrate,
                 'avg_wl': self._kelly_avg_win_loss_ratio
-            }
+            },
+            'user_params': self._profiles.get('User', {'risk_per_trade_pct': 2.0, 'max_leverage': 3})
         }
         try:
             os.makedirs(os.path.dirname(self.STATE_FILE), exist_ok=True)
@@ -247,6 +286,11 @@ class RiskManager:
             self._kelly_enabled = k.get('enabled', False)
             self._kelly_winrate = k.get('winrate', 0.5)
             self._kelly_avg_win_loss_ratio = k.get('avg_wl', 2.0)
+            user_params = data.get('user_params', {'risk_per_trade_pct': 2.0, 'max_leverage': 3})
+            self._profiles['User'] = {
+                'risk_per_trade_pct': user_params['risk_per_trade_pct'],
+                'max_leverage': user_params['max_leverage']
+            }
             logger.info("Risk state loaded")
         except Exception as e:
             logger.error(f"Failed to load risk state: {e}")
