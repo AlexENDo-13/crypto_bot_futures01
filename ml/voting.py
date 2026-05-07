@@ -21,7 +21,7 @@ class VotingSystem:
     MIN_TOTAL_PNL = -100.0
     MAX_CONSECUTIVE_LOSSES = 5
     WEIGHT_PENALTY = 0.1
-    DISABLE_TIMEOUT_HOURS = 12
+    DISABLE_TIMEOUT_HOURS = 24
 
     def __init__(self):
         self._weights: Dict[str, dict] = {}
