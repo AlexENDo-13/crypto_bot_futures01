@@ -28,7 +28,6 @@ DEFAULT_SOUNDS = {
     'milestone': 'sounds/milestone.wav',
 }
 
-# Русские фразы для TTS
 PHRASES = {
     'trade_open': 'Открыта сделка',
     'profit': 'Прибыль',
@@ -58,9 +57,8 @@ class SoundManager:
         if TTS_AVAILABLE:
             try:
                 self._tts_engine = pyttsx3.init()
-                self._tts_engine.setProperty('rate', 180)   # скорость речи
+                self._tts_engine.setProperty('rate', 180)
                 self._tts_engine.setProperty('volume', self._volume)
-                # Попробуем установить русский голос
                 voices = self._tts_engine.getProperty('voices')
                 for voice in voices:
                     if 'russian' in voice.name.lower() or 'ru' in voice.id:
@@ -97,11 +95,8 @@ class SoundManager:
         self._active_events.discard(event)
 
     def play(self, event: str):
-        """Воспроизводит звук/речь для события, если оно разрешено в текущем профиле."""
         if event not in self._active_events:
             return
-
-        # Приоритет – голосовой синтез
         if self._tts_engine:
             try:
                 phrase = PHRASES.get(event, event)
@@ -111,8 +106,6 @@ class SoundManager:
                 return
             except Exception as e:
                 logger.debug(f"TTS failed, falling back to WAV: {e}")
-
-        # Fallback – WAV‑файл
         if not SOUND_AVAILABLE:
             return
         path = self._sounds.get(event)

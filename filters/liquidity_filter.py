@@ -65,7 +65,7 @@ class LiquidityFilter(BaseFilter):
         if self.config.get('adaptive_relax'):
             time_since_last_trade = time.time() - self._last_trade_time
             if time_since_last_trade > self.config.get('relax_after_seconds', 180):
-                threshold = max(0.1, threshold * 0.5)
+                threshold = max(0.02, threshold * 0.5)
                 logger.debug(f"Liquidity threshold relaxed to {threshold:.2f}")
 
         if ratio < threshold:

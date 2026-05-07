@@ -1,6 +1,6 @@
 {
   "MeanReversion": {
-    "weight": 0.26666666666666666,
+    "weight": 1.0,
     "trades": 5,
     "wins": 0,
     "total_pnl": 0.0,
@@ -12,31 +12,29 @@
     "disabled_at": 1778149035.1930761
   },
   "Momentum": {
-    "weight": 0.26666666666666666,
-    "trades": 17,
+    "weight": 1.0,
+    "trades": 18,
     "wins": 0,
     "total_pnl": 0.0,
     "avg_pnl": 0.0,
     "winrate": 0.0,
-    "consecutive_losses": 17,
-    "disabled": true,
-    "disabled_reason": "5 consecutive losses",
-    "disabled_at": 1778114524.4936376
+    "consecutive_losses": 0,
+    "disabled": false,
+    "disabled_reason": null
   },
   "TrendFollowing": {
-    "weight": 0.26666666666666666,
+    "weight": 1.0,
     "trades": 5,
     "wins": 0,
     "total_pnl": 0.0,
     "avg_pnl": 0.0,
     "winrate": 0.0,
-    "consecutive_losses": 5,
-    "disabled": true,
-    "disabled_reason": "5 consecutive losses",
-    "disabled_at": 1778114582.4743986
+    "consecutive_losses": 0,
+    "disabled": false,
+    "disabled_reason": null
   },
   "AdaptiveCombiner": {
-    "weight": 2.6666666666666665,
+    "weight": 1.0,
     "trades": 0,
     "wins": 0,
     "total_pnl": 0.0,
@@ -45,7 +43,7 @@
     "consecutive_losses": 0
   },
   "DualThrust": {
-    "weight": 1.8666666666666665,
+    "weight": 0.7,
     "trades": 0,
     "wins": 0,
     "total_pnl": 0.0,
@@ -54,16 +52,7 @@
     "consecutive_losses": 0
   },
   "Ichimoku": {
-    "weight": 0.26666666666666666,
-    "trades": 3,
-    "wins": 0,
-    "total_pnl": 0.0,
-    "avg_pnl": 0.0,
-    "winrate": 0.0,
-    "consecutive_losses": 3
-  },
-  "RSIDivergence": {
-    "weight": 0.26666666666666666,
+    "weight": 1.0,
     "trades": 4,
     "wins": 0,
     "total_pnl": 0.0,
@@ -71,8 +60,20 @@
     "winrate": 0.0,
     "consecutive_losses": 4
   },
+  "RSIDivergence": {
+    "weight": 0.9,
+    "trades": 5,
+    "wins": 0,
+    "total_pnl": 0.0,
+    "avg_pnl": 0.0,
+    "winrate": 0.0,
+    "consecutive_losses": 5,
+    "disabled": true,
+    "disabled_reason": "5 consecutive losses",
+    "disabled_at": 1778150938.3917124
+  },
   "Squeeze": {
-    "weight": 2.1333333333333333,
+    "weight": 0.8,
     "trades": 0,
     "wins": 0,
     "total_pnl": 0.0,

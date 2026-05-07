@@ -27,7 +27,6 @@ class VolumeSurgeFilter(BaseFilter):
 
     def __init__(self, params=None):
         super().__init__(params)
-        # Загружаем персональный min_volume_mult из config.ini
         self._load_config()
         self._last_trade_time = time.time()
 
@@ -76,7 +75,7 @@ class VolumeSurgeFilter(BaseFilter):
         if self.config.get('adaptive_relax'):
             time_since_last_trade = time.time() - self._last_trade_time
             if time_since_last_trade > self.config.get('relax_after_seconds', 180):
-                threshold = max(0.5, threshold * 0.5)
+                threshold = max(0.15, threshold * 0.5)
                 logger.debug(f"VolumeSurge threshold relaxed to {threshold:.2f} (inactive {time_since_last_trade:.0f}s)")
 
         if ratio < threshold:
