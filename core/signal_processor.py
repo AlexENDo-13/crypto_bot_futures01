@@ -58,9 +58,9 @@ class SignalProcessor:
         # --- Адаптивный порог уверенности ---
         threshold = self.engine.signal_threshold
         if regime in ('HIGH_VOLATILITY', 'TRENDING'):
-            threshold = max(0.3, threshold - 0.15)   # легче войти в тренд
+            threshold = max(0.3, threshold - 0.15)
         elif regime in ('LOW_VOLATILITY', 'RANGE', 'RANGING'):
-            threshold = min(0.8, threshold + 0.2)    # строже в боковике
+            threshold = min(0.8, threshold + 0.2)
         logger.debug(f"Adaptive threshold for {regime}: {threshold:.2f}")
 
         if signal.confidence < threshold:

@@ -16,7 +16,6 @@ DEFAULT_ATR_MULT_TP = 2.0
 MIN_SL_RATIO_LONG = 0.98
 MIN_SL_RATIO_SHORT = 1.02
 
-# Порядок профилей по уровню риска (от консервативного к агрессивному)
 PROFILE_RISK_ORDER = ['Conservative', 'Balanced', 'Adaptive', 'Aggressive', 'User']
 
 
@@ -52,15 +51,13 @@ class RiskManager:
         self._base_risk_pct = self.risk_per_trade_pct
         self._base_leverage = self.max_leverage
 
-        # Для многоступенчатой адаптации
-        self._original_profile = None          # исходный профиль до автоматического снижения
-        self._current_auto_profile = None      # текущий профиль в цепочке адаптации
-        self._auto_loss_stage = 0              # 0=нет, 1=Balanced, 2=Conservative
-        self._auto_win_stage = 0               # для восстановления
+        self._original_profile = None
+        self._current_auto_profile = None
+        self._auto_loss_stage = 0
+        self._auto_win_stage = 0
 
         self._load_state()
 
-    # ---------- Профили ----------
     def set_profile(self, profile: str):
         if profile not in self._profiles:
             return
@@ -97,7 +94,6 @@ class RiskManager:
             self.max_leverage = day_cfg['max_lev']
             logger.info(f"Day-of-week risk applied: {self.risk_per_trade_pct}%, leverage {self.max_leverage}")
 
-    # ---------- ATR-множители ----------
     def set_atr_multipliers(self, symbol: str, sl_mult: float, tp_mult: float):
         self._atr_multipliers[symbol] = {'sl': sl_mult, 'tp': tp_mult}
         self._save_state()
@@ -197,11 +193,7 @@ class RiskManager:
     def can_open_position(self) -> bool:
         return True
 
-    # =================================================================
-    #   МНОГОСТУПЕНЧАТАЯ АДАПТАЦИЯ ПРОФИЛЯ ПО СЕРИЯМ
-    # =================================================================
     def update_adaptive_risk(self, trade_pnl: float):
-        """Автоматическое плавное изменение профиля при серии убытков/прибылей."""
         if not self.adaptive_risk_enabled:
             return
 
@@ -212,44 +204,35 @@ class RiskManager:
             self.consecutive_losses += 1
             self.consecutive_wins = 0
 
-        # Если ещё не начали адаптацию – запоминаем исходный профиль
         if self._original_profile is None:
             self._original_profile = self._current_profile
 
         current_idx = PROFILE_RISK_ORDER.index(self._current_profile) if self._current_profile in PROFILE_RISK_ORDER else 2
 
-        # === Реакция на убытки ===
         if self.consecutive_losses >= 3:
-            # переход на Conservative (если ещё не там)
             if self._current_profile != 'Conservative':
                 logger.warning("3 consecutive losses → switching to Conservative profile")
                 self.set_profile('Conservative')
                 self._auto_loss_stage = 2
         elif self.consecutive_losses >= 2:
-            # переход на Balanced (только если были агрессивнее)
             if current_idx > PROFILE_RISK_ORDER.index('Balanced'):
                 if self._current_profile != 'Balanced':
                     logger.info("2 consecutive losses → switching to Balanced profile")
                     self.set_profile('Balanced')
                     self._auto_loss_stage = 1
 
-        # === Реакция на прибыли (восстановление) ===
         if self.consecutive_wins >= 3 and self._auto_loss_stage > 0:
-            # Поднимаемся на одну ступень вверх
             target_idx = min(current_idx + 1, len(PROFILE_RISK_ORDER) - 1)
             target_profile = PROFILE_RISK_ORDER[target_idx]
-            # Не поднимаемся выше исходного профиля (если он был агрессивнее)
             if PROFILE_RISK_ORDER.index(self._original_profile) >= target_idx:
                 if self._current_profile != target_profile:
                     logger.info(f"3 consecutive wins → upgrading to {target_profile}")
                     self.set_profile(target_profile)
                     self._auto_loss_stage -= 1
-                    self.consecutive_wins = 0  # сбрасываем счётчик побед
+                    self.consecutive_wins = 0
                 else:
-                    # уже на нужном профиле
                     self.consecutive_wins = 0
             else:
-                # Вернулись к исходному или выше – завершаем адаптацию
                 if self._current_profile != self._original_profile:
                     logger.info(f"Adaptation finished, returning to original profile: {self._original_profile}")
                     self.set_profile(self._original_profile)
@@ -257,7 +240,6 @@ class RiskManager:
                 self._auto_loss_stage = 0
                 self.consecutive_wins = 0
 
-    # ---------- Состояние ----------
     def _save_state(self):
         data = {
             'atr_multipliers': self._atr_multipliers,

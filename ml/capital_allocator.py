@@ -14,7 +14,7 @@ class CapitalAllocator:
     def __init__(self, engine, update_interval_minutes=60, lookback_trades=20):
         self.engine = engine
         self.update_interval = update_interval_minutes * 60
-        self.lookback_trades = lookback_trades  # количество последних сделок для оценки
+        self.lookback_trades = lookback_trades
         self._running = False
         self._thread = None
 
@@ -41,36 +41,31 @@ class CapitalAllocator:
 
     def _update_allocations(self):
         voting = self.engine.voting
-        # Получаем полную статистику, а не только веса
         all_stats = voting.get_strategy_stats()
         if not all_stats:
             return
 
-        # Рассчитываем показатели для каждой стратегии
         scores = {}
         for name, stats in all_stats.items():
             trades = stats.get('trades', 0)
-            if trades < 3:  # недостаточно данных – оставляем текущий вес
+            if trades < 3:
                 scores[name] = stats.get('weight', 1.0)
                 continue
 
             avg_pnl = stats.get('avg_pnl', 0)
             winrate = stats.get('winrate', 0) / 100.0
-            # Простая оценка: winrate * avg_pnl (нормализовано)
             if avg_pnl <= 0:
-                score = 0.1  # минимальный вес
+                score = 0.1
             else:
                 score = winrate * avg_pnl
             scores[name] = score
 
-        # Нормализуем в веса от 0.1 до 3.0 (максимальный вес)
         total = sum(scores.values())
         if total == 0:
             return
         for name in scores:
-            normalized = scores[name] / total * len(scores)  # масштабируем, чтобы средний = 1
+            normalized = scores[name] / total * len(scores)
             normalized = max(0.1, min(3.0, normalized))
-            # Обновляем вес в статистике VotingSystem
             if name in voting._weights:
                 voting._weights[name]['weight'] = normalized
                 logger.debug(f"Capital allocation: {name} → {normalized:.2f} (raw score {scores[name]:.4f})")

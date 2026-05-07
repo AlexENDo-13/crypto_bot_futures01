@@ -17,12 +17,11 @@ logger = logging.getLogger(__name__)
 class VotingSystem:
     WEIGHTS_FILE = 'data/strategy_weights.json'
 
-    # Пороги для автоотключения
-    MIN_WINRATE = 0.40       # Минимальный winrate (40%)
-    MIN_TOTAL_PNL = -100.0   # Максимальный убыток ($)
-    MAX_CONSECUTIVE_LOSSES = 5  # Макс серия убытков
-    WEIGHT_PENALTY = 0.1     # Вес при серии убытков
-    DISABLE_TIMEOUT_HOURS = 12  # Через сколько часов снять блокировку
+    MIN_WINRATE = 0.40
+    MIN_TOTAL_PNL = -100.0
+    MAX_CONSECUTIVE_LOSSES = 5
+    WEIGHT_PENALTY = 0.1
+    DISABLE_TIMEOUT_HOURS = 12
 
     def __init__(self):
         self._weights: Dict[str, dict] = {}
@@ -34,7 +33,6 @@ class VotingSystem:
             try:
                 with open(self.WEIGHTS_FILE, 'r') as f:
                     self._weights = json.load(f)
-                # Убедимся, что у всех записей есть поле disabled_at (для миграции)
                 for stats in self._weights.values():
                     if 'disabled' in stats and stats['disabled'] and 'disabled_at' not in stats:
                         stats['disabled_at'] = time.time()
@@ -53,7 +51,6 @@ class VotingSystem:
             logger.error(f"Failed to save weights: {e}")
 
     def _cleanup_expired_disables(self):
-        """Снимает блокировку со стратегий, у которых истёк таймаут."""
         now = time.time()
         timeout_seconds = self.DISABLE_TIMEOUT_HOURS * 3600
         changed = False
@@ -63,7 +60,7 @@ class VotingSystem:
                     stats['disabled'] = False
                     stats['disabled_reason'] = None
                     stats['consecutive_losses'] = 0
-                    stats['weight'] = 1.0  # Стартовый вес
+                    stats['weight'] = 1.0
                     del stats['disabled_at']
                     logger.info(f"Strategy {name} re-enabled after timeout")
                     changed = True
@@ -126,7 +123,6 @@ class VotingSystem:
         return best_signal
 
     def update_weights(self):
-        """Проверяет статистику стратегий и отключает убыточные (с запоминанием времени)."""
         changed = False
         for name, stats in self._weights.items():
             if stats.get('disabled', False):
@@ -164,7 +160,6 @@ class VotingSystem:
             self._save_weights()
 
     def record_trade(self, strategy_name: str, pnl: float):
-        """Записывает результат сделки для статистики стратегии."""
         if strategy_name not in self._weights:
             return
 
@@ -186,11 +181,9 @@ class VotingSystem:
         self.update_weights()
 
     def get_weights(self) -> Dict[str, float]:
-        """Возвращает только веса стратегий (для быстрого просмотра)."""
         return {name: stats.get('weight', 1.0) for name, stats in self._weights.items()}
 
     def get_strategy_stats(self) -> Dict[str, dict]:
-        """Возвращает полную статистику по каждой стратегии."""
         return self._weights.copy()
 
     def is_strategy_disabled(self, name: str) -> bool:

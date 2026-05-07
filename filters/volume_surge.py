@@ -2,6 +2,7 @@
 Volume Surge Filter.
 Requires signal candle volume to be at least multiplier times average volume.
 Now with adaptive threshold – relaxes if no trades were executed for a while.
+Also fixed to handle 'timeframe' parameter correctly.
 """
 import logging
 import time
@@ -13,14 +14,14 @@ logger = logging.getLogger(__name__)
 class VolumeSurgeFilter(BaseFilter):
     NAME = "VolumeSurgeFilter"
     DESCRIPTION = "Blocks signals with low relative volume (no surge)"
-    PRIORITY = 12  # После базовых, до трендовых
+    PRIORITY = 12
     PARAMS = {
         'enabled': True,
-        'min_volume_mult': 1.5,    # минимальное превышение среднего объёма
-        'lookback_bars': 20,       # период усреднения
-        'timeframe': '1h',         # с какого ТФ брать объём (обычно тот же, что у сигнала)
-        'adaptive_relax': True,    # автоматически снижать порог при простое
-        'relax_after_seconds': 180, # через 3 минуты без сделок порог умножается на 0.5
+        'min_volume_mult': 1.5,
+        'lookback_bars': 20,
+        'timeframe': '1h',                # всегда строка, а не список
+        'adaptive_relax': True,
+        'relax_after_seconds': 180,
     }
 
     def __init__(self, params=None):
@@ -36,8 +37,11 @@ class VolumeSurgeFilter(BaseFilter):
             return signal.confidence
 
         tf = self.config.get('timeframe', '1h')
+        # Защита от старой ошибки, где timeframe превратился в список
+        if isinstance(tf, list):
+            tf = tf[0] if tf else '1h'
+
         if tf not in candle_data:
-            # Пробуем первый доступный таймфрейм
             tf = next(iter(candle_data.keys()), None)
             if not tf:
                 return signal.confidence
@@ -47,9 +51,7 @@ class VolumeSurgeFilter(BaseFilter):
         if len(df) < lookback + 1:
             return signal.confidence
 
-        # Объём последней закрытой свечи
         current_volume = df['volume'].iloc[-1]
-        # Средний объём за предыдущие lookback свечей
         avg_volume = df['volume'].iloc[-(lookback+1):-1].mean()
 
         if avg_volume <= 0:
@@ -57,7 +59,6 @@ class VolumeSurgeFilter(BaseFilter):
 
         ratio = current_volume / avg_volume
 
-        # Динамическое снижение порога при длительном отсутствии сделок
         threshold = self.config['min_volume_mult']
         if self.config.get('adaptive_relax'):
             time_since_last_trade = time.time() - self._last_trade_time
@@ -69,10 +70,8 @@ class VolumeSurgeFilter(BaseFilter):
             logger.info(f"VolumeSurge blocked {signal.symbol}: vol ratio {ratio:.2f} < {threshold}")
             return 0.0
 
-        # Обновляем время последней успешной проверки
         self._last_trade_time = time.time()
 
-        # Пропускаем, можно даже немного повысить уверенность при сильном всплеске
         if ratio > 2.0:
             logger.debug(f"Volume surge boost for {signal.symbol}: ratio {ratio:.2f}")
             return min(1.0, signal.confidence * 1.1)

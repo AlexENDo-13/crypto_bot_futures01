@@ -162,11 +162,18 @@ def main():
     except Exception as e:
         logging.warning(f"GitHubBackup not started: {e}")
 
+    # ---------- Moonshot с параметрами из конфига ----------
     try:
         from core.moonshot import MoonshotTrader
-        engine.moonshot = MoonshotTrader(engine)
+        moonshot_capital_pct = cfg.getfloat('MOONSHOT', 'capital_pct', fallback=10.0)
+        moonshot_max_risk = cfg.getfloat('MOONSHOT', 'max_risk_pct', fallback=1.0)
+        moonshot_scan = cfg.getint('MOONSHOT', 'scan_interval', fallback=300)
+        engine.moonshot = MoonshotTrader(engine, capital_pct=moonshot_capital_pct,
+                                         max_risk_pct=moonshot_max_risk,
+                                         scan_interval=moonshot_scan)
         engine.moonshot.start()
-        logging.info("MoonshotTrader started")
+        logging.info(f"MoonshotTrader started (capital %.1f%%, max_risk %.1f%%, scan %ds)",
+                     moonshot_capital_pct, moonshot_max_risk, moonshot_scan)
     except Exception as e:
         logging.warning(f"MoonshotTrader not started: {e}")
 

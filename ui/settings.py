@@ -14,7 +14,6 @@ logger = logging.getLogger(__name__)
 
 
 class ParameterDialog(QDialog):
-    """Диалог редактирования параметров стратегии/индикатора/фильтра."""
     def __init__(self, name, params_config, parent=None):
         super().__init__(parent)
         self.setWindowTitle(f"Параметры: {name}")
@@ -102,17 +101,14 @@ class SettingsTab(QWidget):
         # === API Keys ===
         keys_group = QGroupBox("API Keys")
         keys_layout = QFormLayout(keys_group)
-
         self.api_key_input = QLineEdit()
         self.api_key_input.setPlaceholderText("Enter BingX API Key")
         self.api_key_input.setEchoMode(QLineEdit.Password)
         keys_layout.addRow("API Key:", self.api_key_input)
-
         self.api_secret_input = QLineEdit()
         self.api_secret_input.setPlaceholderText("Enter BingX API Secret")
         self.api_secret_input.setEchoMode(QLineEdit.Password)
         keys_layout.addRow("API Secret:", self.api_secret_input)
-
         keys_buttons = QHBoxLayout()
         self.btn_save_keys = QPushButton("Save Keys")
         self.btn_save_keys.clicked.connect(self._save_keys)
@@ -126,7 +122,6 @@ class SettingsTab(QWidget):
         keys_buttons.addWidget(self.btn_toggle_visible)
         keys_buttons.addStretch()
         keys_layout.addRow(keys_buttons)
-
         self.lbl_key_status = QLabel("Status: No keys configured (Demo mode)")
         self.lbl_key_status.setStyleSheet(f"color: {theme.colors['warning']};")
         keys_layout.addRow(self.lbl_key_status)
@@ -332,7 +327,6 @@ class SettingsTab(QWidget):
         scroll.setWidget(content)
         layout.addWidget(scroll)
 
-    # ---------- Вспомогательные методы (как были ранее) ----------
     def _configure_strategy(self, name):
         strat = self.engine.strategies[name]
         dlg = ParameterDialog(name, strat.config)
@@ -377,7 +371,6 @@ class SettingsTab(QWidget):
         if not self.engine.auth.demo_mode:
             self.lbl_key_status.setText("Status: Keys configured")
             self.lbl_key_status.setStyleSheet(f"color: {theme.colors['success']};")
-
         self.risk_profile.setCurrentText(self.engine.risk_manager._current_profile)
         self.risk_per_trade.setValue(self.engine.risk_manager.risk_per_trade_pct)
         self.max_leverage.setValue(self.engine.risk_manager.max_leverage)
@@ -386,7 +379,6 @@ class SettingsTab(QWidget):
         self.scan_interval.setValue(self.engine.scan_interval)
         self.timeframes.setText(','.join(self.engine.timeframes))
         self.top_symbols.setValue(self.engine.top_n_symbols)
-
         self.trailing_sl.setChecked(self.engine.trailing_sl_enabled)
         self.trailing_distance.setValue(self.engine.trailing_distance_pct)
         self.partial_close.setChecked(self.engine.partial_close_enabled)
@@ -394,13 +386,10 @@ class SettingsTab(QWidget):
         self.breakeven.setChecked(self.engine.breakeven_enabled)
         self.breakeven_atr_mult.setValue(self.engine.breakeven_atr_mult)
         self.slippage_timeout.setValue(self.engine.slippage_timeout_sec)
-
         self.use_day_profile.setChecked(getattr(self.engine.risk_manager, 'use_day_profile', True))
         self.kelly_enabled.setChecked(self.engine.risk_manager._kelly_enabled)
         self.kelly_winrate.setValue(self.engine.risk_manager._kelly_winrate)
         self.kelly_avg_win_loss.setValue(self.engine.risk_manager._kelly_avg_win_loss_ratio)
-
-        # Moonshot
         if hasattr(self.engine, 'moonshot') and self.engine.moonshot:
             self.moonshot_capital_pct.setValue(self.engine.moonshot.capital_pct)
             self.moonshot_max_risk_pct.setValue(self.engine.moonshot.max_risk_pct)
@@ -470,14 +459,12 @@ class SettingsTab(QWidget):
 
     def _save_settings(self):
         try:
-            # Основные параметры
             self.engine.max_positions = self.max_positions.value()
             self.engine.scan_interval = self.scan_interval.value()
             self.engine.signal_threshold = self.signal_threshold.value()
             self.engine.timeframes = self.timeframes.text().split(',')
             self.engine.top_n_symbols = self.top_symbols.value()
 
-            # Риск-менеджер
             risk_pct = self.risk_per_trade.value()
             leverage = self.max_leverage.value()
             profile = self.risk_profile.currentText()
@@ -494,7 +481,6 @@ class SettingsTab(QWidget):
             self.engine.risk_manager._kelly_winrate = self.kelly_winrate.value()
             self.engine.risk_manager._kelly_avg_win_loss_ratio = self.kelly_avg_win_loss.value()
 
-            # Трейдинг
             self.engine.trailing_sl_enabled = self.trailing_sl.isChecked()
             self.engine.trailing_distance_pct = self.trailing_distance.value()
             self.engine.partial_close_enabled = self.partial_close.isChecked()
@@ -503,12 +489,10 @@ class SettingsTab(QWidget):
             self.engine.breakeven_atr_mult = self.breakeven_atr_mult.value()
             self.engine.slippage_timeout_sec = self.slippage_timeout.value()
 
-            # Moonshot
             if hasattr(self.engine, 'moonshot') and self.engine.moonshot:
                 self.engine.moonshot.capital_pct = self.moonshot_capital_pct.value()
                 self.engine.moonshot.max_risk_pct = self.moonshot_max_risk_pct.value()
                 self.engine.moonshot.scan_interval = self.moonshot_scan.value()
-                # Перезапускаем Moonshot с новыми параметрами
                 if self.engine.moonshot._running:
                     self.engine.moonshot.stop()
                     self.engine.moonshot.start()
