@@ -12,7 +12,7 @@ DEFAULT_ATR_MULT_SL = 1.5
 DEFAULT_ATR_MULT_TP = 2.0
 MIN_SL_RATIO_LONG = 0.98
 MIN_SL_RATIO_SHORT = 1.02
-MIN_TP_RATIO = 0.005             # TP не может быть ближе 0.5% от цены
+MIN_TP_RATIO = 0.005
 PROFILE_RISK_ORDER = ['Conservative', 'Balanced', 'Aggressive', 'Adaptive', 'User']
 
 
@@ -153,26 +153,22 @@ class RiskManager:
             sl = entry_price + distance
             tp = entry_price - atr * tp_mult
 
-        # Защита от отрицательного SL
         sl = max(entry_price * 0.001, sl)
         if side == 'BUY' and sl >= entry_price:
             sl = entry_price * 0.999
         elif side == 'SELL' and sl <= entry_price:
             sl = entry_price * 1.001
 
-        # Минимальное расстояние SL (2%)
         if side == 'BUY':
             sl = max(sl, entry_price * MIN_SL_RATIO_LONG)
         else:
             sl = max(sl, entry_price * MIN_SL_RATIO_SHORT)
 
-        # Защита TP: минимум 0.5% от цены входа
         min_tp_distance = entry_price * MIN_TP_RATIO
         if side == 'BUY':
             tp = max(tp, entry_price + min_tp_distance)
         else:
-            tp = min(tp, entry_price - min_tp_distance)   # для шорта TP должен быть меньше цены
-            # tp не может быть отрицательным и слишком близким к нулю
+            tp = min(tp, entry_price - min_tp_distance)
             tp = max(tp, entry_price * 0.001)
 
         return {'sl': sl, 'tp': tp, 'tp2': tp}
@@ -233,12 +229,15 @@ class RiskManager:
     def adapt_to_volatility(self, current_atr_pct: float):
         if self._night_mode:
             return
+        # ----- ИСПРАВЛЕНИЕ: Ограничение роста риска -----
+        if self.risk_per_trade_pct >= 2.5:
+            return
         if current_atr_pct > 0.05:
             self.risk_per_trade_pct = max(0.5, self.risk_per_trade_pct * 0.7)
             self.max_leverage = max(1, self.max_leverage - 1)
             logger.info(f"High volatility ({current_atr_pct:.2%}), risk reduced to {self.risk_per_trade_pct}%, leverage {self.max_leverage}")
         elif current_atr_pct < 0.01:
-            self.risk_per_trade_pct = min(5.0, self.risk_per_trade_pct * 1.2)
+            self.risk_per_trade_pct = min(2.5, self.risk_per_trade_pct * 1.2)
             self.max_leverage = min(5, self.max_leverage + 1)
             logger.info(f"Low volatility ({current_atr_pct:.2%}), risk increased to {self.risk_per_trade_pct}%, leverage {self.max_leverage}")
 

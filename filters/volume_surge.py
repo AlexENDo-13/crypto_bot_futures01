@@ -18,7 +18,7 @@ class VolumeSurgeFilter(BaseFilter):
     PRIORITY = 12
     PARAMS = {
         'enabled': True,
-        'min_volume_mult': 1.5,
+        'min_volume_mult': 0.15,          # было 1.5
         'lookback_bars': 20,
         'timeframe': '1h',
         'adaptive_relax': True,
@@ -37,7 +37,6 @@ class VolumeSurgeFilter(BaseFilter):
             if cfg.has_option('FILTERS', 'volume_surge_min_mult'):
                 val = cfg.getfloat('FILTERS', 'volume_surge_min_mult')
                 self.config['min_volume_mult'] = val
-                logger.debug(f"VolumeSurge min_volume_mult loaded from config: {val}")
         except Exception as e:
             logger.debug(f"Could not load VolumeSurge config: {e}")
 
@@ -75,8 +74,7 @@ class VolumeSurgeFilter(BaseFilter):
         if self.config.get('adaptive_relax'):
             time_since_last_trade = time.time() - self._last_trade_time
             if time_since_last_trade > self.config.get('relax_after_seconds', 180):
-                threshold = max(0.15, threshold * 0.5)
-                logger.debug(f"VolumeSurge threshold relaxed to {threshold:.2f} (inactive {time_since_last_trade:.0f}s)")
+                threshold = max(0.1, threshold * 0.5)
 
         if ratio < threshold:
             logger.info(f"VolumeSurge blocked {signal.symbol}: vol ratio {ratio:.2f} < {threshold}")
@@ -85,7 +83,6 @@ class VolumeSurgeFilter(BaseFilter):
         self._last_trade_time = time.time()
 
         if ratio > 2.0:
-            logger.debug(f"Volume surge boost for {signal.symbol}: ratio {ratio:.2f}")
             return min(1.0, signal.confidence * 1.1)
 
         return signal.confidence

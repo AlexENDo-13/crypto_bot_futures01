@@ -15,14 +15,9 @@ logger = logging.getLogger(__name__)
 class PositionSyncManager:
     def __init__(self, engine):
         self.engine = engine
-        # Кэш последних известных TP/SL для предотвращения спама переустановками
-        self._tpsl_cache = {}   # ключ: f"{symbol}_{side}"
+        self._tpsl_cache = {}
 
-    # ------------------------------------------------------------------
-    # Полная синхронизация (при старте / ручном обновлении)
-    # ------------------------------------------------------------------
     def full_sync(self):
-        """Загружает позиции с биржи и восстанавливает портфель."""
         if self.engine.auth.demo_mode:
             return
         try:
@@ -35,11 +30,8 @@ class PositionSyncManager:
                 qty = abs(float(p.get('positionAmt', 0)))
                 lev = float(p.get('leverage', 1))
                 tp_price, sl_price = self._fetch_exchange_tpsl(symbol, pos_side)
-
-                # Логическая проверка
                 tp_price, sl_price = self._logical_check(pos_side, entry, tp_price, sl_price)
 
-                # Если не удалось получить или SL невалиден, вычисляем через risk_manager
                 if tp_price is None or sl_price is None or sl_price <= 0:
                     atr = self.engine._get_current_atr(symbol)
                     trade_side = 'BUY' if pos_side == 'LONG' else 'SELL'
@@ -47,7 +39,6 @@ class PositionSyncManager:
                     tp_price = tp_price or sl_tp['tp2']
                     sl_price = sl_tp['sl'] if (sl_price is None or sl_price <= 0) else sl_price
 
-                # Дополнительная защита: SL не может быть отрицательным или равным 0
                 if sl_price is None or sl_price <= 0:
                     atr = self.engine._get_current_atr(symbol)
                     min_sl_distance = entry * 0.005
@@ -55,7 +46,6 @@ class PositionSyncManager:
                         sl_price = entry - max(atr * 1.5, min_sl_distance)
                     else:
                         sl_price = entry + max(atr * 1.5, min_sl_distance)
-                    logger.warning(f"Fixed invalid SL for {symbol} {pos_side} to {sl_price}")
 
                 if qty > 0:
                     pos = Position(
@@ -67,28 +57,21 @@ class PositionSyncManager:
                     )
                     self.engine.portfolio.add_position(pos)
                     self._tpsl_cache[f"{symbol}_{pos_side}"] = (tp_price, sl_price)
-                    logger.info(f"Synced existing position: {symbol} {pos_side} qty={qty} @ {entry} "
-                                f"TP={tp_price} SL={sl_price}")
             self._enforce_limit()
         except Exception as e:
             logger.error(f"Full sync failed: {e}")
 
-    # ------------------------------------------------------------------
-    # Фоновая синхронизация (вызывается по расписанию)
-    # ------------------------------------------------------------------
     def background_sync(self):
-        """Периодическая синхронизация: обновление PnL, трейлинг, частичное закрытие, лимит, запись закрытых сделок."""
         if self.engine.auth.demo_mode:
             return
         try:
             api_positions = self.engine.api.get_positions()
             api_keys = {f"{p.get('symbol')}_{p.get('positionSide')}" for p in api_positions}
 
-            # Обработка закрытых позиций
             for pos in self.engine.portfolio.get_positions():
                 if f"{pos.symbol}_{pos.side}" not in api_keys:
                     pnl = pos.unrealized_pnl
-                    exit_price = (pos.entry_price + (pnl / pos.quantity) if pos.side == 'LONG' 
+                    exit_price = (pos.entry_price + (pnl / pos.quantity) if pos.side == 'LONG'
                                   else pos.entry_price - (pnl / pos.quantity))
                     trade = TradeRecord(
                         symbol=pos.symbol, side=pos.side, action='CLOSE',
@@ -99,14 +82,12 @@ class PositionSyncManager:
                         close_time=datetime.now(timezone.utc).isoformat()
                     )
                     self.engine.portfolio.record_trade(trade)
-                    logger.info(f"Position closed: {pos.symbol} {pos.side} PnL={pnl:.4f}")
                     self.engine.risk_manager.update_adaptive_risk(pnl)
                     self.engine.portfolio.remove_position(pos.symbol, pos.side)
                     cache_key = f"{pos.symbol}_{pos.side}"
                     if cache_key in self._tpsl_cache:
                         del self._tpsl_cache[cache_key]
 
-            # Обработка активных позиций
             for p in api_positions:
                 pos_side = p.get('positionSide', 'LONG')
                 symbol = p.get('symbol', '')
@@ -131,27 +112,21 @@ class PositionSyncManager:
                             atr = self.engine._get_current_atr(symbol)
                             self.engine.executor.apply_breakeven(existing, current_price, atr)
 
-                    # --- Trailing Take Profit ---
                     if hasattr(self.engine, 'trailing_tp') and self.engine.trailing_tp:
                         if existing.tp_price and existing.tp_price > 0:
                             updated = self.engine.trailing_tp.update(existing, current_price)
                             if updated:
-                                # Синхронизируем новый TP на бирже
                                 self.engine.trailing_tp.sync_order(
                                     symbol, pos_side, existing.quantity, existing.tp_price
                                 )
 
-                    # Частичное закрытие
                     if self.engine.partial_close_enabled and existing.tp_price is not None:
                         self.engine.executor.apply_partial_close(existing, current_price)
 
-                    # Синхронизация ордеров TP/SL на бирже
                     self._sync_tpsl_orders(symbol, pos_side, existing.quantity,
                                            existing.tp_price, existing.sl_price)
-
                 else:
-                    if len(self.engine.portfolio.get_positions()) >= self.engine.max_positions:
-                        continue
+                    # ВСЕГДА добавляем позицию биржи, ограничение будет применено после цикла
                     atr = self.engine._get_current_atr(symbol)
                     trade_side = 'BUY' if pos_side == 'LONG' else 'SELL'
                     sl_tp = self.engine.risk_manager.get_sl_tp_levels(entry, trade_side, atr, symbol)
@@ -170,9 +145,6 @@ class PositionSyncManager:
         except Exception:
             logger.exception("Background sync crashed")
 
-    # ------------------------------------------------------------------
-    # Принудительное соблюдение лимита
-    # ------------------------------------------------------------------
     def _enforce_limit(self):
         positions = self.engine.portfolio.get_positions()
         max_pos = self.engine.max_positions
@@ -188,9 +160,6 @@ class PositionSyncManager:
             except Exception as e:
                 logger.error(f"Failed to close {pos.symbol} during limit enforcement: {e}")
 
-    # ------------------------------------------------------------------
-    # Умная замена позиций (для signal_processor)
-    # ------------------------------------------------------------------
     def try_replace_weakest(self, new_signal_confidence: float, new_signal_symbol: str) -> bool:
         positions = self.engine.portfolio.get_positions()
         max_pos = self.engine.max_positions
@@ -198,6 +167,15 @@ class PositionSyncManager:
             return True
 
         now = datetime.now(timezone.utc)
+        # ----- ИСПРАВЛЕНИЕ: не трогаем позиции младше 5 минут -----
+        for pos in positions:
+            try:
+                open_t = datetime.fromisoformat(pos.open_time)
+                if (now - open_t).total_seconds() < 300:
+                    return False
+            except:
+                pass
+
         scored = []
         for pos in positions:
             try:
@@ -232,9 +210,6 @@ class PositionSyncManager:
                 return False
         return False
 
-    # ------------------------------------------------------------------
-    # Вспомогательные
-    # ------------------------------------------------------------------
     def _fetch_exchange_tpsl(self, symbol: str, pos_side: str):
         tp_price = None
         sl_price = None
@@ -288,7 +263,6 @@ class PositionSyncManager:
                 if order_type in ('TAKE_PROFIT_MARKET', 'STOP_MARKET'):
                     try:
                         self.engine.api.cancel_order(symbol, o.get('orderId', ''))
-                        logger.debug(f"Cancelled {order_type} for {symbol} {pos_side}")
                     except Exception as e:
                         logger.warning(f"Failed to cancel order {o.get('orderId')}: {e}")
 
@@ -299,7 +273,6 @@ class PositionSyncManager:
                     order_type='TAKE_PROFIT_MARKET', quantity=quantity,
                     stop_price=expected_tp
                 )
-                logger.info(f"Set new TP for {symbol} {pos_side}: {expected_tp}")
             if expected_sl is not None:
                 if (pos_side == 'LONG' and expected_sl >= expected_tp) or \
                    (pos_side == 'SHORT' and expected_sl <= expected_tp):
@@ -310,7 +283,6 @@ class PositionSyncManager:
                         order_type='STOP_MARKET', quantity=quantity,
                         stop_price=expected_sl
                     )
-                    logger.info(f"Set new SL for {symbol} {pos_side}: {expected_sl}")
 
             self._tpsl_cache[cache_key] = (expected_tp, expected_sl)
         except Exception as e:
