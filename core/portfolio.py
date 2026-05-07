@@ -79,6 +79,7 @@ class PortfolioManager:
         self._equity = 0.0
         self.available_margin = 0.0
         self.MIN_AVERAGING_INTERVAL = 30  # секунд, защита от дублирования
+        self._peak_equity = 0.0           # для расчёта просадки
 
     def add_position(self, position: Position):
         key = f"{position.symbol}_{position.side}"
@@ -90,11 +91,11 @@ class PortfolioManager:
                 return
             # Усредняем количество и цену
             total_qty = existing.quantity + position.quantity
-            avg_price = (existing.entry_price * existing.quantity + position.entry_price * position.quantity) / total_qty
+            avg_price = (existing.entry_price * existing.quantity +
+                         position.entry_price * position.quantity) / total_qty
             existing.quantity = total_qty
             existing.entry_price = avg_price
             existing.margin += position.margin
-            # Обновляем TP/SL на новые (последний сигнал) и статус трейлинга
             existing.tp_price = position.tp_price
             existing.sl_price = position.sl_price
             existing.trailing = position.trailing
@@ -129,6 +130,9 @@ class PortfolioManager:
     def update_equity(self, balance: float, unrealized_pnl: float = 0.0):
         self._balance = balance
         self._equity = balance + unrealized_pnl
+        # Обновляем пик эквити
+        if self._equity > self._peak_equity:
+            self._peak_equity = self._equity
         self._equity_curve.append({
             'time': datetime.now(timezone.utc).isoformat(),
             'equity': self._equity,
@@ -155,6 +159,11 @@ class PortfolioManager:
     def get_stats(self) -> dict:
         positions = self.get_positions()
         total_unrealized = sum(p.unrealized_pnl for p in positions)
+        # Расчёт текущей просадки
+        current_drawdown_pct = 0.0
+        if self._peak_equity > 0 and self._equity > 0:
+            drawdown = self._peak_equity - self._equity
+            current_drawdown_pct = (drawdown / self._peak_equity) * 100.0
         return {
             'balance': self._balance,
             'equity': self._equity,
@@ -163,6 +172,7 @@ class PortfolioManager:
             'open_positions': len(positions),
             'win_rate': self.get_win_rate(),
             'total_trades': len(self._trades),
+            'current_drawdown_pct': current_drawdown_pct,
         }
 
     def get_equity_curve(self, days=7) -> List[Dict]:

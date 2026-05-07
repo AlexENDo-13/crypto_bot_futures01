@@ -174,11 +174,21 @@ class RiskController:
             except Exception as e:
                 logger.debug(f"Spread check failed: {e}")
 
-        # Ликвидность через фильтр
+        # Ликвидность через фильтр – теперь передаём полный контекст
         liquidity_filter = self.engine.filters.get('LiquidityFilter')
         if liquidity_filter and getattr(liquidity_filter, 'enabled', True):
             try:
-                new_conf = liquidity_filter.assess(signal, {'candle_data': all_candles})
+                current_positions = self.engine.portfolio.get_positions()
+                filter_data = {
+                    'open_positions': [{'symbol': p.symbol, 'side': p.side} for p in current_positions],
+                    'current_drawdown_pct': self.engine.portfolio.get_stats().get('current_drawdown_pct', 0.0),
+                    'current_atr': self.engine._get_current_atr(symbol, all_candles),
+                    'current_price': price,
+                    'market_regime': signal.meta.get('regime', 'unknown'),
+                    'candle_data': all_candles,
+                    'available_margin': self.engine.portfolio.available_margin or self._get_free_margin(),
+                }
+                new_conf = liquidity_filter.assess(signal, filter_data)
                 if new_conf <= 0:
                     logger.info(f"Liquidity filter blocked {symbol}")
                     return False, "low liquidity (filter)"

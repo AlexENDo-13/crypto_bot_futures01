@@ -66,9 +66,8 @@ class TradingViewWebhook:
                         'price': engine._get_current_price(symbol),
                         'strategy': 'TradingView',
                     })
-                    # Добавляем в очередь (будет подхвачено при следующем скане)
-                    signal.meta['webhook'] = True
-                    engine._process_signal(signal, {})  # Вызываем напрямую с пустыми свечами
+                    # Передаём сигнал в обработчик сигналов движка
+                    engine.signal_processor.process(signal, {})
             def log_message(self, format, *args):
                 pass
         return Handler
