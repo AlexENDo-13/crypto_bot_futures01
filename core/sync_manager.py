@@ -126,7 +126,7 @@ class PositionSyncManager:
                     self._sync_tpsl_orders(symbol, pos_side, existing.quantity,
                                            existing.tp_price, existing.sl_price)
                 else:
-                    # ВСЕГДА добавляем позицию биржи, ограничение будет применено после цикла
+                    # Всегда добавляем позицию биржи, ограничение применяется после цикла
                     atr = self.engine._get_current_atr(symbol)
                     trade_side = 'BUY' if pos_side == 'LONG' else 'SELL'
                     sl_tp = self.engine.risk_manager.get_sl_tp_levels(entry, trade_side, atr, symbol)
@@ -167,11 +167,11 @@ class PositionSyncManager:
             return True
 
         now = datetime.now(timezone.utc)
-        # ----- ИСПРАВЛЕНИЕ: не трогаем позиции младше 5 минут -----
+        # Не трогаем позиции младше 60 секунд
         for pos in positions:
             try:
                 open_t = datetime.fromisoformat(pos.open_time)
-                if (now - open_t).total_seconds() < 300:
+                if (now - open_t).total_seconds() < 60:
                     return False
             except:
                 pass

@@ -229,7 +229,7 @@ class RiskManager:
     def adapt_to_volatility(self, current_atr_pct: float):
         if self._night_mode:
             return
-        # ----- ИСПРАВЛЕНИЕ: Ограничение роста риска -----
+        # ----- Ограничение роста риска до 2.5% -----
         if self.risk_per_trade_pct >= 2.5:
             return
         if current_atr_pct > 0.05:
@@ -244,9 +244,6 @@ class RiskManager:
     def can_open_position(self) -> bool:
         return True
 
-    # =================================================================
-    # Multi-step adaptive profile switching
-    # =================================================================
     def update_adaptive_risk(self, trade_pnl: float):
         if not self.adaptive_risk_enabled:
             return
@@ -294,7 +291,6 @@ class RiskManager:
                 self._auto_loss_stage = 0
                 self.consecutive_wins = 0
 
-    # ---------- State ----------
     def _save_state(self):
         data = {
             'atr_multipliers': self._atr_multipliers,
