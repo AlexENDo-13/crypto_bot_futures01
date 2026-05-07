@@ -1,21 +1,24 @@
 {
   "MeanReversion": {
-    "weight": 0.2105263157894737,
-    "trades": 3,
+    "weight": 0.0,
+    "trades": 5,
     "wins": 0,
     "total_pnl": 0.0,
     "avg_pnl": 0.0,
     "winrate": 0.0,
-    "consecutive_losses": 3
+    "consecutive_losses": 5,
+    "disabled": true,
+    "disabled_reason": "5 consecutive losses",
+    "disabled_at": 1778149035.1930761
   },
   "Momentum": {
     "weight": 0.2105263157894737,
-    "trades": 7,
+    "trades": 14,
     "wins": 0,
     "total_pnl": 0.0,
     "avg_pnl": 0.0,
     "winrate": 0.0,
-    "consecutive_losses": 7,
+    "consecutive_losses": 14,
     "disabled": true,
     "disabled_reason": "5 consecutive losses",
     "disabled_at": 1778114524.4936376
@@ -61,12 +64,12 @@
   },
   "RSIDivergence": {
     "weight": 1.8947368421052633,
-    "trades": 2,
+    "trades": 4,
     "wins": 0,
     "total_pnl": 0.0,
     "avg_pnl": 0.0,
     "winrate": 0.0,
-    "consecutive_losses": 2
+    "consecutive_losses": 4
   },
   "Squeeze": {
     "weight": 1.6842105263157896,

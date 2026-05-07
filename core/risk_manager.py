@@ -2,9 +2,7 @@
 Risk Management: position sizing, leverage, SL/TP calculation, Kelly criterion.
 Now with multi-step adaptive profile switching and negative TP protection.
 """
-import logging
-import json
-import os
+import logging, json, os
 from datetime import datetime, timezone
 from typing import Dict, Tuple, Optional
 
@@ -12,10 +10,8 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_ATR_MULT_SL = 1.5
 DEFAULT_ATR_MULT_TP = 2.0
-
 MIN_SL_RATIO_LONG = 0.98
 MIN_SL_RATIO_SHORT = 1.02
-
 PROFILE_RISK_ORDER = ['Conservative', 'Balanced', 'Adaptive', 'Aggressive', 'User']
 
 
@@ -56,7 +52,7 @@ class RiskManager:
 
         self._load_state()
 
-    # ---------- Профили ----------
+    # ---------- Profiles ----------
     def set_profile(self, profile: str):
         if profile not in self._profiles:
             return
@@ -93,7 +89,7 @@ class RiskManager:
             self.max_leverage = day_cfg['max_lev']
             logger.info(f"Day-of-week risk applied: {self.risk_per_trade_pct}%, leverage {self.max_leverage}")
 
-    # ---------- ATR-множители ----------
+    # ---------- ATR multipliers ----------
     def set_atr_multipliers(self, symbol: str, sl_mult: float, tp_mult: float):
         self._atr_multipliers[symbol] = {'sl': sl_mult, 'tp': tp_mult}
         self._save_state()
@@ -102,7 +98,9 @@ class RiskManager:
         if symbol in self._atr_multipliers:
             m = self._atr_multipliers[symbol]
             return m['sl'], m['tp']
-        return DEFAULT_ATR_MULT_SL, DEFAULT_ATR_MULT_TP
+        # Если для символа нет индивидуальных настроек, используем __default__
+        default = self._atr_multipliers.get('__default__', {})
+        return default.get('sl', DEFAULT_ATR_MULT_SL), default.get('tp', DEFAULT_ATR_MULT_TP)
 
     def get_sl_tp_levels(self, entry_price: float, side: str, atr: float, symbol: str = None) -> Dict[str, float]:
         sl_mult, tp_mult = self.get_atr_multipliers(symbol) if symbol else (DEFAULT_ATR_MULT_SL, DEFAULT_ATR_MULT_TP)
@@ -116,20 +114,20 @@ class RiskManager:
             sl = entry_price + distance
             tp = entry_price - atr * tp_mult
 
-        # Первичная защита от отрицательного SL
+        # Primary negative SL protection
         sl = max(entry_price * 0.001, sl)
         if side == 'BUY' and sl >= entry_price:
             sl = entry_price * 0.999
         elif side == 'SELL' and sl <= entry_price:
             sl = entry_price * 1.001
 
-        # Минимальное расстояние SL (2% от цены)
+        # Enforced minimum distance (2%)
         if side == 'BUY':
             sl = max(sl, entry_price * MIN_SL_RATIO_LONG)
         else:
             sl = max(sl, entry_price * MIN_SL_RATIO_SHORT)
 
-        # Защита TP: для лонга не ниже цены, для шорта не отрицательный
+        # TP must be reasonable (not negative, not below entry for long etc.)
         if side == 'BUY':
             tp = max(tp, entry_price * 1.001)
         else:
@@ -137,7 +135,7 @@ class RiskManager:
 
         return {'sl': sl, 'tp': tp, 'tp2': tp}
 
-    # ---------- Плечо по волатильности ----------
+    # ---------- Leverage by volatility ----------
     def get_optimal_leverage(self, symbol: str, price: float, atr: float) -> int:
         atr_pct = atr / price if price > 0 else 0.02
         if atr_pct > 0.05:
@@ -206,7 +204,7 @@ class RiskManager:
         return True
 
     # =================================================================
-    #   МНОГОСТУПЕНЧАТАЯ АДАПТАЦИЯ ПРОФИЛЯ ПО СЕРИЯМ
+    # Multi‑step adaptive profile switching
     # =================================================================
     def update_adaptive_risk(self, trade_pnl: float):
         if not self.adaptive_risk_enabled:
@@ -255,7 +253,7 @@ class RiskManager:
                 self._auto_loss_stage = 0
                 self.consecutive_wins = 0
 
-    # ---------- Состояние ----------
+    # ---------- State ----------
     def _save_state(self):
         data = {
             'atr_multipliers': self._atr_multipliers,
