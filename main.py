@@ -1,5 +1,5 @@
 """BingX Trading Bot v2.0 – Main Entry Point (ALL MODULES ACTIVE)."""
-import os, sys, time, logging, argparse
+import os, sys, time, logging, argparse, subprocess, importlib.util
 from pathlib import Path
 from datetime import datetime, timezone
 
@@ -7,10 +7,84 @@ project_root = Path(__file__).parent.absolute()
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-from PyQt5.QtWidgets import QApplication
-from ui.styles import theme
+# Попытка импорта PyQt5 – если его нет, будет предложено установить зависимости
+try:
+    from PyQt5.QtWidgets import QApplication
+    from ui.styles import theme
+except ImportError:
+    print("PyQt5 not found. Please install dependencies: pip install -r requirements.txt")
+    sys.exit(1)
 
 __version__ = "2.0.0"
+
+# Функция проверки и установки зависимостей
+def check_and_install_dependencies(auto_install=False):
+    """
+    Проверяет наличие всех пакетов из requirements.txt.
+    Если какого-то нет и auto_install=True, пытается установить его через pip.
+    Возвращает список отсутствующих пакетов.
+    """
+    req_file = project_root / 'requirements.txt'
+    if not req_file.exists():
+        logging.warning("requirements.txt not found, skipping dependency check.")
+        return []
+
+    missing = []
+    with open(req_file, 'r') as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            # Извлекаем имя пакета (может быть с версией)
+            pkg_name = line.split('==')[0].split('>=')[0].split('<=')[0].split('~=')[0].strip()
+            if not pkg_name:
+                continue
+            spec = importlib.util.find_spec(pkg_name)
+            if spec is None:
+                missing.append(line)
+
+    if missing:
+        logging.warning(f"Missing packages: {', '.join(missing)}")
+        if auto_install:
+            logging.info("Attempting to install missing packages...")
+            try:
+                # Используем sys.executable для уверенности, что pip в том же окружении
+                subprocess.check_call([sys.executable, '-m', 'pip', 'install', *missing],
+                                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                logging.info("Dependencies installed successfully.")
+                # После установки может потребоваться перезагрузка модулей
+                return []
+            except subprocess.CalledProcessError as e:
+                logging.error(f"Failed to install dependencies: {e}")
+                return missing
+    return missing
+
+def check_for_updates():
+    """
+    Проверяет, есть ли новые коммиты в удалённом репозитории (git).
+    Выводит предупреждение, если локальная версия отстаёт.
+    """
+    try:
+        # Получаем хеш последнего локального коммита
+        local = subprocess.check_output(
+            ['git', 'rev-parse', 'HEAD'],
+            cwd=project_root, stderr=subprocess.DEVNULL
+        ).decode().strip()
+
+        # Получаем хеш последнего коммита на origin/main
+        subprocess.check_call(['git', 'fetch', 'origin'], cwd=project_root,
+                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        remote = subprocess.check_output(
+            ['git', 'rev-parse', 'origin/main'],
+            cwd=project_root, stderr=subprocess.DEVNULL
+        ).decode().strip()
+
+        if local != remote:
+            logging.info("A new version of the bot is available! Consider running 'git pull' to update.")
+        else:
+            logging.info("Bot is up-to-date.")
+    except Exception as e:
+        logging.debug(f"Update check skipped: {e}")
 
 def setup_logging():
     log_dir = Path("logs")
@@ -25,12 +99,33 @@ def setup_logging():
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--console', action='store_true')
+    parser.add_argument('--console', action='store_true', help='Run in console mode (no GUI)')
+    parser.add_argument('--auto-install', action='store_true', help='Automatically install missing dependencies')
     args = parser.parse_args()
 
+    # Настройка логирования
     setup_logging()
     logging.info(f"BingX Trading Bot v{__version__}")
 
+    # Проверка и установка зависимостей
+    missing_pkgs = check_and_install_dependencies(auto_install=args.auto_install)
+    if missing_pkgs:
+        logging.error(f"Missing packages: {missing_pkgs}. Please install them manually or use --auto-install flag.")
+        if not args.console:
+            # В GUI режиме покажем messagebox (требует PyQt5, но он уже должен быть)
+            from PyQt5.QtWidgets import QMessageBox, QApplication
+            app = QApplication(sys.argv)
+            QMessageBox.critical(None, "Missing Dependencies",
+                                 f"The following packages are missing:\n{', '.join(missing_pkgs)}\n\n"
+                                 "Please install them with: pip install -r requirements.txt")
+            sys.exit(1)
+        else:
+            sys.exit(1)
+
+    # Проверка обновлений (только если git доступен)
+    check_for_updates()
+
+    # Инициализация ядра бота
     from core.auth import AuthManager
     from core.engine import TradingEngine
 
@@ -38,6 +133,7 @@ def main():
     engine = TradingEngine(auth)
     engine.load_all_modules()
 
+    # Запуск дополнительных модулей (OrderGuard, Telegram, Discord, ...)
     try:
         from core.order_guard import OrderGuard
         engine.order_guard = OrderGuard(engine)
@@ -193,6 +289,7 @@ def main():
     except Exception as e:
         logging.warning(f"VoiceAlerter not started: {e}")
 
+    # Запуск основного цикла
     if args.console:
         engine.start()
         logging.info("Bot running (console). Ctrl+C to stop.")
