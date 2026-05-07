@@ -1,10 +1,12 @@
 """
 Liquidity filter: blocks signals when recent volume is too low relative to average.
 Now with adaptive threshold – relaxes if no trades were executed for a while.
+Also loads min_volume_ratio from config.ini under [FILTERS] section.
 """
 import logging
 import time
 import pandas as pd
+from configparser import ConfigParser
 from filters.base import BaseFilter
 from strategies.base import Signal
 
@@ -16,16 +18,28 @@ class LiquidityFilter(BaseFilter):
     PRIORITY = 15
     PARAMS = {
         'enabled': True,
-        'min_volume_ratio': 0.3,          # было 0.7 – теперь мягче
+        'min_volume_ratio': 0.3,
         'lookback_bars': 20,
         'recent_bars': 5,
-        'adaptive_relax': True,           # автоматически снижать порог при простое
-        'relax_after_seconds': 180,       # через 3 минуты без сделок
+        'adaptive_relax': True,
+        'relax_after_seconds': 180,
     }
 
     def __init__(self, params=None):
         super().__init__(params)
+        self._load_config()
         self._last_trade_time = time.time()
+
+    def _load_config(self):
+        try:
+            cfg = ConfigParser()
+            cfg.read('config.ini')
+            if cfg.has_option('FILTERS', 'liquidity_min_ratio'):
+                val = cfg.getfloat('FILTERS', 'liquidity_min_ratio')
+                self.config['min_volume_ratio'] = val
+                logger.debug(f"Liquidity min_volume_ratio loaded from config: {val}")
+        except Exception as e:
+            logger.debug(f"Could not load Liquidity config: {e}")
 
     def assess(self, signal: Signal, data: dict) -> float:
         if not self.enabled:
@@ -47,7 +61,6 @@ class LiquidityFilter(BaseFilter):
 
         ratio = recent_vol / avg_vol
 
-        # Динамическое снижение порога при длительном отсутствии сделок
         threshold = self.config['min_volume_ratio']
         if self.config.get('adaptive_relax'):
             time_since_last_trade = time.time() - self._last_trade_time
@@ -59,6 +72,5 @@ class LiquidityFilter(BaseFilter):
             logger.info(f"Liquidity filter blocked {signal.symbol}: volume ratio {ratio:.2f} < {threshold:.2f}")
             return 0.0
 
-        # Обновляем время последней успешной проверки (можно было бы обновлять при реальной сделке, но пусть будет здесь)
         self._last_trade_time = time.time()
         return signal.confidence

@@ -2,10 +2,11 @@
 Volume Surge Filter.
 Requires signal candle volume to be at least multiplier times average volume.
 Now with adaptive threshold – relaxes if no trades were executed for a while.
-Also fixed to handle 'timeframe' parameter correctly.
+Also loads min_volume_mult from config.ini under [FILTERS] section.
 """
 import logging
 import time
+from configparser import ConfigParser
 from filters.base import BaseFilter
 from strategies.base import Signal
 
@@ -19,14 +20,27 @@ class VolumeSurgeFilter(BaseFilter):
         'enabled': True,
         'min_volume_mult': 1.5,
         'lookback_bars': 20,
-        'timeframe': '1h',                # всегда строка, а не список
+        'timeframe': '1h',
         'adaptive_relax': True,
         'relax_after_seconds': 180,
     }
 
     def __init__(self, params=None):
         super().__init__(params)
+        # Загружаем персональный min_volume_mult из config.ini
+        self._load_config()
         self._last_trade_time = time.time()
+
+    def _load_config(self):
+        try:
+            cfg = ConfigParser()
+            cfg.read('config.ini')
+            if cfg.has_option('FILTERS', 'volume_surge_min_mult'):
+                val = cfg.getfloat('FILTERS', 'volume_surge_min_mult')
+                self.config['min_volume_mult'] = val
+                logger.debug(f"VolumeSurge min_volume_mult loaded from config: {val}")
+        except Exception as e:
+            logger.debug(f"Could not load VolumeSurge config: {e}")
 
     def assess(self, signal: Signal, data: dict) -> float:
         if not self.enabled:
@@ -37,7 +51,6 @@ class VolumeSurgeFilter(BaseFilter):
             return signal.confidence
 
         tf = self.config.get('timeframe', '1h')
-        # Защита от старой ошибки, где timeframe превратился в список
         if isinstance(tf, list):
             tf = tf[0] if tf else '1h'
 

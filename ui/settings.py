@@ -1,5 +1,6 @@
 """Settings tab: API keys, risk, strategies/indicators/filters, Moonshot configuration."""
 import logging
+from configparser import ConfigParser
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
     QComboBox, QCheckBox, QGroupBox, QFormLayout, QMessageBox,
@@ -14,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 class ParameterDialog(QDialog):
+    """Диалог редактирования параметров стратегии/индикатора/фильтра."""
     def __init__(self, name, params_config, parent=None):
         super().__init__(parent)
         self.setWindowTitle(f"Параметры: {name}")
@@ -327,6 +329,7 @@ class SettingsTab(QWidget):
         scroll.setWidget(content)
         layout.addWidget(scroll)
 
+    # ---------- Вспомогательные методы ----------
     def _configure_strategy(self, name):
         strat = self.engine.strategies[name]
         dlg = ParameterDialog(name, strat.config)
@@ -459,12 +462,14 @@ class SettingsTab(QWidget):
 
     def _save_settings(self):
         try:
+            # Основные параметры
             self.engine.max_positions = self.max_positions.value()
             self.engine.scan_interval = self.scan_interval.value()
             self.engine.signal_threshold = self.signal_threshold.value()
             self.engine.timeframes = self.timeframes.text().split(',')
             self.engine.top_n_symbols = self.top_symbols.value()
 
+            # Риск-менеджер
             risk_pct = self.risk_per_trade.value()
             leverage = self.max_leverage.value()
             profile = self.risk_profile.currentText()
@@ -481,6 +486,7 @@ class SettingsTab(QWidget):
             self.engine.risk_manager._kelly_winrate = self.kelly_winrate.value()
             self.engine.risk_manager._kelly_avg_win_loss_ratio = self.kelly_avg_win_loss.value()
 
+            # Трейдинг
             self.engine.trailing_sl_enabled = self.trailing_sl.isChecked()
             self.engine.trailing_distance_pct = self.trailing_distance.value()
             self.engine.partial_close_enabled = self.partial_close.isChecked()
@@ -489,6 +495,7 @@ class SettingsTab(QWidget):
             self.engine.breakeven_atr_mult = self.breakeven_atr_mult.value()
             self.engine.slippage_timeout_sec = self.slippage_timeout.value()
 
+            # Moonshot
             if hasattr(self.engine, 'moonshot') and self.engine.moonshot:
                 self.engine.moonshot.capital_pct = self.moonshot_capital_pct.value()
                 self.engine.moonshot.max_risk_pct = self.moonshot_max_risk_pct.value()
@@ -497,6 +504,28 @@ class SettingsTab(QWidget):
                     self.engine.moonshot.stop()
                     self.engine.moonshot.start()
                 logger.info("Moonshot parameters updated")
+
+            # Сохраняем настройки фильтров в config.ini
+            try:
+                cfg = ConfigParser()
+                cfg.read('config.ini')
+
+                if not cfg.has_section('FILTERS'):
+                    cfg.add_section('FILTERS')
+
+                volume_surge = self.engine.filters.get('VolumeSurgeFilter')
+                if volume_surge:
+                    cfg.set('FILTERS', 'volume_surge_min_mult', str(volume_surge.config.get('min_volume_mult', 1.5)))
+
+                liquidity = self.engine.filters.get('LiquidityFilter')
+                if liquidity:
+                    cfg.set('FILTERS', 'liquidity_min_ratio', str(liquidity.config.get('min_volume_ratio', 0.3)))
+
+                with open('config.ini', 'w') as f:
+                    cfg.write(f)
+                logger.info("Filter parameters saved to config.ini")
+            except Exception as e:
+                logger.error(f"Failed to save filter settings to config.ini: {e}")
 
             self.engine.risk_manager._save_state()
             self.engine._save_config()
