@@ -7,7 +7,6 @@ project_root = Path(__file__).parent.absolute()
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-# Попытка импорта PyQt5 – если его нет, будет предложено установить зависимости
 try:
     from PyQt5.QtWidgets import QApplication
     from ui.styles import theme
@@ -17,13 +16,11 @@ except ImportError:
 
 __version__ = "2.0.0"
 
-# Функция проверки и установки зависимостей
 def check_and_install_dependencies(auto_install=False):
     req_file = project_root / 'requirements.txt'
     if not req_file.exists():
         logging.warning("requirements.txt not found, skipping dependency check.")
         return []
-
     missing = []
     with open(req_file, 'r') as f:
         for line in f:
@@ -36,7 +33,6 @@ def check_and_install_dependencies(auto_install=False):
             spec = importlib.util.find_spec(pkg_name)
             if spec is None:
                 missing.append(line)
-
     if missing:
         logging.warning(f"Missing packages: {', '.join(missing)}")
         if auto_install:
@@ -53,18 +49,9 @@ def check_and_install_dependencies(auto_install=False):
 
 def check_for_updates():
     try:
-        local = subprocess.check_output(
-            ['git', 'rev-parse', 'HEAD'],
-            cwd=project_root, stderr=subprocess.DEVNULL
-        ).decode().strip()
-
-        subprocess.check_call(['git', 'fetch', 'origin'], cwd=project_root,
-                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        remote = subprocess.check_output(
-            ['git', 'rev-parse', 'origin/main'],
-            cwd=project_root, stderr=subprocess.DEVNULL
-        ).decode().strip()
-
+        local = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=project_root, stderr=subprocess.DEVNULL).decode().strip()
+        subprocess.check_call(['git', 'fetch', 'origin'], cwd=project_root, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        remote = subprocess.check_output(['git', 'rev-parse', 'origin/main'], cwd=project_root, stderr=subprocess.DEVNULL).decode().strip()
         if local != remote:
             logging.info("A new version of the bot is available! Consider running 'git pull' to update.")
         else:
@@ -79,8 +66,6 @@ def setup_logging():
     formatter = logging.Formatter('[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s')
     fh = logging.FileHandler(log_file, encoding='utf-8')
     fh.setLevel(logging.DEBUG); fh.setFormatter(formatter)
-
-    # Читаем уровень логирования из config.ini
     try:
         from configparser import ConfigParser
         cfg = ConfigParser()
@@ -89,11 +74,8 @@ def setup_logging():
         log_level = getattr(logging, log_level_str.upper(), logging.INFO)
     except Exception:
         log_level = logging.INFO
-
     ch = logging.StreamHandler()
-    ch.setLevel(log_level)
-    ch.setFormatter(formatter)
-
+    ch.setLevel(log_level); ch.setFormatter(formatter)
     root = logging.getLogger(); root.setLevel(logging.DEBUG); root.addHandler(fh); root.addHandler(ch)
     return log_file
 
@@ -105,8 +87,6 @@ def main():
 
     setup_logging()
     logging.info(f"BingX Trading Bot v{__version__}")
-
-    # Проверка и установка зависимостей
     missing_pkgs = check_and_install_dependencies(auto_install=args.auto_install)
     if missing_pkgs:
         logging.error(f"Missing packages: {', '.join(missing_pkgs)}. Please install them manually or use --auto-install flag.")
@@ -119,19 +99,33 @@ def main():
             sys.exit(1)
         else:
             sys.exit(1)
-
-    # Проверка обновлений
     check_for_updates()
 
-    # Инициализация ядра бота
     from core.auth import AuthManager
     from core.engine import TradingEngine
-
     auth = AuthManager()
     engine = TradingEngine(auth)
     engine.load_all_modules()
 
-    # Запуск дополнительных модулей (OrderGuard, Telegram, Discord, ...)
+    # -------------------- НОВЫЕ МОДУЛИ --------------------
+    # 1. Адаптивный порог уверенности (автоматически корректирует signal_threshold)
+    try:
+        from core.adaptive_threshold import AdaptiveThresholdManager
+        engine.adaptive_threshold = AdaptiveThresholdManager(engine)
+        engine.adaptive_threshold.start()
+        logging.info("AdaptiveThresholdManager started")
+    except Exception as e:
+        logging.warning(f"AdaptiveThreshold not started: {e}")
+
+    # 2. Микро‑лотовый фильтр (блокирует сигналы, на которые не хватит маржи)
+    try:
+        from filters.micro_lot_filter import MicroLotFilter
+        engine.filters['MicroLotFilter'] = MicroLotFilter()
+        logging.info("MicroLotFilter added")
+    except Exception as e:
+        logging.warning(f"MicroLotFilter not added: {e}")
+
+    # ------------------- ОСТАЛЬНЫЕ МОДУЛИ -------------------
     try:
         from core.order_guard import OrderGuard
         engine.order_guard = OrderGuard(engine)
@@ -148,7 +142,6 @@ def main():
         tg_token = cfg.get('TELEGRAM', 'bot_token', fallback='')
         tg_chat = cfg.get('TELEGRAM', 'chat_id', fallback='')
         tg_enabled = cfg.getboolean('TELEGRAM', 'enabled', fallback=False)
-
         if tg_enabled and tg_token and tg_chat:
             from telegram.bot import TelegramBot
             engine.telegram = TelegramBot(tg_token, tg_chat, engine)
@@ -256,7 +249,6 @@ def main():
     except Exception as e:
         logging.warning(f"GitHubBackup not started: {e}")
 
-    # ---------- Moonshot с параметрами из конфига ----------
     try:
         from core.moonshot import MoonshotTrader
         moonshot_capital_pct = cfg.getfloat('MOONSHOT', 'capital_pct', fallback=10.0)

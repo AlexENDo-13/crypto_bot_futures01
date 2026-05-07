@@ -1,0 +1,90 @@
+{
+  "AdaptiveCombiner": {
+    "weight": 0.9876543209876544,
+    "trades": 0,
+    "wins": 0,
+    "total_pnl": 0.0,
+    "avg_pnl": 0.0,
+    "winrate": 0.0,
+    "consecutive_losses": 0,
+    "disabled": false,
+    "disabled_reason": null
+  },
+  "DualThrust": {
+    "weight": 0.691358024691358,
+    "trades": 0,
+    "wins": 0,
+    "total_pnl": 0.0,
+    "avg_pnl": 0.0,
+    "winrate": 0.0,
+    "consecutive_losses": 0,
+    "disabled": false,
+    "disabled_reason": null
+  },
+  "Ichimoku": {
+    "weight": 0.9876543209876544,
+    "trades": 0,
+    "wins": 0,
+    "total_pnl": 0.0,
+    "avg_pnl": 0.0,
+    "winrate": 0.0,
+    "consecutive_losses": 0,
+    "disabled": false,
+    "disabled_reason": null
+  },
+  "MeanReversion": {
+    "weight": 0.9876543209876544,
+    "trades": 0,
+    "wins": 0,
+    "total_pnl": 0.0,
+    "avg_pnl": 0.0,
+    "winrate": 0.0,
+    "consecutive_losses": 0,
+    "disabled": false,
+    "disabled_reason": null
+  },
+  "Momentum": {
+    "weight": 1.1851851851851851,
+    "trades": 1,
+    "wins": 0,
+    "total_pnl": 0.0,
+    "avg_pnl": 0.0,
+    "winrate": 0.0,
+    "consecutive_losses": 1,
+    "disabled": false,
+    "disabled_reason": null
+  },
+  "RSIDivergence": {
+    "weight": 0.888888888888889,
+    "trades": 0,
+    "wins": 0,
+    "total_pnl": 0.0,
+    "avg_pnl": 0.0,
+    "winrate": 0.0,
+    "consecutive_losses": 0,
+    "disabled": false,
+    "disabled_reason": null
+  },
+  "Squeeze": {
+    "weight": 0.7901234567901235,
+    "trades": 0,
+    "wins": 0,
+    "total_pnl": 0.0,
+    "avg_pnl": 0.0,
+    "winrate": 0.0,
+    "consecutive_losses": 0,
+    "disabled": false,
+    "disabled_reason": null
+  },
+  "TrendFollowing": {
+    "weight": 1.4814814814814816,
+    "trades": 0,
+    "wins": 0,
+    "total_pnl": 0.0,
+    "avg_pnl": 0.0,
+    "winrate": 0.0,
+    "consecutive_losses": 0,
+    "disabled": false,
+    "disabled_reason": null
+  }
+}

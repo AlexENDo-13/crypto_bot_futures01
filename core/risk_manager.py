@@ -1,6 +1,6 @@
 """
 Risk Management: position sizing, leverage, SL/TP calculation, Kelly criterion.
-Redesigned profiles for clear risk/reward targets.
+Now with automatic low-balance protection and adaptive risk scaling.
 """
 import logging, json, os
 from datetime import datetime, timezone
@@ -15,6 +15,8 @@ MIN_SL_RATIO_SHORT = 1.02
 MIN_TP_RATIO = 0.005
 PROFILE_RISK_ORDER = ['Conservative', 'Balanced', 'Aggressive', 'Adaptive', 'User']
 
+LOW_BALANCE_THRESHOLD = 100.0   # Ниже этого – автоматический консервативный режим
+
 
 class RiskManager:
     STATE_FILE = 'data/risk_state.json'
@@ -23,7 +25,8 @@ class RiskManager:
         self.risk_per_trade_pct = 2.0
         self.max_leverage = 3
         self._night_mode = False
-        self._current_profile = 'Adaptive'
+        self._current_profile = 'Balanced'
+        self._low_balance_mode = False           # флаг автоматического защитного режима
         self._profiles = {
             'Conservative': {
                 'risk_per_trade_pct': 0.5,
@@ -83,6 +86,23 @@ class RiskManager:
         self._original_profile = None
         self._auto_loss_stage = 0
         self._load_state()
+
+    # ---------- Low-balance auto-protection ----------
+    def check_low_balance(self, balance: float):
+        """Автоматически включает консервативный режим при низком балансе."""
+        if balance <= 0:
+            return
+        if balance < LOW_BALANCE_THRESHOLD and not self._low_balance_mode:
+            logger.warning(f"Low balance ({balance:.2f} < {LOW_BALANCE_THRESHOLD}), activating protection")
+            self._low_balance_mode = True
+            self.set_profile('Conservative')
+            # Дополнительно снижаем риск и плечо
+            self.risk_per_trade_pct = 0.5
+            self.max_leverage = 2
+        elif balance >= LOW_BALANCE_THRESHOLD and self._low_balance_mode:
+            logger.info(f"Balance restored ({balance:.2f}), returning to Balanced profile")
+            self._low_balance_mode = False
+            self.set_profile('Balanced')
 
     # ---------- Profiles ----------
     def set_profile(self, profile: str):
@@ -212,7 +232,6 @@ class RiskManager:
             return
         trades = getattr(portfolio, '_trades', [])
         if len(trades) < 5:
-            logger.debug(f"Not enough trades for Kelly update ({len(trades)} < 5)")
             return
         wins = [t for t in trades if t.pnl > 0]
         losses = [t for t in trades if t.pnl <= 0]
@@ -227,9 +246,8 @@ class RiskManager:
         self._save_state()
 
     def adapt_to_volatility(self, current_atr_pct: float):
-        if self._night_mode:
+        if self._night_mode or self._low_balance_mode:
             return
-        # ----- Ограничение роста риска до 2.5% -----
         if self.risk_per_trade_pct >= 2.5:
             return
         if current_atr_pct > 0.05:
@@ -245,7 +263,7 @@ class RiskManager:
         return True
 
     def update_adaptive_risk(self, trade_pnl: float):
-        if not self.adaptive_risk_enabled:
+        if not self.adaptive_risk_enabled or self._low_balance_mode:
             return
 
         if trade_pnl > 0:
@@ -280,8 +298,6 @@ class RiskManager:
                     logger.info(f"3 consecutive wins → upgrading to {target_profile}")
                     self.set_profile(target_profile)
                     self._auto_loss_stage -= 1
-                    self.consecutive_wins = 0
-                else:
                     self.consecutive_wins = 0
             else:
                 if self._current_profile != self._original_profile:
