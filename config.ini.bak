@@ -4,16 +4,16 @@ api_secret =
 
 [ENGINE]
 scan_interval = 120
-signal_threshold = 0.45
-max_positions = 5
-timeframes = 15m,1h,4h,1d
-top_symbols = 100
+signal_threshold = 0.55
+max_positions = 4
+timeframes = 1h,4h
+top_symbols = 30
 
 [RISK]
 risk_per_trade = 2.0
 max_leverage = 3
-profile = Adaptive
-use_day_profile = False
+profile = Balanced
+use_day_profile = True
 kelly_enabled = True
 kelly_winrate = 0.5
 kelly_avg_win_loss = 2.0
@@ -21,21 +21,21 @@ kelly_avg_win_loss = 2.0
 [TRADING]
 partial_close = True
 trailing_sl = True
-trailing_distance_pct = 0.8
-partial_close_pct = 50.0
+trailing_distance_pct = 1.2
+partial_close_pct = 40.0
 breakeven = True
-breakeven_atr_mult = 1.0
+breakeven_atr_mult = 1.5
 slippage_timeout = 10.0
 reinvest_profits = True
 
 [MOONSHOT]
-capital_pct = 25.0
-max_risk_pct = 2.0
+capital_pct = 0.0
+max_risk_pct = 0.0
 scan_interval = 300
 
 [FILTERS]
-volume_surge_min_mult = 0.5
-liquidity_min_ratio = 0.4
+volume_surge_min_mult = 0.05
+liquidity_min_ratio = 0.05
 
 [UI]
 language = ru
@@ -44,7 +44,7 @@ window_width = 1400
 window_height = 900
 
 [LOGGING]
-level = INFO
+level = DEBUG
 retention_days = 30
 color_output = true
 

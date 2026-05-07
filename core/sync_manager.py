@@ -171,7 +171,7 @@ class PositionSyncManager:
         for pos in positions:
             try:
                 open_t = datetime.fromisoformat(pos.open_time)
-                if (now - open_t).total_seconds() < 60:
+                if (now - open_t).total_seconds() < 300:
                     return False
             except:
                 pass
