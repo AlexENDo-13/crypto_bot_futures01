@@ -31,7 +31,8 @@ def market_scan_task(engine):
         try:
             _process_symbol(engine, symbol)
         except Exception as e:
-            logger.error(f"Error processing {symbol}: {e}")
+            # exc_info=True отправляет traceback в лог-файл
+            logger.error(f"Error processing {symbol}: {e}", exc_info=True)
 
     engine._last_scan_time = time.time()
 

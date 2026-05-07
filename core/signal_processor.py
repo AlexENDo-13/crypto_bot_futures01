@@ -126,10 +126,14 @@ class SignalProcessor:
         )
         leverage = self.engine.risk_manager.get_optimal_leverage(signal.symbol, price, atr_val)
 
-        # --- Нормализация количества под требования биржи ---
+        # --- Нормализация количества под требования биржи (защита от None) ---
         contract_info = self.engine._contracts_info.get(signal.symbol, {})
-        min_qty = contract_info.get('minQty', 0)
-        step_size = contract_info.get('stepSize', 0.001)
+        # Приводим к float, обрабатывая None
+        raw_min_qty = contract_info.get('minQty')
+        raw_step_size = contract_info.get('stepSize')
+
+        min_qty = float(raw_min_qty) if raw_min_qty is not None else 0.0
+        step_size = float(raw_step_size) if raw_step_size is not None else 0.001
 
         if min_qty > 0 and quantity < min_qty:
             quantity = min_qty

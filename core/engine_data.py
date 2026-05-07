@@ -25,11 +25,18 @@ def load_contracts_info(engine):
         contracts = engine.api.get_contracts()
         for c in contracts:
             sym = c.get('symbol', '')
-            if sym.endswith('USDT'):
-                engine._contracts_info[sym] = {
-                    'minQty': float(c.get('tradeMinQuantity', 0)),
-                    'stepSize': float(c.get('stepSize', 0.001))
-                }
+            if not sym.endswith('USDT'):
+                continue
+            try:
+                min_qty = float(c.get('tradeMinQuantity', 0))
+                step_size = float(c.get('stepSize', 0.001))
+            except (TypeError, ValueError):
+                logger.debug(f"Skipping contract info for {sym} due to invalid numeric values")
+                continue
+            engine._contracts_info[sym] = {
+                'minQty': min_qty,
+                'stepSize': step_size
+            }
         logger.info(f"Loaded contract info for {len(engine._contracts_info)} symbols")
     except Exception as e:
         logger.error(f"Failed to load contracts info: {e}")
