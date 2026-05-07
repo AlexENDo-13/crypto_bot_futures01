@@ -9,7 +9,7 @@
     "consecutive_losses": 0
   },
   "Momentum": {
-    "weight": 0.0,
+    "weight": 1.2,
     "trades": 7,
     "wins": 0,
     "total_pnl": 0.0,
@@ -17,16 +17,20 @@
     "winrate": 0.0,
     "consecutive_losses": 7,
     "disabled": true,
-    "disabled_reason": "5 consecutive losses"
+    "disabled_reason": "5 consecutive losses",
+    "disabled_at": 1778114524.4936376
   },
   "TrendFollowing": {
-    "weight": 1.5,
-    "trades": 4,
+    "weight": 0.0,
+    "trades": 5,
     "wins": 0,
     "total_pnl": 0.0,
     "avg_pnl": 0.0,
     "winrate": 0.0,
-    "consecutive_losses": 4
+    "consecutive_losses": 5,
+    "disabled": true,
+    "disabled_reason": "5 consecutive losses",
+    "disabled_at": 1778114582.4743986
   },
   "AdaptiveCombiner": {
     "weight": 1.0,

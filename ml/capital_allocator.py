@@ -41,20 +41,19 @@ class CapitalAllocator:
 
     def _update_allocations(self):
         voting = self.engine.voting
-        all_weights = voting.get_weights()  # возвращает dict с подробной статистикой
-        if not all_weights:
+        # Получаем полную статистику, а не только веса
+        all_stats = voting.get_strategy_stats()
+        if not all_stats:
             return
 
         # Рассчитываем показатели для каждой стратегии
         scores = {}
-        for name, stats in all_weights.items():
+        for name, stats in all_stats.items():
             trades = stats.get('trades', 0)
             if trades < 3:  # недостаточно данных – оставляем текущий вес
                 scores[name] = stats.get('weight', 1.0)
                 continue
 
-            # Используем только последние N сделок, если возможно (достаём из voting weights?)
-            # В нашем VotingSystem мы храним общую статистику, но можно использовать общие метрики
             avg_pnl = stats.get('avg_pnl', 0)
             winrate = stats.get('winrate', 0) / 100.0
             # Простая оценка: winrate * avg_pnl (нормализовано)
@@ -71,8 +70,9 @@ class CapitalAllocator:
         for name in scores:
             normalized = scores[name] / total * len(scores)  # масштабируем, чтобы средний = 1
             normalized = max(0.1, min(3.0, normalized))
-            # Сохраняем в VotingSystem (обновляем weight в статистике, что повлияет на взвешивание сигналов)
-            voting._weights[name]['weight'] = normalized
-            logger.debug(f"Capital allocation: {name} → {normalized:.2f} (raw score {scores[name]:.4f})")
+            # Обновляем вес в статистике VotingSystem
+            if name in voting._weights:
+                voting._weights[name]['weight'] = normalized
+                logger.debug(f"Capital allocation: {name} → {normalized:.2f} (raw score {scores[name]:.4f})")
 
         logger.info("Capital allocation updated for %d strategies", len(scores))

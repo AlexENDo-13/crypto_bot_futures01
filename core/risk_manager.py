@@ -1,3 +1,6 @@
+"""
+Risk Management: position sizing, leverage, SL/TP calculation, Kelly criterion.
+"""
 import logging
 import json
 import os
@@ -99,11 +102,21 @@ class RiskManager:
         min_sl_distance = entry_price * 0.005
 
         if side == 'BUY':
-            sl = entry_price - max(atr * sl_mult, min_sl_distance)
+            distance = max(atr * sl_mult, min_sl_distance)
+            sl = entry_price - distance
             tp = entry_price + atr * tp_mult
         else:
-            sl = entry_price + max(atr * sl_mult, min_sl_distance)
+            distance = max(atr * sl_mult, min_sl_distance)
+            sl = entry_price + distance
             tp = entry_price - atr * tp_mult
+
+        # Финальная защита: SL никогда не должен быть отрицательным и сильно удалённым от цены
+        sl = max(entry_price * 0.001, sl)      # минимум 0.1% от цены входа
+        # Дополнительно: для лонга SL не может быть выше цены (тогда бы сразу сработал)
+        if side == 'BUY' and sl >= entry_price:
+            sl = entry_price * 0.999
+        elif side == 'SELL' and sl <= entry_price:
+            sl = entry_price * 1.001
 
         return {'sl': sl, 'tp': tp, 'tp2': tp}
 

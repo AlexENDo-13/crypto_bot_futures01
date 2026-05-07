@@ -186,7 +186,12 @@ class VotingSystem:
         self.update_weights()
 
     def get_weights(self) -> Dict[str, float]:
+        """Возвращает только веса стратегий (для быстрого просмотра)."""
         return {name: stats.get('weight', 1.0) for name, stats in self._weights.items()}
+
+    def get_strategy_stats(self) -> Dict[str, dict]:
+        """Возвращает полную статистику по каждой стратегии."""
+        return self._weights.copy()
 
     def is_strategy_disabled(self, name: str) -> bool:
         return self._weights.get(name, {}).get('disabled', False)
