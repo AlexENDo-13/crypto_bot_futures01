@@ -32,12 +32,6 @@ class SignalProcessor:
             except Exception as e:
                 logger.debug(f"Pre-check sync failed: {e}")
 
-        # Проверка лимита позиций с умной заменой
-        if len(current_positions) >= self.engine.max_positions:
-            if not self.engine.sync_manager.try_replace_weakest(signal.confidence, signal.symbol):
-                logger.info(f"Max positions reached ({self.engine.max_positions}), skipping {signal.symbol}")
-                return
-
         price = self.engine._get_current_price(signal.symbol)
         if price <= 0:
             logger.warning(f"Invalid price for {signal.symbol}")
@@ -108,6 +102,7 @@ class SignalProcessor:
             'correlations': self._calculate_correlations(signal.symbol, current_positions, all_candles),
         }
 
+        # --- ВАЖНО: сначала прогоняем все фильтры, только потом думаем о замене ---
         for filter_name, filter_obj in sorted(self.engine.filters.items(),
                                               key=lambda x: getattr(x[1], 'PRIORITY', 100)):
             if not getattr(filter_obj, 'enabled', True):
@@ -120,6 +115,12 @@ class SignalProcessor:
                 signal.confidence = new_conf
             except Exception as e:
                 logger.warning(f"Filter {filter_name} error: {e}")
+
+        # --- Проверка лимита позиций с умной заменой (только если сигнал прошёл все фильтры) ---
+        if len(current_positions) >= self.engine.max_positions:
+            if not self.engine.sync_manager.try_replace_weakest(signal.confidence, signal.symbol):
+                logger.info(f"Max positions reached ({self.engine.max_positions}), skipping {signal.symbol}")
+                return
 
         free_margin = available_margin
         sl_tp = self.engine.risk_manager.get_sl_tp_levels(price, signal.action, atr_val, signal.symbol)

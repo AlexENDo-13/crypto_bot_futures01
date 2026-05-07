@@ -1,8 +1,10 @@
 """
 Volume Surge Filter.
 Requires signal candle volume to be at least multiplier times average volume.
+Now with adaptive threshold – relaxes if no trades were executed for a while.
 """
 import logging
+import time
 from filters.base import BaseFilter
 from strategies.base import Signal
 
@@ -16,8 +18,14 @@ class VolumeSurgeFilter(BaseFilter):
         'enabled': True,
         'min_volume_mult': 1.5,    # минимальное превышение среднего объёма
         'lookback_bars': 20,       # период усреднения
-        'timeframe': '1h'          # с какого ТФ брать объём (обычно тот же, что у сигнала)
+        'timeframe': '1h',         # с какого ТФ брать объём (обычно тот же, что у сигнала)
+        'adaptive_relax': True,    # автоматически снижать порог при простое
+        'relax_after_seconds': 180, # через 3 минуты без сделок порог умножается на 0.5
     }
+
+    def __init__(self, params=None):
+        super().__init__(params)
+        self._last_trade_time = time.time()
 
     def assess(self, signal: Signal, data: dict) -> float:
         if not self.enabled:
@@ -48,11 +56,21 @@ class VolumeSurgeFilter(BaseFilter):
             return signal.confidence
 
         ratio = current_volume / avg_volume
+
+        # Динамическое снижение порога при длительном отсутствии сделок
         threshold = self.config['min_volume_mult']
+        if self.config.get('adaptive_relax'):
+            time_since_last_trade = time.time() - self._last_trade_time
+            if time_since_last_trade > self.config.get('relax_after_seconds', 180):
+                threshold = max(0.5, threshold * 0.5)
+                logger.debug(f"VolumeSurge threshold relaxed to {threshold:.2f} (inactive {time_since_last_trade:.0f}s)")
 
         if ratio < threshold:
             logger.info(f"VolumeSurge blocked {signal.symbol}: vol ratio {ratio:.2f} < {threshold}")
             return 0.0
+
+        # Обновляем время последней успешной проверки
+        self._last_trade_time = time.time()
 
         # Пропускаем, можно даже немного повысить уверенность при сильном всплеске
         if ratio > 2.0:

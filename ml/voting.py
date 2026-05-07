@@ -1,10 +1,12 @@
 """
 Voting System: combines signals from multiple strategies with weighted confidence.
 Auto-disables losing strategies based on winrate and PnL.
+Now with automatic re-enable after timeout (12 hours default).
 """
 import json
 import logging
 import os
+import time
 from typing import Dict, List, Optional
 
 from strategies.base import Signal
@@ -20,16 +22,22 @@ class VotingSystem:
     MIN_TOTAL_PNL = -100.0   # Максимальный убыток ($)
     MAX_CONSECUTIVE_LOSSES = 5  # Макс серия убытков
     WEIGHT_PENALTY = 0.1     # Вес при серии убытков
+    DISABLE_TIMEOUT_HOURS = 12  # Через сколько часов снять блокировку
 
     def __init__(self):
         self._weights: Dict[str, dict] = {}
         self._load_weights()
+        self._cleanup_expired_disables()
 
     def _load_weights(self):
         if os.path.exists(self.WEIGHTS_FILE):
             try:
                 with open(self.WEIGHTS_FILE, 'r') as f:
                     self._weights = json.load(f)
+                # Убедимся, что у всех записей есть поле disabled_at (для миграции)
+                for stats in self._weights.values():
+                    if 'disabled' in stats and stats['disabled'] and 'disabled_at' not in stats:
+                        stats['disabled_at'] = time.time()
             except Exception as e:
                 logger.error(f"Failed to load weights: {e}")
                 self._weights = {}
@@ -43,6 +51,24 @@ class VotingSystem:
                 json.dump(self._weights, f, indent=2)
         except Exception as e:
             logger.error(f"Failed to save weights: {e}")
+
+    def _cleanup_expired_disables(self):
+        """Снимает блокировку со стратегий, у которых истёк таймаут."""
+        now = time.time()
+        timeout_seconds = self.DISABLE_TIMEOUT_HOURS * 3600
+        changed = False
+        for name, stats in self._weights.items():
+            if stats.get('disabled') and 'disabled_at' in stats:
+                if now - stats['disabled_at'] > timeout_seconds:
+                    stats['disabled'] = False
+                    stats['disabled_reason'] = None
+                    stats['consecutive_losses'] = 0
+                    stats['weight'] = 1.0  # Стартовый вес
+                    del stats['disabled_at']
+                    logger.info(f"Strategy {name} re-enabled after timeout")
+                    changed = True
+        if changed:
+            self._save_weights()
 
     def register_strategy(self, name: str, weight: float = 1.0):
         if name not in self._weights:
@@ -58,14 +84,12 @@ class VotingSystem:
                 'disabled_reason': None,
             }
         else:
-            # Обновляем вес если стратегия уже зарегистрирована
             self._weights[name]['weight'] = weight
 
     def evaluate_signals(self, signals: List[Signal]) -> Optional[Signal]:
         if not signals:
             return None
 
-        # Группируем по символу и направлению
         by_symbol_action = {}
         for s in signals:
             key = (s.symbol, s.action)
@@ -82,12 +106,10 @@ class VotingSystem:
                 strategy = s.meta.get('strategy', 'Unknown')
                 stats = self._weights.get(strategy, {})
 
-                # Пропускаем отключённые стратегии
                 if stats.get('disabled', False):
                     continue
 
                 w = stats.get('weight', 1.0)
-                # Снижаем вес при серии убытков
                 if stats.get('consecutive_losses', 0) >= 3:
                     w = self.WEIGHT_PENALTY
 
@@ -98,14 +120,13 @@ class VotingSystem:
                 avg_conf = weighted_conf / total_weight
                 if avg_conf > best_score:
                     best_score = avg_conf
-                    # Берём первый сигнал как базу, обновляем confidence
                     best_signal = sigs[0]
                     best_signal.confidence = min(1.0, avg_conf)
 
         return best_signal
 
     def update_weights(self):
-        """Проверяет статистику стратегий и отключает убыточные."""
+        """Проверяет статистику стратегий и отключает убыточные (с запоминанием времени)."""
         changed = False
         for name, stats in self._weights.items():
             if stats.get('disabled', False):
@@ -116,11 +137,10 @@ class VotingSystem:
             total_pnl = stats.get('total_pnl', 0.0)
             consecutive_losses = stats.get('consecutive_losses', 0)
 
-            # Критерии отключения
             disabled = False
             reason = None
 
-            if trades >= 5:  # Минимум сделок для оценки
+            if trades >= 5:
                 if winrate < self.MIN_WINRATE * 100:
                     disabled = True
                     reason = f"winrate {winrate:.1f}% < {self.MIN_WINRATE*100:.0f}%"
@@ -136,6 +156,7 @@ class VotingSystem:
                 stats['disabled'] = True
                 stats['disabled_reason'] = reason
                 stats['weight'] = 0.0
+                stats['disabled_at'] = time.time()
                 logger.warning(f"Strategy {name} AUTO-DISABLED: {reason}")
                 changed = True
 
@@ -162,8 +183,6 @@ class VotingSystem:
         stats['avg_pnl'] = stats['total_pnl'] / trades if trades > 0 else 0.0
 
         self._save_weights()
-
-        # Проверяем нужно ли отключить
         self.update_weights()
 
     def get_weights(self) -> Dict[str, float]:
@@ -178,5 +197,6 @@ class VotingSystem:
             self._weights[name]['disabled_reason'] = None
             self._weights[name]['consecutive_losses'] = 0
             self._weights[name]['weight'] = 1.0
+            self._weights[name].pop('disabled_at', None)
             self._save_weights()
-            logger.info(f"Strategy {name} re-enabled")
+            logger.info(f"Strategy {name} re-enabled manually")

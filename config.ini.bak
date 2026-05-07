@@ -5,7 +5,7 @@ api_secret =
 [ENGINE]
 scan_interval = 120
 signal_threshold = 0.5
-max_positions = 5
+max_positions = 6
 timeframes = 15m,1h,4h,1d
 top_symbols = 100
 
@@ -15,7 +15,7 @@ max_leverage = 4
 profile = Aggressive
 use_day_profile = False
 kelly_enabled = True
-kelly_winrate = 0.6000000000000001
+kelly_winrate = 0.6
 kelly_avg_win_loss = 1.5
 
 [TRADING]
