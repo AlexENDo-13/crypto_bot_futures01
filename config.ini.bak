@@ -34,8 +34,8 @@ max_risk_pct = 0.0
 scan_interval = 300
 
 [FILTERS]
-volume_surge_min_mult = 0.8
-liquidity_min_ratio = 0.4
+volume_surge_min_mult = 0.5
+liquidity_min_ratio = 0.3
 
 [UI]
 language = ru
