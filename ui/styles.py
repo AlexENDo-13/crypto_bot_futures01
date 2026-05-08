@@ -12,7 +12,7 @@ class Theme:
             'header': QFont('Segoe UI', 11, QFont.Bold),
             'large': QFont('Segoe UI', 16, QFont.Bold),
             'mono': QFont('Consolas', 9),
-            'small': QFont('Segoe UI', 8),        # ← возвращён
+            'small': QFont('Segoe UI', 8),
         }
         self._set_dark_theme()
 
@@ -20,7 +20,7 @@ class Theme:
         self.colors.update({
             'bg_primary': '#1e1e2e',
             'bg_secondary': '#2a2a3e',
-            'bg_tertiary': '#333350',
+            'bg_tertiary': '#333350',      # добавлен для поддержки ui/signals.py
             'text_primary': '#e0e0f0',
             'text_secondary': '#a0a0c0',
             'text_muted': '#707090',
@@ -37,7 +37,7 @@ class Theme:
         self.colors.update({
             'bg_primary': '#ffffff',
             'bg_secondary': '#f3f4f6',
-            'bg_tertiary': '#e5e7eb',
+            'bg_tertiary': '#e5e7eb',      # светлая версия
             'text_primary': '#111827',
             'text_secondary': '#4b5563',
             'text_muted': '#9ca3af',
