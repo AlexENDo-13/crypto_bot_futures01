@@ -6,7 +6,8 @@ class Theme:
         self.colors = {
             'accent': '#00d4aa', 'accent_hover': '#00b894', 'success': '#34d399',
             'danger': '#f87171', 'warning': '#fbbf24', 'bg_primary': '#0f172a',
-            'bg_secondary': '#1e293b', 'text_primary': '#f1f5f9',
+            'bg_secondary': '#1e293b', 'bg_tertiary': '#1e293b',  # ← добавлено (можно выбрать другой оттенок)
+            'text_primary': '#f1f5f9',
             'text_secondary': '#94a3b8', 'text_muted': '#64748b', 'border': '#334155',
         }
         self.FONTS = {
@@ -37,7 +38,7 @@ class Theme:
         QLabel {{ color: {c['text_primary']}; }}
         QStatusBar {{ background: {c['bg_secondary']}; color: {c['text_secondary']}; }}
         """
-
+    
     def toggle(self):
         self._dark = not self._dark
     def apply_theme(self):
