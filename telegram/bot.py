@@ -58,6 +58,7 @@ class TelegramBot:
         self._running = False
         if self._thread:
             self._thread.join(timeout=5)
+            self._thread = None
 
     def send_message(self, text: str, parse_mode: str = 'HTML', reply_markup: dict = None) -> bool:
         if not self.enabled:
@@ -156,7 +157,7 @@ class TelegramBot:
         symbol = args[0].upper()
         side = args[1].upper()
         try:
-            self.engine.executor.api.close_position(symbol, side)
+            self.engine.api.close_position(symbol, side)          # ИСПРАВЛЕНО
             self.send_message(f"✅ Закрываю {symbol} {side}")
         except Exception as e:
             self.send_message(f"❌ Ошибка: {e}")
@@ -176,7 +177,6 @@ class TelegramBot:
         if not self.engine:
             return
         logger.critical("EMERGENCY STOP via Telegram")
-        # Закрываем все позиции
         for pos in self.engine.portfolio.get_positions():
             try:
                 self.engine.api.close_position(pos.symbol, pos.side)

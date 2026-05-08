@@ -10,7 +10,7 @@ from typing import Dict, Optional
 
 logger = logging.getLogger(__name__)
 
-CHECK_INTERVAL_SECONDS = 600  # каждые 10 минут
+CHECK_INTERVAL_SECONDS = 120  # уменьшено с 600 до 120 секунд для быстрой реакции
 
 
 class OrderGuard:
@@ -18,9 +18,8 @@ class OrderGuard:
         self.engine = engine
         self._running = False
         self._thread: Optional[threading.Thread] = None
-        # Кэш для подавления повторных попыток перевыставления при неудаче
         self._last_repair_attempt: Dict[str, float] = {}
-        self._min_repeat_interval = 300  # не пытаться чинить один и тот же ордер чаще 5 минут
+        self._min_repeat_interval = 300
 
     def start(self):
         if self._running:
@@ -66,7 +65,6 @@ class OrderGuard:
         if expected_tp is None and expected_sl is None:
             return
 
-        # Ключ для контроля частоты ремонта
         repair_key = f"{symbol}_{pos_side}"
 
         try:
@@ -90,7 +88,6 @@ class OrderGuard:
                 if stop_price and abs(float(stop_price) - expected_sl) < 1e-10:
                     sl_found = True
 
-        # Не чинить слишком часто
         now = time.time()
         last_attempt = self._last_repair_attempt.get(repair_key, 0)
         if now - last_attempt < self._min_repeat_interval:

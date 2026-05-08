@@ -14,12 +14,12 @@ class MicroLotFilter(BaseFilter):
 
     PARAMS = {'enabled': True}
 
-    def assess(self, signal: Signal, data: dict) -> float:
-        if not self.enabled:
-            return signal.confidence
+    def __init__(self, params=None, engine=None):
+        super().__init__(params)
+        self.engine = engine
 
-        engine = self._get_engine()
-        if engine is None:
+    def assess(self, signal: Signal, data: dict) -> float:
+        if not self.enabled or self.engine is None:
             return signal.confidence
 
         symbol = signal.symbol
@@ -27,14 +27,14 @@ class MicroLotFilter(BaseFilter):
         if price <= 0:
             return signal.confidence
 
-        contract_info = engine._contracts_info.get(symbol, {})
+        contract_info = self.engine._contracts_info.get(symbol, {})
         min_qty = contract_info.get('minQty', 0)
         if min_qty <= 0:
             return signal.confidence
 
         min_order_value = min_qty * price
-        free_margin = data.get('available_margin', 0) or engine.portfolio.available_margin or 0
-        max_leverage = engine.risk_manager.max_leverage
+        free_margin = data.get('available_margin', 0) or self.engine.portfolio.available_margin or 0
+        max_leverage = self.engine.risk_manager.max_leverage
         required_margin = min_order_value / max_leverage
 
         if free_margin < required_margin:
@@ -42,11 +42,3 @@ class MicroLotFilter(BaseFilter):
             return 0.0
 
         return signal.confidence
-
-    def _get_engine(self):
-        import gc
-        from core.engine import TradingEngine
-        for obj in gc.get_objects():
-            if isinstance(obj, TradingEngine):
-                return obj
-        return None

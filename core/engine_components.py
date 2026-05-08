@@ -26,9 +26,9 @@ def init_components(engine):
 
 def load_all_modules(engine):
     logger.info("Loading modules...")
-    engine.strategies = _load_from_package('strategies', BaseStrategy)
-    engine.indicators = _load_from_package('indicators', BaseIndicator)
-    engine.filters = _load_from_package('filters', BaseFilter)
+    engine.strategies = _load_from_package('strategies', BaseStrategy, engine)
+    engine.indicators = _load_from_package('indicators', BaseIndicator, engine)
+    engine.filters = _load_from_package('filters', BaseFilter, engine)
 
     for name, strategy in engine.strategies.items():
         engine.voting.register_strategy(name, getattr(strategy, 'weight', 1))
@@ -36,7 +36,7 @@ def load_all_modules(engine):
     logger.info(f"Loaded: {len(engine.strategies)} strategies, {len(engine.indicators)} indicators, {len(engine.filters)} filters")
 
 
-def _load_from_package(package_name, base_class):
+def _load_from_package(package_name, base_class, engine=None):
     modules = {}
     try:
         package = importlib.import_module(package_name)
@@ -61,7 +61,11 @@ def _load_from_package(package_name, base_class):
             if name.startswith('Base'):
                 continue
             try:
-                instance = obj()
+                # Передаём engine в конструктор, если он ожидается
+                if engine is not None and inspect.signature(obj.__init__).parameters.get('engine'):
+                    instance = obj(engine=engine)
+                else:
+                    instance = obj()
                 modules[getattr(instance, 'NAME', name)] = instance
                 logger.info(f"  Loaded {base_class.__name__}: {getattr(instance, 'NAME', name)}")
             except Exception as e:

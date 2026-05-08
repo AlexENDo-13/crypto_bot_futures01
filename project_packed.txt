@@ -1,22 +1,22 @@
 === SYSTEM INFO ===
 {
-  "timestamp": "2026-05-07T23:11:18.328067+00:00",
+  "timestamp": "2026-05-08T00:51:53.652238+00:00",
   "os": "Windows-11-10.0.26100-SP0",
   "python_version": "3.12.13",
   "cpu": {
     "model": "AMD64 Family 23 Model 104 Stepping 1, AuthenticAMD",
     "cores_physical": 4,
     "cores_logical": 8,
-    "usage_percent": 4.9
+    "usage_percent": 16.5
   },
   "memory": {
     "total_gb": 11.35,
-    "available_gb": 3.57,
-    "percent_used": 68.6
+    "available_gb": 3.64,
+    "percent_used": 67.9
   },
   "disk": {
     "total_gb": 238.36,
-    "free_gb": 41.31,
+    "free_gb": 41.23,
     "percent_used": 82.7
   }
 }
@@ -153,6 +153,15 @@ scan_interval = 300
 volume_surge_min_mult = 0.5
 liquidity_min_ratio = 0.3
 
+[WHALE]
+enabled = true
+depth_threshold_mult = 3.0
+big_single_order_btc = 50
+trade_volume_spike_mult = 20
+alert_cooldown_min = 5
+auto_reduce_risk = true
+full_close_threshold_btc = 100
+
 [UI]
 language = ru
 theme = dark_teal
@@ -194,8 +203,6 @@ milestone_sound = sounds/milestone.wav
 auto_optimize = true
 optimize_interval_hours = 24
 metric = sharpe
-
-
 === END FILE: config.ini ===
 
 === BEGIN FILE: core\__init__.py ===
@@ -566,6 +573,7 @@ class BingXAPI:
     BALANCE = "/openApi/swap/v2/user/balance"
     POSITIONS = "/openApi/swap/v2/user/positions"
     ORDER = "/openApi/swap/v2/trade/order"
+    OPEN_ORDERS = "/openApi/swap/v2/trade/openOrders"  # Правильный эндпоинт
     LEVERAGE = "/openApi/swap/v2/trade/leverage"
     CONTRACTS = "/openApi/swap/v2/quote/contracts"
     KLINES = "/openApi/swap/v2/quote/klines"
@@ -692,8 +700,7 @@ class BingXAPI:
         params = {
             'symbol': symbol,
             'leverage': leverage,
-            'side': position_side,
-            'positionSide': position_side
+            'side': position_side
         }
         return self._request('POST', self.LEVERAGE, params)
 
@@ -758,8 +765,9 @@ class BingXAPI:
         params = {}
         if symbol:
             params['symbol'] = symbol
-        response = self._request('GET', self.ORDER, params)
-        return response.get('data', [])
+        response = self._request('GET', self.OPEN_ORDERS, params)
+        # Правильный путь к массиву ордеров: data.orders
+        return response.get('data', {}).get('orders', [])
 
     # Market Data
     def get_contracts(self) -> List[Dict]:
@@ -1286,13 +1294,33 @@ class TradingEngine:
         threading.Thread(target=_scan, daemon=True, name="ManualScan").start()
         logger.info("Manual scan started (async)")
 
+    # ---------- ИСПРАВЛЕННЫЙ МЕТОД ----------
     def close_position_manual(self, symbol, side, percent=None):
         try:
             if percent:
                 self.api.close_position_percent(symbol, side, percent)
+                # Получаем актуальные данные с биржи после частичного закрытия
+                positions = self.api.get_positions(symbol)
+                pos = next((p for p in positions if p.get('positionSide') == side), None)
+                if pos:
+                    new_qty = abs(float(pos.get('positionAmt', 0)))
+                    local_pos = next((p for p in self.portfolio.get_positions()
+                                      if p.symbol == symbol and p.side == side), None)
+                    if local_pos:
+                        local_pos.quantity = new_qty
+                        logger.info(f"Position {symbol} {side} partially closed, new qty: {new_qty}")
+                        # Перевыставляем TP/SL с новым количеством
+                        if local_pos.tp_price is not None and local_pos.sl_price is not None:
+                            self.executor._place_tpsl_orders(symbol, side, new_qty,
+                                                             local_pos.tp_price, local_pos.sl_price)
+                    else:
+                        logger.warning(f"Partial close: local position not found for {symbol} {side}")
+                else:
+                    # Позиция полностью закрылась
+                    self.portfolio.remove_position(symbol, side)
             else:
                 self.api.close_position(symbol, side)
-            self.portfolio.remove_position(symbol, side)
+                self.portfolio.remove_position(symbol, side)
         except Exception as e:
             logger.error(f"Manual close failed: {e}")
 
@@ -1769,6 +1797,7 @@ slippage protection and sound notifications.
 """
 import time
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -1782,9 +1811,28 @@ from core.portfolio import Position
 
 logger = logging.getLogger(__name__)
 
+
 class TradeExecutor:
     def __init__(self, engine):
         self.engine = engine
+
+    @staticmethod
+    def _is_tpsl_already_exists_error(exception: Exception) -> bool:
+        """
+        Проверяет, является ли ошибка следствием уже существующего TP/SL ордера.
+        Парсит JSON из сообщения исключения и ищет коды 110406 или 110407.
+        """
+        try:
+            error_str = str(exception)
+            # Ищем JSON-объект с полем "code" в строке ошибки
+            match = re.search(r'\{.*"code":\s*(\d+).*\}', error_str)
+            if match:
+                code = int(match.group(1))
+                return code in (110406, 110407)
+        except Exception:
+            pass
+        # Fallback: если JSON не найден, проверяем старую подстроку
+        return 'already exists' in str(exception).lower()
 
     # ------------------------------------------------------------------
     def execute(self, signal, entry_price, quantity, leverage, tp_price, sl_price):
@@ -1899,8 +1947,7 @@ class TradeExecutor:
         self._play_sound('trade_open')
         logger.info(f"Trade executed: {signal.symbol} {side} @ {actual_entry}, TP={final_tp}, SL={final_sl}")
 
-    # ... остальные методы остаются без изменений (apply_trailing_stop, apply_breakeven, apply_partial_close, _place_tpsl_orders, _simulate, _play_sound)
-    # Они полностью совпадают с предыдущей версией.
+    # ------------------------------------------------------------------
     def apply_trailing_stop(self, pos, current_price: float):
         atr = self.engine._get_current_atr(pos.symbol)
         price = current_price or pos.entry_price
@@ -1947,6 +1994,11 @@ class TradeExecutor:
                 pos.quantity -= close_qty
                 pos.partial_done = True
                 logger.info(f"Partial close {self.engine.partial_close_pct}% for {pos.symbol}")
+
+                # Перевыставить TP/SL с новым количеством
+                if pos.quantity > 0:
+                    self._place_tpsl_orders(pos.symbol, pos.side, pos.quantity, pos.tp_price, pos.sl_price)
+
                 self._play_sound('profit')
                 return True
             except Exception as e:
@@ -1955,22 +2007,47 @@ class TradeExecutor:
 
     def _place_tpsl_orders(self, symbol, pos_side, quantity, tp_price, sl_price):
         close_side = 'SELL' if pos_side == 'LONG' else 'BUY'
+
+        # 1. Отменяем все старые TP/SL ордера для этой стороны
+        try:
+            open_orders = self.engine.api.get_open_orders(symbol)
+            for o in open_orders:
+                if o.get('positionSide') == pos_side and o.get('type') in ('TAKE_PROFIT_MARKET', 'STOP_MARKET'):
+                    self.engine.api.cancel_order(symbol, o['orderId'])
+        except Exception as e:
+            logger.warning(f"Не удалось отменить старые TP/SL для {symbol}: {e}")
+
+        # 2. Создаём новые TP/SL, игнорируя ошибку "already exists"
         if tp_price is not None:
-            self.engine.api.place_order(
-                symbol=symbol, side=close_side, position_side=pos_side,
-                order_type='TAKE_PROFIT_MARKET', quantity=quantity, stop_price=tp_price
-            )
+            try:
+                self.engine.api.place_order(
+                    symbol=symbol, side=close_side, position_side=pos_side,
+                    order_type='TAKE_PROFIT_MARKET', quantity=quantity, stop_price=tp_price
+                )
+            except Exception as e:
+                if self._is_tpsl_already_exists_error(e):
+                    logger.debug(f"TP already exists for {symbol} {pos_side}, skipping creation")
+                else:
+                    logger.error(f"Failed to place TP for {symbol}: {e}")
+
         if sl_price is not None:
-            if pos_side == 'LONG' and sl_price >= tp_price:
-                logger.error(f"Invalid SL for LONG: {sl_price} >= TP {tp_price}, skipping SL order")
-                return
-            if pos_side == 'SHORT' and sl_price <= tp_price:
-                logger.error(f"Invalid SL for SHORT: {sl_price} <= TP {tp_price}, skipping SL order")
-                return
-            self.engine.api.place_order(
-                symbol=symbol, side=close_side, position_side=pos_side,
-                order_type='STOP_MARKET', quantity=quantity, stop_price=sl_price
-            )
+            if tp_price is not None:
+                if pos_side == 'LONG' and sl_price >= tp_price:
+                    logger.error(f"Invalid SL for LONG: {sl_price} >= TP {tp_price}, skipping SL order")
+                    return
+                if pos_side == 'SHORT' and sl_price <= tp_price:
+                    logger.error(f"Invalid SL for SHORT: {sl_price} <= TP {tp_price}, skipping SL order")
+                    return
+            try:
+                self.engine.api.place_order(
+                    symbol=symbol, side=close_side, position_side=pos_side,
+                    order_type='STOP_MARKET', quantity=quantity, stop_price=sl_price
+                )
+            except Exception as e:
+                if self._is_tpsl_already_exists_error(e):
+                    logger.debug(f"SL already exists for {symbol} {pos_side}, skipping creation")
+                else:
+                    logger.error(f"Failed to place SL for {symbol}: {e}")
 
     def _simulate(self, signal, entry_price, quantity, leverage, tp_price, sl_price):
         pos_side = "LONG" if signal.action == "BUY" else "SHORT"
@@ -2203,7 +2280,7 @@ from typing import Dict, Optional
 
 logger = logging.getLogger(__name__)
 
-CHECK_INTERVAL_SECONDS = 600  # каждые 10 минут
+CHECK_INTERVAL_SECONDS = 120  # уменьшено с 600 до 120 секунд для быстрой реакции
 
 
 class OrderGuard:
@@ -2211,9 +2288,8 @@ class OrderGuard:
         self.engine = engine
         self._running = False
         self._thread: Optional[threading.Thread] = None
-        # Кэш для подавления повторных попыток перевыставления при неудаче
         self._last_repair_attempt: Dict[str, float] = {}
-        self._min_repeat_interval = 300  # не пытаться чинить один и тот же ордер чаще 5 минут
+        self._min_repeat_interval = 300
 
     def start(self):
         if self._running:
@@ -2259,7 +2335,6 @@ class OrderGuard:
         if expected_tp is None and expected_sl is None:
             return
 
-        # Ключ для контроля частоты ремонта
         repair_key = f"{symbol}_{pos_side}"
 
         try:
@@ -2283,7 +2358,6 @@ class OrderGuard:
                 if stop_price and abs(float(stop_price) - expected_sl) < 1e-10:
                     sl_found = True
 
-        # Не чинить слишком часто
         now = time.time()
         last_attempt = self._last_repair_attempt.get(repair_key, 0)
         if now - last_attempt < self._min_repeat_interval:
@@ -2820,7 +2894,7 @@ class RiskController:
 === BEGIN FILE: core\risk_manager.py ===
 """
 Risk Management: position sizing, leverage, SL/TP calculation, Kelly criterion.
-Now with automatic low-balance protection and adaptive risk scaling.
+Now with automatic low-balance protection (Turbo & Conservative) and adaptive risk scaling.
 """
 import logging, json, os
 from datetime import datetime, timezone
@@ -2833,9 +2907,12 @@ DEFAULT_ATR_MULT_TP = 2.0
 MIN_SL_RATIO_LONG = 0.98
 MIN_SL_RATIO_SHORT = 1.02
 MIN_TP_RATIO = 0.005
-PROFILE_RISK_ORDER = ['Conservative', 'Balanced', 'Aggressive', 'Adaptive', 'User']
+PROFILE_RISK_ORDER = ['Conservative', 'Balanced', 'Aggressive', 'Adaptive', 'Turbo', 'User']
 
-LOW_BALANCE_THRESHOLD = 100.0   # Ниже этого – автоматический консервативный режим
+# Пороги для автоматического переключения профилей
+TURBO_BALANCE_THRESHOLD = 50.0      # Ниже этого – включаем Turbo (если не Conservative)
+TURBO_EXIT_THRESHOLD = 200.0        # Выше этого – выходим из Turbo
+LOW_BALANCE_CONSERVATIVE = 15.0     # Ниже этого – принудительный Conservative
 
 
 class RiskManager:
@@ -2846,7 +2923,9 @@ class RiskManager:
         self.max_leverage = 3
         self._night_mode = False
         self._current_profile = 'Balanced'
-        self._low_balance_mode = False           # флаг автоматического защитного режима
+        self._low_balance_mode = False           # флаг автоматического защитного режима (Conservative)
+        self._turbo_mode = False                 # флаг режима Turbo
+        self._previous_profile = None            # профиль до включения Turbo
         self._profiles = {
             'Conservative': {
                 'risk_per_trade_pct': 0.5,
@@ -2860,20 +2939,27 @@ class RiskManager:
                 'max_leverage': 3,
                 'atr_mult': {'sl': 2.2, 'tp': 3.8},
                 'daily_loss_limit_pct': 5.0,
-                'max_positions': 2,
+                'max_positions': 4,
             },
             'Aggressive': {
                 'risk_per_trade_pct': 3.0,
                 'max_leverage': 5,
                 'atr_mult': {'sl': 1.8, 'tp': 3.0},
                 'daily_loss_limit_pct': 8.0,
-                'max_positions': 4,
+                'max_positions': 6,
             },
             'Adaptive': {
                 'risk_per_trade_pct': 2.0,
                 'max_leverage': 3,
                 'atr_mult': {'sl': 2.0, 'tp': 3.5},
                 'daily_loss_limit_pct': 10.0,
+                'max_positions': 5,
+            },
+            'Turbo': {
+                'risk_per_trade_pct': 8.0,
+                'max_leverage': 10,
+                'atr_mult': {'sl': 1.2, 'tp': 2.5},
+                'daily_loss_limit_pct': 20.0,
                 'max_positions': 3,
             },
             'User': {
@@ -2905,24 +2991,46 @@ class RiskManager:
         self._base_leverage = self.max_leverage
         self._original_profile = None
         self._auto_loss_stage = 0
+
+        # Кэш статистики для динамического риска
+        self._trade_pnls = []   # последние 20 PnL сделок
+
         self._load_state()
 
     # ---------- Low-balance auto-protection ----------
     def check_low_balance(self, balance: float):
-        """Автоматически включает консервативный режим при низком балансе."""
+        """Автоматически включает Turbo или Conservative в зависимости от баланса."""
         if balance <= 0:
             return
-        if balance < LOW_BALANCE_THRESHOLD and not self._low_balance_mode:
-            logger.warning(f"Low balance ({balance:.2f} < {LOW_BALANCE_THRESHOLD}), activating protection")
+
+        # 1. Экстренная защита: очень низкий баланс → Conservative
+        if balance < LOW_BALANCE_CONSERVATIVE and not self._low_balance_mode:
+            logger.warning(f"Critical low balance ({balance:.2f} < {LOW_BALANCE_CONSERVATIVE}), activating Conservative protection")
             self._low_balance_mode = True
+            self._turbo_mode = False
             self.set_profile('Conservative')
-            # Дополнительно снижаем риск и плечо
             self.risk_per_trade_pct = 0.5
             self.max_leverage = 2
-        elif balance >= LOW_BALANCE_THRESHOLD and self._low_balance_mode:
-            logger.info(f"Balance restored ({balance:.2f}), returning to Balanced profile")
+            return
+        elif balance >= LOW_BALANCE_CONSERVATIVE and self._low_balance_mode:
+            logger.info(f"Balance recovered above critical level ({balance:.2f}), switching to Balanced")
             self._low_balance_mode = False
             self.set_profile('Balanced')
+            return
+
+        # 2. Режим Turbo для разгона маленького депозита
+        if balance < TURBO_BALANCE_THRESHOLD and not self._turbo_mode and not self._low_balance_mode:
+            logger.info(f"Low balance ({balance:.2f} < {TURBO_BALANCE_THRESHOLD}), activating Turbo mode")
+            self._turbo_mode = True
+            self._previous_profile = self._current_profile  # запоминаем, куда вернуться
+            self.set_profile('Turbo')
+        elif balance >= TURBO_EXIT_THRESHOLD and self._turbo_mode:
+            logger.info(f"Balance sufficient ({balance:.2f} >= {TURBO_EXIT_THRESHOLD}), exiting Turbo mode")
+            self._turbo_mode = False
+            # Возвращаемся на предыдущий профиль или Balanced
+            return_profile = self._previous_profile if self._previous_profile not in (None, 'Turbo', 'Conservative') else 'Balanced'
+            self.set_profile(return_profile)
+            self._previous_profile = None
 
     # ---------- Profiles ----------
     def set_profile(self, profile: str):
@@ -3021,26 +3129,58 @@ class RiskManager:
         elif atr_pct > 0.03:
             return max(1, self.max_leverage - 1)
         elif atr_pct < 0.01:
-            return min(5, self.max_leverage + 1)
+            return min(self.max_leverage, self.max_leverage + 1)
         return self.max_leverage
 
     def calculate_position_size(self, free_margin: float, entry_price: float,
                                 sl_price: float, confidence: float) -> Tuple[float, int]:
         if entry_price <= 0 or free_margin <= 0:
             return 0.0, 1
+
         risk_amount = free_margin * (self.risk_per_trade_pct / 100.0) * confidence
+
+        # --- Динамическое ускорение риска при хорошей статистике ---
+        if len(self._trade_pnls) >= 5:
+            wins = sum(1 for p in self._trade_pnls if p > 0)
+            winrate = wins / len(self._trade_pnls)
+            # Профит-фактор: средняя прибыль / средний убыток
+            positive = [p for p in self._trade_pnls if p > 0]
+            negative = [abs(p) for p in self._trade_pnls if p <= 0]
+            avg_win = sum(positive) / len(positive) if positive else 1.0
+            avg_loss = sum(negative) / len(negative) if negative else 1.0
+            profit_factor = avg_win / avg_loss if avg_loss > 0 else 2.0
+
+            if winrate > 0.6 and profit_factor > 1.5:
+                boost = 1.2
+                risk_amount *= boost
+                logger.debug(f"Dynamic risk boost: winrate={winrate:.1%}, PF={profit_factor:.2f}, boost={boost}")
+                # Ограничиваем сверху: не более 15% на сделку (даже для Turbo)
+                max_risk = free_margin * 0.15
+                if risk_amount > max_risk:
+                    risk_amount = max_risk
+
         sl_distance = abs(entry_price - sl_price)
         if sl_distance == 0:
             sl_distance = entry_price * 0.01
         quantity = risk_amount / sl_distance
         leverage = self.max_leverage
+
         if self._kelly_enabled:
             f = self._kelly_winrate - ((1 - self._kelly_winrate) / self._kelly_avg_win_loss_ratio)
             quantity *= max(0.1, f)
+
         required_margin = (quantity * entry_price) / leverage
         if required_margin > free_margin:
             quantity = (free_margin * leverage) / entry_price
+
         return quantity, leverage
+
+    # ---------- Статистика для динамического риска ----------
+    def record_trade_result(self, pnl: float):
+        """Сохраняет результат сделки для расчёта ускоряющего коэффициента."""
+        self._trade_pnls.append(pnl)
+        if len(self._trade_pnls) > 20:
+            self._trade_pnls.pop(0)
 
     def set_kelly_params(self, winrate: float, avg_win_loss_ratio: float, enabled: bool = True):
         self._kelly_winrate = winrate
@@ -3068,7 +3208,7 @@ class RiskManager:
     def adapt_to_volatility(self, current_atr_pct: float):
         if self._night_mode or self._low_balance_mode:
             return
-        if self.risk_per_trade_pct >= 2.5:
+        if self.risk_per_trade_pct >= 5.0:  # Не снижаем агрессивные профили
             return
         if current_atr_pct > 0.05:
             self.risk_per_trade_pct = max(0.5, self.risk_per_trade_pct * 0.7)
@@ -3135,7 +3275,8 @@ class RiskManager:
                 'winrate': self._kelly_winrate,
                 'avg_wl': self._kelly_avg_win_loss_ratio
             },
-            'user_params': self._profiles.get('User', {'risk_per_trade_pct': 2.0, 'max_leverage': 3})
+            'user_params': self._profiles.get('User', {'risk_per_trade_pct': 2.0, 'max_leverage': 3}),
+            'previous_profile': self._previous_profile,   # для восстановления после Turbo
         }
         try:
             os.makedirs(os.path.dirname(self.STATE_FILE), exist_ok=True)
@@ -3160,6 +3301,7 @@ class RiskManager:
                 'risk_per_trade_pct': user_params['risk_per_trade_pct'],
                 'max_leverage': user_params['max_leverage']
             }
+            self._previous_profile = data.get('previous_profile')
             logger.info("Risk state loaded")
         except Exception as e:
             logger.error(f"Failed to load risk state: {e}")
@@ -3671,6 +3813,7 @@ corrects TP/SL orders, enforces maximum position limit, records closed trades,
 and supports smart replacement of weakest positions.
 """
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -3678,10 +3821,28 @@ from core.portfolio import Position, TradeRecord
 
 logger = logging.getLogger(__name__)
 
+
 class PositionSyncManager:
     def __init__(self, engine):
         self.engine = engine
+        # Кэш теперь хранит словари {'tp': ..., 'sl': ..., 'qty': ...}
         self._tpsl_cache = {}
+
+    @staticmethod
+    def _is_tpsl_already_exists_error(exception: Exception) -> bool:
+        """
+        Проверяет, является ли ошибка следствием уже существующего TP/SL ордера.
+        Парсит JSON из сообщения исключения и ищет коды 110406 или 110407.
+        """
+        try:
+            error_str = str(exception)
+            match = re.search(r'\{.*"code":\s*(\d+).*\}', error_str)
+            if match:
+                code = int(match.group(1))
+                return code in (110406, 110407)
+        except Exception:
+            pass
+        return 'already exists' in str(exception).lower()
 
     def full_sync(self):
         if self.engine.auth.demo_mode:
@@ -3722,9 +3883,10 @@ class PositionSyncManager:
                         open_time=datetime.now(timezone.utc).isoformat()
                     )
                     self.engine.portfolio.add_position(pos)
-                    self._tpsl_cache[f"{symbol}_{pos_side}"] = (tp_price, sl_price)
+                    self._tpsl_cache[f"{symbol}_{pos_side}"] = {
+                        'tp': tp_price, 'sl': sl_price, 'qty': qty
+                    }
 
-            # --- Защита от дубликатов на бирже: если есть и LONG, и SHORT по одному символу ---
             self._remove_duplicate_positions()
             self._enforce_limit()
         except Exception as e:
@@ -3752,6 +3914,7 @@ class PositionSyncManager:
                     )
                     self.engine.portfolio.record_trade(trade)
                     self.engine.risk_manager.update_adaptive_risk(pnl)
+                    self.engine.risk_manager.record_trade_result(pnl)   # ← для динамического риска
                     self.engine.portfolio.remove_position(pos.symbol, pos.side)
                     cache_key = f"{pos.symbol}_{pos.side}"
                     if cache_key in self._tpsl_cache:
@@ -3806,9 +3969,10 @@ class PositionSyncManager:
                         open_time=datetime.now(timezone.utc).isoformat()
                     )
                     self.engine.portfolio.add_position(pos)
-                    self._tpsl_cache[f"{symbol}_{pos_side}"] = (sl_tp['tp2'], sl_tp['sl'])
+                    self._tpsl_cache[f"{symbol}_{pos_side}"] = {
+                        'tp': sl_tp['tp2'], 'sl': sl_tp['sl'], 'qty': qty
+                    }
 
-            # --- Убираем дубликаты ---
             self._remove_duplicate_positions()
             self._enforce_limit()
 
@@ -3816,7 +3980,6 @@ class PositionSyncManager:
             logger.exception("Background sync crashed")
 
     def _remove_duplicate_positions(self):
-        """Если на бирже есть и LONG, и SHORT по одному символу, закрываем одну из них."""
         positions = self.engine.portfolio.get_positions()
         symbols_seen = set()
         for pos in list(positions):
@@ -3855,7 +4018,6 @@ class PositionSyncManager:
             return True
 
         now = datetime.now(timezone.utc)
-        # Не трогаем позиции младше 60 секунд
         for pos in positions:
             try:
                 open_t = datetime.fromisoformat(pos.open_time)
@@ -3937,12 +4099,13 @@ class PositionSyncManager:
 
     def _sync_tpsl_orders(self, symbol, pos_side, quantity, expected_tp, expected_sl):
         cache_key = f"{symbol}_{pos_side}"
-        cached_tp, cached_sl = self._tpsl_cache.get(cache_key, (None, None))
-
-        if cached_tp == expected_tp and cached_sl == expected_sl:
+        cached = self._tpsl_cache.get(cache_key)
+        # Сравниваем все три параметра
+        if (cached and cached['tp'] == expected_tp and cached['sl'] == expected_sl and cached['qty'] == quantity):
             return
 
         try:
+            # Отменяем все существующие TP/SL ордера для этой стороны
             orders = self.engine.api.get_open_orders(symbol)
             for o in orders:
                 if o.get('positionSide') != pos_side:
@@ -3956,23 +4119,38 @@ class PositionSyncManager:
 
             close_side = 'SELL' if pos_side == 'LONG' else 'BUY'
             if expected_tp is not None:
-                self.engine.api.place_order(
-                    symbol=symbol, side=close_side, position_side=pos_side,
-                    order_type='TAKE_PROFIT_MARKET', quantity=quantity,
-                    stop_price=expected_tp
-                )
+                try:
+                    self.engine.api.place_order(
+                        symbol=symbol, side=close_side, position_side=pos_side,
+                        order_type='TAKE_PROFIT_MARKET', quantity=quantity,
+                        stop_price=expected_tp
+                    )
+                except Exception as e:
+                    if self._is_tpsl_already_exists_error(e):
+                        logger.debug(f"TP already exists for {symbol}, skip")
+                    else:
+                        logger.error(f"TP order failed for {symbol}: {e}")
+
             if expected_sl is not None:
                 if (pos_side == 'LONG' and expected_sl >= expected_tp) or \
                    (pos_side == 'SHORT' and expected_sl <= expected_tp):
                     logger.warning(f"Invalid SL {expected_sl} relative to TP {expected_tp}, skipping SL order")
                 else:
-                    self.engine.api.place_order(
-                        symbol=symbol, side=close_side, position_side=pos_side,
-                        order_type='STOP_MARKET', quantity=quantity,
-                        stop_price=expected_sl
-                    )
+                    try:
+                        self.engine.api.place_order(
+                            symbol=symbol, side=close_side, position_side=pos_side,
+                            order_type='STOP_MARKET', quantity=quantity,
+                            stop_price=expected_sl
+                        )
+                    except Exception as e:
+                        if self._is_tpsl_already_exists_error(e):
+                            logger.debug(f"SL already exists for {symbol}, skip")
+                        else:
+                            logger.error(f"SL order failed for {symbol}: {e}")
 
-            self._tpsl_cache[cache_key] = (expected_tp, expected_sl)
+            self._tpsl_cache[cache_key] = {
+                'tp': expected_tp, 'sl': expected_sl, 'qty': quantity
+            }
         except Exception as e:
             logger.error(f"Failed to sync TP/SL orders for {symbol}: {e}")
 
@@ -4381,11 +4559,198 @@ class Watchdog:
 
 === END FILE: core\watchdog.py ===
 
+=== BEGIN FILE: core\whale_shield.py ===
+"""
+Whale Shield – автоматическая защита от крупных манипуляций.
+Обнаруживает аномальные объёмы в стакане и ленте сделок,
+закрывает или переводит позицию в безубыток.
+"""
+import logging
+import time
+import threading
+from datetime import datetime, timezone
+from typing import Dict, Optional
+
+logger = logging.getLogger(__name__)
+
+# Константы по умолчанию
+DEPTH_THRESHOLD_MULT = 3.0          # Во сколько раз объем стакана превысил средний
+BIG_SINGLE_ORDER_BTC = 50           # Размер ордера (в BTC эквиваленте), считающийся китовым
+TRADE_VOLUME_SPIKE_MULT = 20        # Множитель объёма сделки для срабатывания
+FULL_CLOSE_THRESHOLD_BTC = 100      # Сумма ордеров, при которой позиция закрывается полностью
+CHECK_INTERVAL_SECONDS = 10         # Период опроса стакана
+ALERT_COOLDOWN_MINUTES = 5          # Интервал между повторными алертами
+
+
+class WhaleShield:
+    """Обнаруживает вход крупных игроков и немедленно защищает позиции."""
+
+    def __init__(self, engine):
+        self.engine = engine
+        self._running = False
+        self._thread: Optional[threading.Thread] = None
+        self._avg_depth_volumes: Dict[str, float] = {}   # символ -> средний объём стакана
+        self._avg_trade_volumes: Dict[str, float] = {}    # символ -> средний объём сделок
+        self._last_alert_time: Dict[str, float] = {}     # символ -> время последнего алерта
+        self._depth_history: Dict[str, list] = {}         # история объёмов стакана
+        self._trade_history: Dict[str, list] = {}         # история объёмов сделок
+
+    def start(self):
+        if self._running:
+            return
+        self._running = True
+        self._thread = threading.Thread(target=self._loop, daemon=True, name="WhaleShield")
+        self._thread.start()
+        logger.info("WhaleShield started (check every %ds)", CHECK_INTERVAL_SECONDS)
+
+    def stop(self):
+        self._running = False
+        if self._thread:
+            self._thread.join(timeout=5)
+
+    def _loop(self):
+        while self._running:
+            try:
+                self._check_open_positions()
+            except Exception as e:
+                logger.error(f"WhaleShield error: {e}")
+            time.sleep(CHECK_INTERVAL_SECONDS)
+
+    def _check_open_positions(self):
+        if self.engine.auth.demo_mode:
+            return
+        positions = self.engine.portfolio.get_positions()
+        if not positions:
+            return
+
+        for pos in positions:
+            try:
+                self._protect_position(pos)
+            except Exception as e:
+                logger.debug(f"WhaleShield check failed for {pos.symbol}: {e}")
+
+    def _protect_position(self, pos):
+        symbol = pos.symbol
+        now = time.time()
+
+        # Сбор данных
+        try:
+            depth = self.engine.api.get_depth(symbol, limit=20)
+            trades = self.engine.api.get_ticker(symbol)  # или trades, если доступен
+        except Exception as e:
+            logger.debug(f"WhaleShield cannot fetch data for {symbol}: {e}")
+            return
+
+        # Расчёт объёмов стакана
+        asks_vol = sum(float(a[1]) for a in depth.get('data', {}).get('asks', []))
+        bids_vol = sum(float(b[1]) for b in depth.get('data', {}).get('bids', []))
+        total_depth_vol = asks_vol + bids_vol
+
+        # Обновление истории
+        if symbol not in self._depth_history:
+            self._depth_history[symbol] = []
+        self._depth_history[symbol].append(total_depth_vol)
+        if len(self._depth_history[symbol]) > 30:
+            self._depth_history[symbol].pop(0)
+
+        if symbol not in self._trade_history:
+            self._trade_history[symbol] = []
+        # Анализируем объём последней сделки
+        last_qty = float(trades.get('data', {}).get('volume', 0))
+        self._trade_history[symbol].append(last_qty)
+        if len(self._trade_history[symbol]) > 30:
+            self._trade_history[symbol].pop(0)
+
+        # Средние значения
+        if len(self._depth_history[symbol]) >= 10:
+            self._avg_depth_volumes[symbol] = sum(self._depth_history[symbol][-10:]) / 10
+        if len(self._trade_history[symbol]) >= 10:
+            self._avg_trade_volumes[symbol] = sum(self._trade_history[symbol][-10:]) / 10
+
+        # --- Оценка аномалии ---
+        threat_level = 0
+
+        # 1. Аномальный объём стакана
+        avg_depth = self._avg_depth_volumes.get(symbol, 1)
+        if avg_depth > 0 and total_depth_vol > avg_depth * DEPTH_THRESHOLD_MULT:
+            threat_level += 3
+            logger.info(f"WhaleShield: depth spike on {symbol} ({total_depth_vol} vs avg {avg_depth})")
+
+        # 2. Крупный одиночный ордер в стакане
+        max_bid_qty = max((float(b[1]) for b in depth.get('data', {}).get('bids', [])), default=0)
+        max_ask_qty = max((float(a[1]) for a in depth.get('data', {}).get('asks', [])), default=0)
+        # Конвертация в BTC эквивалент (грубо)
+        price = self.engine._get_current_price(symbol) or 1
+        max_order_btc = max(max_bid_qty, max_ask_qty) * price / 50000  # допускаем, что 1 BTC = 50000 USDT
+        if max_order_btc > BIG_SINGLE_ORDER_BTC:
+            threat_level += 5
+            logger.warning(f"WhaleShield: single giant order on {symbol} ({max_order_btc:.1f} BTC eq.)")
+
+        # 3. Всплеск объёма сделок
+        avg_trade = self._avg_trade_volumes.get(symbol, 1)
+        if avg_trade > 0 and last_qty > avg_trade * TRADE_VOLUME_SPIKE_MULT:
+            threat_level += 2
+            logger.info(f"WhaleShield: trade volume spike on {symbol} ({last_qty} vs avg {avg_trade})")
+
+        # 4. Критический уровень – полное закрытие
+        if max_order_btc > FULL_CLOSE_THRESHOLD_BTC:
+            threat_level = 10  # максимальная тревога
+
+        if threat_level == 0:
+            return
+
+        # Проверка кулдауна на спам алертами
+        last_alert = self._last_alert_time.get(symbol, 0)
+        if now - last_alert < ALERT_COOLDOWN_MINUTES * 60 and threat_level < 10:
+            return
+
+        self._last_alert_time[symbol] = now
+
+        # --- Реакция ---
+        if threat_level >= 10:
+            # Полное закрытие позиции
+            logger.critical(f"WhaleShield: EMERGENCY CLOSE {pos.symbol} {pos.side} (threat={threat_level})")
+            try:
+                self.engine.executor.api.close_position(pos.symbol, pos.side)
+                self.engine.portfolio.remove_position(pos.symbol, pos.side)
+                if hasattr(self.engine, 'telegram'):
+                    self.engine.telegram.send_message(f"🚨 WhaleShield экстренно закрыл {symbol} {pos.side}")
+            except Exception as e:
+                logger.error(f"WhaleShield emergency close failed: {e}")
+        elif threat_level >= 5:
+            # Закрыть 50% позиции
+            try:
+                close_qty = pos.quantity * 0.5
+                self.engine.executor.api.close_position(pos.symbol, pos.side, close_qty)
+                pos.quantity -= close_qty
+                if pos.quantity > 0:
+                    self.engine.executor._place_tpsl_orders(pos.symbol, pos.side, pos.quantity,
+                                                            pos.tp_price, pos.sl_price)
+                logger.warning(f"WhaleShield: 50% close on {symbol} (threat={threat_level})")
+                if hasattr(self.engine, 'telegram'):
+                    self.engine.telegram.send_message(f"⚠️ WhaleShield закрыл 50% {symbol} {pos.side}")
+            except Exception as e:
+                logger.error(f"WhaleShield partial close failed: {e}")
+        elif threat_level >= 3:
+            # Подтянуть SL в безубыток (или очень близко)
+            if pos.side == 'LONG':
+                new_sl = pos.entry_price * 1.001
+            else:
+                new_sl = pos.entry_price * 0.999
+            pos.sl_price = new_sl
+            self.engine.executor._place_tpsl_orders(pos.symbol, pos.side, pos.quantity,
+                                                    pos.tp_price, new_sl)
+            logger.info(f"WhaleShield: moved SL to breakeven on {symbol}")
+            if hasattr(self.engine, 'telegram'):
+                self.engine.telegram.send_message(f"🔒 WhaleShield перевёл SL в БУ по {symbol}")
+
+=== END FILE: core\whale_shield.py ===
+
 === BEGIN FILE: data\engine_state.json ===
 {
   "daily_pnl": 0.0,
   "last_day": 6,
-  "updated": "2026-05-07T23:10:35.120097+00:00"
+  "updated": "2026-05-07T23:21:39.724645+00:00"
 }
 === END FILE: data\engine_state.json ===
 
@@ -6184,7 +6549,7 @@ def main():
         dc_channel = cfg.getint('DISCORD', 'channel_id', fallback=0)
         dc_enabled = cfg.getboolean('DISCORD', 'enabled', fallback=False)
         if dc_enabled and dc_token and dc_channel:
-            from discord_bot import DiscordBot
+            from discord.bot import DiscordBot
             engine.discord = DiscordBot(dc_token, dc_channel, engine)
             engine.discord.start()
             logging.info("Discord bot started")
@@ -6307,6 +6672,19 @@ def main():
         logging.info("VoiceAlerter started")
     except Exception as e:
         logging.warning(f"VoiceAlerter not started: {e}")
+
+    # -------------------- WHALE SHIELD --------------------
+    try:
+        whale_enabled = cfg.getboolean('WHALE', 'enabled', fallback=True)
+        if whale_enabled and not auth.demo_mode:
+            from core.whale_shield import WhaleShield
+            engine.whale_shield = WhaleShield(engine)
+            engine.whale_shield.start()
+            logging.info("WhaleShield started")
+        else:
+            logging.info("WhaleShield disabled (demo mode or config)")
+    except Exception as e:
+        logging.warning(f"WhaleShield not started: {e}")
 
     if args.console:
         engine.start()
@@ -7350,6 +7728,7 @@ class StressTestRunner:
 """
 Sliding backtest: continuously evaluates current strategy set on recent data.
 Fixed: computes relative PnL, uses realistic scaling, no longer crashes weights.
+Also syncs backtest-adjusted weights with VotingSystem.
 """
 import logging
 import threading
@@ -7443,7 +7822,12 @@ class SlidingBacktest:
                 new_weight = old_weight + adjustment
                 new_weight = max(0.1, min(3.0, new_weight))
                 self.engine.strategies[name].weight = new_weight
+                # Синхронизируем с VotingSystem
+                if name in self.engine.voting._weights:
+                    self.engine.voting._weights[name]['weight'] = new_weight
                 logger.debug(f"Backtest weight adjusted for {name}: {old_weight:.2f} -> {new_weight:.2f} (score={score:.2f})")
+        # Сохраняем обновлённые веса
+        self.engine.voting._save_weights()
 
     def get_results(self):
         return self._results.copy()
@@ -8312,6 +8696,157 @@ class RSIDivergenceStrategy(BaseStrategy):
         return None
 
 === END FILE: strategies\rsi_divergence.py ===
+
+=== BEGIN FILE: strategies\smart_pyramiding.py ===
+"""
+Smart Pyramiding Strategy – наращивает позицию в сторону тренда при подтверждении.
+Заменяет скальпинг, не нарушает лимиты API.
+"""
+import logging
+import pandas as pd
+from datetime import datetime, timezone
+from typing import Optional
+
+from strategies.base import BaseStrategy, Signal
+from indicators.base import EMA, ATR, ADX
+
+logger = logging.getLogger(__name__)
+
+
+class SmartPyramidingStrategy(BaseStrategy):
+    NAME = "SmartPyramiding"
+    DESCRIPTION = "Пирамидинг в сторону сильного тренда с подтверждением Whale Shield"
+    VERSION = "1.0.0"
+
+    PARAMS = {
+        'enabled': True,
+        'weight': 0.9,
+        'timeframes': ['1h'],
+        'ema_fast': 20,
+        'ema_slow': 50,
+        'adx_period': 14,
+        'min_adx': 25,
+        'atr_period': 14,
+        'pyramid_max_additions': 3,   # максимальное количество добавлений к позиции
+        'pyramid_profit_threshold': 0.02,  # 2% прибыли от текущей позиции для добавления
+    }
+
+    def __init__(self, params=None):
+        super().__init__(params)
+        self.ema_fast = EMA({'period': self.config['ema_fast']})
+        self.ema_slow = EMA({'period': self.config['ema_slow']})
+        self.adx = ADX({'period': self.config['adx_period']})
+        self.atr = ATR({'period': self.config['atr_period']})
+        self._pyramid_counters = {}  # symbol_side -> количество добавлений
+
+    def evaluate(self, symbol: str, timeframe: str, candles: pd.DataFrame) -> Optional[Signal]:
+        if len(candles) < self.config['ema_slow'] + 10:
+            return None
+
+        # Индикаторы
+        ema_fast_vals = self.ema_fast.calculate(candles)
+        ema_slow_vals = self.ema_slow.calculate(candles)
+        adx_vals = self.adx.calculate(candles)
+        atr_vals = self.atr.calculate(candles)
+
+        current_price = candles['close'].iloc[-1]
+        prev_price = candles['close'].iloc[-2]
+
+        # Тренд определяется пересечением EMA
+        fast_above_slow = ema_fast_vals.iloc[-1] > ema_slow_vals.iloc[-1]
+        prev_fast_above = ema_fast_vals.iloc[-2] > ema_slow_vals.iloc[-2]
+        adx_value = adx_vals.iloc[-1] if not adx_vals.empty else 0
+
+        # Сильный тренд
+        strong_trend_up = fast_above_slow and adx_value > self.config['min_adx']
+        strong_trend_down = not fast_above_slow and adx_value > self.config['min_adx']
+
+        # Проверка пирамидинга: есть ли уже позиция по этому символу
+        engine = self._get_engine()
+        if engine is None:
+            return None
+
+        existing_positions = engine.portfolio.get_positions()
+        current_pos = next((p for p in existing_positions if p.symbol == symbol), None)
+
+        # Если позиции нет — первичный вход по тренду
+        if current_pos is None:
+            if strong_trend_up:
+                # Проверка, что Whale Shield не блокирует (если активен)
+                if not self._is_whale_safe(symbol, engine):
+                    return None
+                confidence = self._calc_confidence(adx_value, True, atr_vals.iloc[-1], current_price)
+                return Signal(
+                    symbol=symbol, action='BUY', confidence=confidence,
+                    meta={'reason': 'SmartPyramiding initial BUY trend'}
+                )
+            elif strong_trend_down:
+                if not self._is_whale_safe(symbol, engine):
+                    return None
+                confidence = self._calc_confidence(adx_value, False, atr_vals.iloc[-1], current_price)
+                return Signal(
+                    symbol=symbol, action='SELL', confidence=confidence,
+                    meta={'reason': 'SmartPyramiding initial SELL trend'}
+                )
+        else:
+            # Позиция уже есть — проверка на добавление (пирамидинг)
+            key = f"{symbol}_{current_pos.side}"
+            pyramid_count = self._pyramid_counters.get(key, 0)
+            if pyramid_count >= self.config['pyramid_max_additions']:
+                return None  # больше не добавляем
+
+            # Условие: позиция в плюсе > порога
+            if current_pos.pnl_pct >= self.config['pyramid_profit_threshold'] * 100:
+                # Подтверждение тренда всё ещё есть
+                if current_pos.side == 'LONG' and strong_trend_up:
+                    if not self._is_whale_safe(symbol, engine):
+                        return None
+                    self._pyramid_counters[key] = pyramid_count + 1
+                    confidence = self._calc_confidence(adx_value, True, atr_vals.iloc[-1], current_price) * 0.8
+                    return Signal(
+                        symbol=symbol, action='BUY', confidence=confidence,
+                        meta={'reason': f'SmartPyramiding add #{pyramid_count+1} to LONG'}
+                    )
+                elif current_pos.side == 'SHORT' and strong_trend_down:
+                    if not self._is_whale_safe(symbol, engine):
+                        return None
+                    self._pyramid_counters[key] = pyramid_count + 1
+                    confidence = self._calc_confidence(adx_value, False, atr_vals.iloc[-1], current_price) * 0.8
+                    return Signal(
+                        symbol=symbol, action='SELL', confidence=confidence,
+                        meta={'reason': f'SmartPyramiding add #{pyramid_count+1} to SHORT'}
+                    )
+        return None
+
+    def _calc_confidence(self, adx: float, is_bullish: bool, atr: float, price: float) -> float:
+        conf = 0.5
+        conf += min(0.3, (adx - self.config['min_adx']) / 50)
+        atr_pct = atr / price if price > 0 else 0
+        if 0.01 < atr_pct < 0.05:
+            conf += 0.1
+        return min(1.0, max(0.1, conf))
+
+    def _is_whale_safe(self, symbol: str, engine) -> bool:
+        """Проверяет, не блокирует ли Whale Shield этот символ."""
+        if hasattr(engine, 'whale_shield') and engine.whale_shield._running:
+            # Если Whale Shield активен, проверяем, нет ли недавнего алерта
+            last_alert = engine.whale_shield._last_alert_time.get(symbol, 0)
+            import time
+            if time.time() - last_alert < 60 * engine.whale_shield.ALERT_COOLDOWN_MINUTES:
+                logger.debug(f"SmartPyramiding blocked by Whale Shield for {symbol}")
+                return False
+        return True
+
+    def _get_engine(self):
+        """Получает ссылку на движок."""
+        import gc
+        from core.engine import TradingEngine
+        for obj in gc.get_objects():
+            if isinstance(obj, TradingEngine):
+                return obj
+        return None
+
+=== END FILE: strategies\smart_pyramiding.py ===
 
 === BEGIN FILE: strategies\squeeze_strategy.py ===
 from strategies.base import BaseStrategy, Signal
@@ -11645,8 +12180,17 @@ class TradingViewWebhook:
                         'price': engine._get_current_price(symbol),
                         'strategy': 'TradingView',
                     })
-                    # Передаём сигнал в обработчик сигналов движка
-                    engine.signal_processor.process(signal, {})
+                    # Получаем свечи для корректной работы фильтров
+                    all_candles = {}
+                    try:
+                        for tf in engine.timeframes:
+                            df = engine.api.get_klines_dataframe(symbol, tf, limit=200)
+                            if not df.empty:
+                                all_candles[tf] = df
+                    except Exception as e:
+                        logger.warning(f"Не удалось получить свечи для вебхука {symbol}: {e}")
+                    # Передаём сигнал с контекстом
+                    engine.signal_processor.process(signal, all_candles if all_candles else {})
             def log_message(self, format, *args):
                 pass
         return Handler

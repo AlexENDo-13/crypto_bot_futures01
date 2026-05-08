@@ -155,7 +155,7 @@ def main():
         dc_channel = cfg.getint('DISCORD', 'channel_id', fallback=0)
         dc_enabled = cfg.getboolean('DISCORD', 'enabled', fallback=False)
         if dc_enabled and dc_token and dc_channel:
-            from discord_bot import DiscordBot
+            from discord.bot import DiscordBot
             engine.discord = DiscordBot(dc_token, dc_channel, engine)
             engine.discord.start()
             logging.info("Discord bot started")
@@ -278,6 +278,19 @@ def main():
         logging.info("VoiceAlerter started")
     except Exception as e:
         logging.warning(f"VoiceAlerter not started: {e}")
+
+    # -------------------- WHALE SHIELD --------------------
+    try:
+        whale_enabled = cfg.getboolean('WHALE', 'enabled', fallback=True)
+        if whale_enabled and not auth.demo_mode:
+            from core.whale_shield import WhaleShield
+            engine.whale_shield = WhaleShield(engine)
+            engine.whale_shield.start()
+            logging.info("WhaleShield started")
+        else:
+            logging.info("WhaleShield disabled (demo mode or config)")
+    except Exception as e:
+        logging.warning(f"WhaleShield not started: {e}")
 
     if args.console:
         engine.start()

@@ -1,6 +1,6 @@
 """
 Risk Management: position sizing, leverage, SL/TP calculation, Kelly criterion.
-Now with automatic low-balance protection and adaptive risk scaling.
+Now with automatic low-balance protection (Turbo & Conservative) and adaptive risk scaling.
 """
 import logging, json, os
 from datetime import datetime, timezone
@@ -13,9 +13,12 @@ DEFAULT_ATR_MULT_TP = 2.0
 MIN_SL_RATIO_LONG = 0.98
 MIN_SL_RATIO_SHORT = 1.02
 MIN_TP_RATIO = 0.005
-PROFILE_RISK_ORDER = ['Conservative', 'Balanced', 'Aggressive', 'Adaptive', 'User']
+PROFILE_RISK_ORDER = ['Conservative', 'Balanced', 'Aggressive', 'Adaptive', 'Turbo', 'User']
 
-LOW_BALANCE_THRESHOLD = 100.0   # Ниже этого – автоматический консервативный режим
+# Пороги для автоматического переключения профилей
+TURBO_BALANCE_THRESHOLD = 50.0      # Ниже этого – включаем Turbo (если не Conservative)
+TURBO_EXIT_THRESHOLD = 200.0        # Выше этого – выходим из Turbo
+LOW_BALANCE_CONSERVATIVE = 15.0     # Ниже этого – принудительный Conservative
 
 
 class RiskManager:
@@ -26,7 +29,9 @@ class RiskManager:
         self.max_leverage = 3
         self._night_mode = False
         self._current_profile = 'Balanced'
-        self._low_balance_mode = False           # флаг автоматического защитного режима
+        self._low_balance_mode = False           # флаг автоматического защитного режима (Conservative)
+        self._turbo_mode = False                 # флаг режима Turbo
+        self._previous_profile = None            # профиль до включения Turbo
         self._profiles = {
             'Conservative': {
                 'risk_per_trade_pct': 0.5,
@@ -40,20 +45,27 @@ class RiskManager:
                 'max_leverage': 3,
                 'atr_mult': {'sl': 2.2, 'tp': 3.8},
                 'daily_loss_limit_pct': 5.0,
-                'max_positions': 2,
+                'max_positions': 4,
             },
             'Aggressive': {
                 'risk_per_trade_pct': 3.0,
                 'max_leverage': 5,
                 'atr_mult': {'sl': 1.8, 'tp': 3.0},
                 'daily_loss_limit_pct': 8.0,
-                'max_positions': 4,
+                'max_positions': 6,
             },
             'Adaptive': {
                 'risk_per_trade_pct': 2.0,
                 'max_leverage': 3,
                 'atr_mult': {'sl': 2.0, 'tp': 3.5},
                 'daily_loss_limit_pct': 10.0,
+                'max_positions': 5,
+            },
+            'Turbo': {
+                'risk_per_trade_pct': 8.0,
+                'max_leverage': 10,
+                'atr_mult': {'sl': 1.2, 'tp': 2.5},
+                'daily_loss_limit_pct': 20.0,
                 'max_positions': 3,
             },
             'User': {
@@ -85,24 +97,46 @@ class RiskManager:
         self._base_leverage = self.max_leverage
         self._original_profile = None
         self._auto_loss_stage = 0
+
+        # Кэш статистики для динамического риска
+        self._trade_pnls = []   # последние 20 PnL сделок
+
         self._load_state()
 
     # ---------- Low-balance auto-protection ----------
     def check_low_balance(self, balance: float):
-        """Автоматически включает консервативный режим при низком балансе."""
+        """Автоматически включает Turbo или Conservative в зависимости от баланса."""
         if balance <= 0:
             return
-        if balance < LOW_BALANCE_THRESHOLD and not self._low_balance_mode:
-            logger.warning(f"Low balance ({balance:.2f} < {LOW_BALANCE_THRESHOLD}), activating protection")
+
+        # 1. Экстренная защита: очень низкий баланс → Conservative
+        if balance < LOW_BALANCE_CONSERVATIVE and not self._low_balance_mode:
+            logger.warning(f"Critical low balance ({balance:.2f} < {LOW_BALANCE_CONSERVATIVE}), activating Conservative protection")
             self._low_balance_mode = True
+            self._turbo_mode = False
             self.set_profile('Conservative')
-            # Дополнительно снижаем риск и плечо
             self.risk_per_trade_pct = 0.5
             self.max_leverage = 2
-        elif balance >= LOW_BALANCE_THRESHOLD and self._low_balance_mode:
-            logger.info(f"Balance restored ({balance:.2f}), returning to Balanced profile")
+            return
+        elif balance >= LOW_BALANCE_CONSERVATIVE and self._low_balance_mode:
+            logger.info(f"Balance recovered above critical level ({balance:.2f}), switching to Balanced")
             self._low_balance_mode = False
             self.set_profile('Balanced')
+            return
+
+        # 2. Режим Turbo для разгона маленького депозита
+        if balance < TURBO_BALANCE_THRESHOLD and not self._turbo_mode and not self._low_balance_mode:
+            logger.info(f"Low balance ({balance:.2f} < {TURBO_BALANCE_THRESHOLD}), activating Turbo mode")
+            self._turbo_mode = True
+            self._previous_profile = self._current_profile  # запоминаем, куда вернуться
+            self.set_profile('Turbo')
+        elif balance >= TURBO_EXIT_THRESHOLD and self._turbo_mode:
+            logger.info(f"Balance sufficient ({balance:.2f} >= {TURBO_EXIT_THRESHOLD}), exiting Turbo mode")
+            self._turbo_mode = False
+            # Возвращаемся на предыдущий профиль или Balanced
+            return_profile = self._previous_profile if self._previous_profile not in (None, 'Turbo', 'Conservative') else 'Balanced'
+            self.set_profile(return_profile)
+            self._previous_profile = None
 
     # ---------- Profiles ----------
     def set_profile(self, profile: str):
@@ -201,26 +235,58 @@ class RiskManager:
         elif atr_pct > 0.03:
             return max(1, self.max_leverage - 1)
         elif atr_pct < 0.01:
-            return min(5, self.max_leverage + 1)
+            return min(self.max_leverage, self.max_leverage + 1)
         return self.max_leverage
 
     def calculate_position_size(self, free_margin: float, entry_price: float,
                                 sl_price: float, confidence: float) -> Tuple[float, int]:
         if entry_price <= 0 or free_margin <= 0:
             return 0.0, 1
+
         risk_amount = free_margin * (self.risk_per_trade_pct / 100.0) * confidence
+
+        # --- Динамическое ускорение риска при хорошей статистике ---
+        if len(self._trade_pnls) >= 5:
+            wins = sum(1 for p in self._trade_pnls if p > 0)
+            winrate = wins / len(self._trade_pnls)
+            # Профит-фактор: средняя прибыль / средний убыток
+            positive = [p for p in self._trade_pnls if p > 0]
+            negative = [abs(p) for p in self._trade_pnls if p <= 0]
+            avg_win = sum(positive) / len(positive) if positive else 1.0
+            avg_loss = sum(negative) / len(negative) if negative else 1.0
+            profit_factor = avg_win / avg_loss if avg_loss > 0 else 2.0
+
+            if winrate > 0.6 and profit_factor > 1.5:
+                boost = 1.2
+                risk_amount *= boost
+                logger.debug(f"Dynamic risk boost: winrate={winrate:.1%}, PF={profit_factor:.2f}, boost={boost}")
+                # Ограничиваем сверху: не более 15% на сделку (даже для Turbo)
+                max_risk = free_margin * 0.15
+                if risk_amount > max_risk:
+                    risk_amount = max_risk
+
         sl_distance = abs(entry_price - sl_price)
         if sl_distance == 0:
             sl_distance = entry_price * 0.01
         quantity = risk_amount / sl_distance
         leverage = self.max_leverage
+
         if self._kelly_enabled:
             f = self._kelly_winrate - ((1 - self._kelly_winrate) / self._kelly_avg_win_loss_ratio)
             quantity *= max(0.1, f)
+
         required_margin = (quantity * entry_price) / leverage
         if required_margin > free_margin:
             quantity = (free_margin * leverage) / entry_price
+
         return quantity, leverage
+
+    # ---------- Статистика для динамического риска ----------
+    def record_trade_result(self, pnl: float):
+        """Сохраняет результат сделки для расчёта ускоряющего коэффициента."""
+        self._trade_pnls.append(pnl)
+        if len(self._trade_pnls) > 20:
+            self._trade_pnls.pop(0)
 
     def set_kelly_params(self, winrate: float, avg_win_loss_ratio: float, enabled: bool = True):
         self._kelly_winrate = winrate
@@ -248,7 +314,7 @@ class RiskManager:
     def adapt_to_volatility(self, current_atr_pct: float):
         if self._night_mode or self._low_balance_mode:
             return
-        if self.risk_per_trade_pct >= 2.5:
+        if self.risk_per_trade_pct >= 5.0:  # Не снижаем агрессивные профили
             return
         if current_atr_pct > 0.05:
             self.risk_per_trade_pct = max(0.5, self.risk_per_trade_pct * 0.7)
@@ -315,7 +381,8 @@ class RiskManager:
                 'winrate': self._kelly_winrate,
                 'avg_wl': self._kelly_avg_win_loss_ratio
             },
-            'user_params': self._profiles.get('User', {'risk_per_trade_pct': 2.0, 'max_leverage': 3})
+            'user_params': self._profiles.get('User', {'risk_per_trade_pct': 2.0, 'max_leverage': 3}),
+            'previous_profile': self._previous_profile,   # для восстановления после Turbo
         }
         try:
             os.makedirs(os.path.dirname(self.STATE_FILE), exist_ok=True)
@@ -340,6 +407,7 @@ class RiskManager:
                 'risk_per_trade_pct': user_params['risk_per_trade_pct'],
                 'max_leverage': user_params['max_leverage']
             }
+            self._previous_profile = data.get('previous_profile')
             logger.info("Risk state loaded")
         except Exception as e:
             logger.error(f"Failed to load risk state: {e}")

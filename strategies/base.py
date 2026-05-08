@@ -39,32 +39,31 @@ class BaseStrategy(ABC):
     4. Implement evaluate() method
     """
     
-    # Strategy metadata - override in subclass
     NAME: str = "BaseStrategy"
     DESCRIPTION: str = "Base strategy description"
     VERSION: str = "1.0.0"
     AUTHOR: str = ""
     
-    # Configurable parameters - define defaults here
-    # GUI will auto-generate controls from this dict
     PARAMS: Dict[str, Any] = {
         'enabled': True,
-        'weight': 1.0,  # Voting weight in ensemble
+        'weight': 1.0,
         'timeframes': ['15m', '1h', '4h'],
     }
     
-    def __init__(self, params: Optional[Dict[str, Any]] = None):
+    def __init__(self, params: Optional[Dict[str, Any]] = None, engine: Any = None):
         """
         Initialize strategy with parameters.
         
         Args:
             params: Override default PARAMS values
+            engine: TradingEngine instance (if needed by strategy)
         """
         self.config = dict(self.PARAMS)
         if params:
             self.config.update(params)
         self.enabled = self.config.get('enabled', True)
         self.weight = self.config.get('weight', 1.0)
+        self.engine = engine  # сохраняем движок, если передан
         self._error_count = 0
         self._last_error_time = None
         self._disabled_until = None
@@ -85,25 +84,9 @@ class BaseStrategy(ABC):
         pass
     
     def on_trade_completed(self, signal: Signal, pnl: float, duration_seconds: float):
-        """
-        Called when a trade based on this strategy's signal completes.
-        Use this for strategy self-optimization / learning.
-        
-        Args:
-            signal: The original signal
-            pnl: Profit/loss in quote currency (positive = profit)
-            duration_seconds: How long the position was held
-        """
         pass
     
     def get_params_schema(self) -> Dict[str, Dict[str, Any]]:
-        """
-        Return parameter schema for GUI auto-generation.
-        Override to provide type hints, ranges, descriptions.
-        
-        Returns:
-            Dict of param_name -> {type, default, min, max, description}
-        """
         schema = {}
         for key, value in self.config.items():
             param_info = {
@@ -131,7 +114,6 @@ class BaseStrategy(ABC):
         return schema
     
     def is_disabled(self) -> bool:
-        """Check if strategy is temporarily disabled due to errors."""
         if not self.enabled:
             return True
         if self._disabled_until is not None:
@@ -142,19 +124,16 @@ class BaseStrategy(ABC):
         return False
     
     def disable_temporarily(self, seconds: float = 3600):
-        """Temporarily disable strategy after repeated errors."""
         from datetime import datetime, timezone
         self._disabled_until = datetime.now(timezone.utc).timestamp() + seconds
         
     def record_error(self):
-        """Record an error occurrence. Disable if too many errors."""
         self._error_count += 1
         if self._error_count >= 3:
-            self.disable_temporarily(3600)  # 1 hour
+            self.disable_temporarily(3600)
             self._error_count = 0
     
     def reset_error_count(self):
-        """Reset error counter after successful execution."""
         self._error_count = 0
         self._disabled_until = None
         

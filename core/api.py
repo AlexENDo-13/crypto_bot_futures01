@@ -48,6 +48,7 @@ class BingXAPI:
     BALANCE = "/openApi/swap/v2/user/balance"
     POSITIONS = "/openApi/swap/v2/user/positions"
     ORDER = "/openApi/swap/v2/trade/order"
+    OPEN_ORDERS = "/openApi/swap/v2/trade/openOrders"  # Правильный эндпоинт
     LEVERAGE = "/openApi/swap/v2/trade/leverage"
     CONTRACTS = "/openApi/swap/v2/quote/contracts"
     KLINES = "/openApi/swap/v2/quote/klines"
@@ -174,8 +175,7 @@ class BingXAPI:
         params = {
             'symbol': symbol,
             'leverage': leverage,
-            'side': position_side,
-            'positionSide': position_side
+            'side': position_side
         }
         return self._request('POST', self.LEVERAGE, params)
 
@@ -240,8 +240,9 @@ class BingXAPI:
         params = {}
         if symbol:
             params['symbol'] = symbol
-        response = self._request('GET', self.ORDER, params)
-        return response.get('data', [])
+        response = self._request('GET', self.OPEN_ORDERS, params)
+        # Правильный путь к массиву ордеров: data.orders
+        return response.get('data', {}).get('orders', [])
 
     # Market Data
     def get_contracts(self) -> List[Dict]:

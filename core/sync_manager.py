@@ -5,6 +5,7 @@ corrects TP/SL orders, enforces maximum position limit, records closed trades,
 and supports smart replacement of weakest positions.
 """
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -12,10 +13,28 @@ from core.portfolio import Position, TradeRecord
 
 logger = logging.getLogger(__name__)
 
+
 class PositionSyncManager:
     def __init__(self, engine):
         self.engine = engine
+        # Кэш теперь хранит словари {'tp': ..., 'sl': ..., 'qty': ...}
         self._tpsl_cache = {}
+
+    @staticmethod
+    def _is_tpsl_already_exists_error(exception: Exception) -> bool:
+        """
+        Проверяет, является ли ошибка следствием уже существующего TP/SL ордера.
+        Парсит JSON из сообщения исключения и ищет коды 110406 или 110407.
+        """
+        try:
+            error_str = str(exception)
+            match = re.search(r'\{.*"code":\s*(\d+).*\}', error_str)
+            if match:
+                code = int(match.group(1))
+                return code in (110406, 110407)
+        except Exception:
+            pass
+        return 'already exists' in str(exception).lower()
 
     def full_sync(self):
         if self.engine.auth.demo_mode:
@@ -56,9 +75,10 @@ class PositionSyncManager:
                         open_time=datetime.now(timezone.utc).isoformat()
                     )
                     self.engine.portfolio.add_position(pos)
-                    self._tpsl_cache[f"{symbol}_{pos_side}"] = (tp_price, sl_price)
+                    self._tpsl_cache[f"{symbol}_{pos_side}"] = {
+                        'tp': tp_price, 'sl': sl_price, 'qty': qty
+                    }
 
-            # --- Защита от дубликатов на бирже: если есть и LONG, и SHORT по одному символу ---
             self._remove_duplicate_positions()
             self._enforce_limit()
         except Exception as e:
@@ -86,6 +106,7 @@ class PositionSyncManager:
                     )
                     self.engine.portfolio.record_trade(trade)
                     self.engine.risk_manager.update_adaptive_risk(pnl)
+                    self.engine.risk_manager.record_trade_result(pnl)   # ← для динамического риска
                     self.engine.portfolio.remove_position(pos.symbol, pos.side)
                     cache_key = f"{pos.symbol}_{pos.side}"
                     if cache_key in self._tpsl_cache:
@@ -140,9 +161,10 @@ class PositionSyncManager:
                         open_time=datetime.now(timezone.utc).isoformat()
                     )
                     self.engine.portfolio.add_position(pos)
-                    self._tpsl_cache[f"{symbol}_{pos_side}"] = (sl_tp['tp2'], sl_tp['sl'])
+                    self._tpsl_cache[f"{symbol}_{pos_side}"] = {
+                        'tp': sl_tp['tp2'], 'sl': sl_tp['sl'], 'qty': qty
+                    }
 
-            # --- Убираем дубликаты ---
             self._remove_duplicate_positions()
             self._enforce_limit()
 
@@ -150,7 +172,6 @@ class PositionSyncManager:
             logger.exception("Background sync crashed")
 
     def _remove_duplicate_positions(self):
-        """Если на бирже есть и LONG, и SHORT по одному символу, закрываем одну из них."""
         positions = self.engine.portfolio.get_positions()
         symbols_seen = set()
         for pos in list(positions):
@@ -189,7 +210,6 @@ class PositionSyncManager:
             return True
 
         now = datetime.now(timezone.utc)
-        # Не трогаем позиции младше 60 секунд
         for pos in positions:
             try:
                 open_t = datetime.fromisoformat(pos.open_time)
@@ -271,12 +291,13 @@ class PositionSyncManager:
 
     def _sync_tpsl_orders(self, symbol, pos_side, quantity, expected_tp, expected_sl):
         cache_key = f"{symbol}_{pos_side}"
-        cached_tp, cached_sl = self._tpsl_cache.get(cache_key, (None, None))
-
-        if cached_tp == expected_tp and cached_sl == expected_sl:
+        cached = self._tpsl_cache.get(cache_key)
+        # Сравниваем все три параметра
+        if (cached and cached['tp'] == expected_tp and cached['sl'] == expected_sl and cached['qty'] == quantity):
             return
 
         try:
+            # Отменяем все существующие TP/SL ордера для этой стороны
             orders = self.engine.api.get_open_orders(symbol)
             for o in orders:
                 if o.get('positionSide') != pos_side:
@@ -290,22 +311,37 @@ class PositionSyncManager:
 
             close_side = 'SELL' if pos_side == 'LONG' else 'BUY'
             if expected_tp is not None:
-                self.engine.api.place_order(
-                    symbol=symbol, side=close_side, position_side=pos_side,
-                    order_type='TAKE_PROFIT_MARKET', quantity=quantity,
-                    stop_price=expected_tp
-                )
+                try:
+                    self.engine.api.place_order(
+                        symbol=symbol, side=close_side, position_side=pos_side,
+                        order_type='TAKE_PROFIT_MARKET', quantity=quantity,
+                        stop_price=expected_tp
+                    )
+                except Exception as e:
+                    if self._is_tpsl_already_exists_error(e):
+                        logger.debug(f"TP already exists for {symbol}, skip")
+                    else:
+                        logger.error(f"TP order failed for {symbol}: {e}")
+
             if expected_sl is not None:
                 if (pos_side == 'LONG' and expected_sl >= expected_tp) or \
                    (pos_side == 'SHORT' and expected_sl <= expected_tp):
                     logger.warning(f"Invalid SL {expected_sl} relative to TP {expected_tp}, skipping SL order")
                 else:
-                    self.engine.api.place_order(
-                        symbol=symbol, side=close_side, position_side=pos_side,
-                        order_type='STOP_MARKET', quantity=quantity,
-                        stop_price=expected_sl
-                    )
+                    try:
+                        self.engine.api.place_order(
+                            symbol=symbol, side=close_side, position_side=pos_side,
+                            order_type='STOP_MARKET', quantity=quantity,
+                            stop_price=expected_sl
+                        )
+                    except Exception as e:
+                        if self._is_tpsl_already_exists_error(e):
+                            logger.debug(f"SL already exists for {symbol}, skip")
+                        else:
+                            logger.error(f"SL order failed for {symbol}: {e}")
 
-            self._tpsl_cache[cache_key] = (expected_tp, expected_sl)
+            self._tpsl_cache[cache_key] = {
+                'tp': expected_tp, 'sl': expected_sl, 'qty': quantity
+            }
         except Exception as e:
             logger.error(f"Failed to sync TP/SL orders for {symbol}: {e}")

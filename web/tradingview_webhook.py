@@ -66,8 +66,17 @@ class TradingViewWebhook:
                         'price': engine._get_current_price(symbol),
                         'strategy': 'TradingView',
                     })
-                    # Передаём сигнал в обработчик сигналов движка
-                    engine.signal_processor.process(signal, {})
+                    # Получаем свечи для корректной работы фильтров
+                    all_candles = {}
+                    try:
+                        for tf in engine.timeframes:
+                            df = engine.api.get_klines_dataframe(symbol, tf, limit=200)
+                            if not df.empty:
+                                all_candles[tf] = df
+                    except Exception as e:
+                        logger.warning(f"Не удалось получить свечи для вебхука {symbol}: {e}")
+                    # Передаём сигнал с контекстом
+                    engine.signal_processor.process(signal, all_candles if all_candles else {})
             def log_message(self, format, *args):
                 pass
         return Handler

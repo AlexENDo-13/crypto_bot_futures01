@@ -104,6 +104,7 @@ class TradingEngine:
         self.adaptive_threshold = None
         self.micro_lot_filter = None
 
+        # Загружаем конфиг и состояние
         load_config(self)
         self._init_components()
         self._load_blacklist()
@@ -172,6 +173,20 @@ class TradingEngine:
         self.scheduler.stop()
         self.watchdog.stop()
         self._save_state()
+
+        # Остановка всех дополнительных модулей
+        for attr in ['adaptive_threshold', 'moonshot', 'order_guard', 'whale_shield',
+                     'backup_mgr', 'github_backup', 'voice', 'stresstest',
+                     'capital_alloc', 'tf_selector', 'alert_mgr',
+                     'telegram', 'discord', 'web_server', 'webhook']:
+            obj = getattr(self, attr, None)
+            if obj is not None and hasattr(obj, 'stop'):
+                try:
+                    obj.stop()
+                    logger.info(f"Stopped {attr}")
+                except Exception as e:
+                    logger.error(f"Failed to stop {attr}: {e}")
+
         logger.info("Trading engine stopped")
 
     def pause(self):
@@ -289,9 +304,25 @@ class TradingEngine:
         try:
             if percent:
                 self.api.close_position_percent(symbol, side, percent)
+                positions = self.api.get_positions(symbol)
+                pos = next((p for p in positions if p.get('positionSide') == side), None)
+                if pos:
+                    new_qty = abs(float(pos.get('positionAmt', 0)))
+                    local_pos = next((p for p in self.portfolio.get_positions()
+                                      if p.symbol == symbol and p.side == side), None)
+                    if local_pos:
+                        local_pos.quantity = new_qty
+                        logger.info(f"Position {symbol} {side} partially closed, new qty: {new_qty}")
+                        if local_pos.tp_price is not None and local_pos.sl_price is not None:
+                            self.executor._place_tpsl_orders(symbol, side, new_qty,
+                                                             local_pos.tp_price, local_pos.sl_price)
+                    else:
+                        logger.warning(f"Partial close: local position not found for {symbol} {side}")
+                else:
+                    self.portfolio.remove_position(symbol, side)
             else:
                 self.api.close_position(symbol, side)
-            self.portfolio.remove_position(symbol, side)
+                self.portfolio.remove_position(symbol, side)
         except Exception as e:
             logger.error(f"Manual close failed: {e}")
 

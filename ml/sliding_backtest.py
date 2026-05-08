@@ -1,6 +1,7 @@
 """
 Sliding backtest: continuously evaluates current strategy set on recent data.
 Fixed: computes relative PnL, uses realistic scaling, no longer crashes weights.
+Also syncs backtest-adjusted weights with VotingSystem.
 """
 import logging
 import threading
@@ -94,7 +95,12 @@ class SlidingBacktest:
                 new_weight = old_weight + adjustment
                 new_weight = max(0.1, min(3.0, new_weight))
                 self.engine.strategies[name].weight = new_weight
+                # Синхронизируем с VotingSystem
+                if name in self.engine.voting._weights:
+                    self.engine.voting._weights[name]['weight'] = new_weight
                 logger.debug(f"Backtest weight adjusted for {name}: {old_weight:.2f} -> {new_weight:.2f} (score={score:.2f})")
+        # Сохраняем обновлённые веса
+        self.engine.voting._save_weights()
 
     def get_results(self):
         return self._results.copy()
