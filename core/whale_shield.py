@@ -32,7 +32,6 @@ class WhaleShield:
         self._last_alert_time: Dict[str, float] = {}
         self._depth_history: Dict[str, list] = {}
         self._trade_history: Dict[str, list] = {}
-        self._warmup_complete: Dict[str, bool] = {}   # защита от холодного старта
         self._load_config()
 
     def _load_config(self):
@@ -121,7 +120,7 @@ class WhaleShield:
 
         # Проверка прогрева: нужно не менее 10 наблюдений для каждого типа данных
         if len(self._depth_history[symbol]) < 10 or len(self._trade_history[symbol]) < 10:
-            return  # ждём накопления истории, чтобы избежать ложных срабатываний
+            return
 
         # Средние значения
         self._avg_depth_volumes[symbol] = sum(self._depth_history[symbol][-10:]) / 10
@@ -153,7 +152,7 @@ class WhaleShield:
 
         # 4. Критический уровень – полное закрытие
         if max_order_btc > FULL_CLOSE_THRESHOLD_BTC:
-            threat_level = 10  # максимальная тревога
+            threat_level = 10
 
         if threat_level == 0:
             return

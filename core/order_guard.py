@@ -1,7 +1,8 @@
 """
 Order Guard – periodic check and repair of TP/SL orders on the exchange.
 Runs in a separate thread, ensures every open position has valid stop-loss
-and take-profit orders at all times.
+and take-profit orders at all times. Now also detects closed positions and
+removes them instead of trying to recreate orders.
 """
 import logging
 import time
@@ -49,7 +50,24 @@ class OrderGuard:
         if not positions:
             return
         logger.debug("OrderGuard: checking %d positions", len(positions))
-        for pos in positions:
+        # Сначала проверим, какие позиции реально существуют на бирже
+        api_positions = []
+        try:
+            api_positions = self.engine.api.get_positions()
+        except Exception as e:
+            logger.warning(f"OrderGuard cannot fetch positions: {e}")
+            return
+
+        api_keys = {f"{p.get('symbol')}_{p.get('positionSide')}" for p in api_positions}
+
+        for pos in list(positions):  # копируем список, чтобы безопасно удалять
+            key = f"{pos.symbol}_{pos.side}"
+            if key not in api_keys:
+                # Позиции больше нет на бирже – удаляем её локально
+                logger.info(f"OrderGuard: Position {pos.symbol} {pos.side} no longer exists on exchange, removing")
+                self.engine.portfolio.remove_position(pos.symbol, pos.side)
+                continue
+
             try:
                 self._check_and_repair(pos)
             except Exception as e:

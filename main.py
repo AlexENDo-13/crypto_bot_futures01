@@ -120,10 +120,19 @@ def main():
     # 2. Микро‑лотовый фильтр (блокирует сигналы, на которые не хватит маржи)
     try:
         from filters.micro_lot_filter import MicroLotFilter
-        engine.filters['MicroLotFilter'] = MicroLotFilter()
+        engine.filters['MicroLotFilter'] = MicroLotFilter(engine=engine)
         logging.info("MicroLotFilter added")
     except Exception as e:
         logging.warning(f"MicroLotFilter not added: {e}")
+
+    # 3. Human Emulator (эмуляция поведения человека)
+    try:
+        from core.human_emulator import HumanEmulator
+        engine.human_emulator = HumanEmulator(engine)
+        engine.human_emulator.start()
+        logging.info("HumanEmulator started")
+    except Exception as e:
+        logging.warning(f"HumanEmulator not started: {e}")
 
     # ------------------- ОСТАЛЬНЫЕ МОДУЛИ -------------------
     try:

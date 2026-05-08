@@ -16,18 +16,19 @@ class SignalProcessor:
         self.engine = engine
 
     def process(self, signal: Signal, all_candles: Dict[str, pd.DataFrame]):
+        # --- Принудительная синхронизация перед проверкой лимитов ---
+        if not self.engine.auth.demo_mode:
+            try:
+                self.engine.sync_manager.background_sync()
+            except Exception as e:
+                logger.debug(f"Pre-check sync failed: {e}")
+
         # --- Запрет на дубликаты позиций по символу ---
         current_positions = self.engine.portfolio.get_positions()
         for pos in current_positions:
             if pos.symbol == signal.symbol:
                 logger.info(f"Position already exists for {signal.symbol} ({pos.side}), skipping new signal")
                 return
-
-        if not self.engine.auth.demo_mode:
-            try:
-                self.engine.sync_manager.background_sync()
-            except Exception as e:
-                logger.debug(f"Pre-check sync failed: {e}")
 
         price = self.engine._get_current_price(signal.symbol)
         if price <= 0:
@@ -76,7 +77,7 @@ class SignalProcessor:
         onchain_filter = self.engine.filters.get('OnChainFilter')
         if onchain_filter and onchain_filter.enabled:
             new_conf = self._safe_filter_assess(onchain_filter, signal, {})
-            if new_conf is None:               # если фильтр вернул None, пропускаем
+            if new_conf is None:
                 new_conf = signal.confidence
             if new_conf <= 0:
                 logger.info(f"On-chain filter blocked {signal.symbol}")
@@ -115,7 +116,7 @@ class SignalProcessor:
             except Exception as e:
                 logger.warning(f"Filter {filter_name} error: {e}")
 
-        # Проверка лимита позиций (без умной замены)
+        # Проверка лимита позиций (после актуализации)
         if len(current_positions) >= self.engine.max_positions:
             logger.info(f"Max positions reached ({self.engine.max_positions}), skipping {signal.symbol}")
             return

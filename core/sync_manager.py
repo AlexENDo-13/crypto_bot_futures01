@@ -106,7 +106,7 @@ class PositionSyncManager:
                     )
                     self.engine.portfolio.record_trade(trade)
                     self.engine.risk_manager.update_adaptive_risk(pnl)
-                    self.engine.risk_manager.record_trade_result(pnl)   # ← для динамического риска
+                    self.engine.risk_manager.record_trade_result(pnl)
                     self.engine.portfolio.remove_position(pos.symbol, pos.side)
                     cache_key = f"{pos.symbol}_{pos.side}"
                     if cache_key in self._tpsl_cache:
@@ -292,12 +292,10 @@ class PositionSyncManager:
     def _sync_tpsl_orders(self, symbol, pos_side, quantity, expected_tp, expected_sl):
         cache_key = f"{symbol}_{pos_side}"
         cached = self._tpsl_cache.get(cache_key)
-        # Сравниваем все три параметра
         if (cached and cached['tp'] == expected_tp and cached['sl'] == expected_sl and cached['qty'] == quantity):
             return
 
         try:
-            # Отменяем все существующие TP/SL ордера для этой стороны
             orders = self.engine.api.get_open_orders(symbol)
             for o in orders:
                 if o.get('positionSide') != pos_side:

@@ -61,8 +61,9 @@ def _load_from_package(package_name, base_class, engine=None):
             if name.startswith('Base'):
                 continue
             try:
-                # Передаём engine в конструктор, если он ожидается
-                if engine is not None and inspect.signature(obj.__init__).parameters.get('engine'):
+                # Проверяем, ожидает ли конструктор параметр 'engine'
+                sig = inspect.signature(obj.__init__)
+                if 'engine' in sig.parameters:
                     instance = obj(engine=engine)
                 else:
                     instance = obj()

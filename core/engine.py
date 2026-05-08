@@ -176,9 +176,10 @@ class TradingEngine:
 
         # Остановка всех дополнительных модулей
         for attr in ['adaptive_threshold', 'moonshot', 'order_guard', 'whale_shield',
-                     'backup_mgr', 'github_backup', 'voice', 'stresstest',
+                     'backup_mgr', 'github_backup', 'voice', 'stress_test',  # исправлено
                      'capital_alloc', 'tf_selector', 'alert_mgr',
-                     'telegram', 'discord', 'web_server', 'webhook']:
+                     'telegram', 'discord', 'web_server', 'webhook',
+                     'bayes_opt', 'backtest', 'human_emulator', 'onchain']:
             obj = getattr(self, attr, None)
             if obj is not None and hasattr(obj, 'stop'):
                 try:
@@ -216,6 +217,10 @@ class TradingEngine:
                 self.portfolio.available_margin = available
                 self.risk_controller.update_drawdown(self.portfolio._equity)
                 self.risk_controller.check_daily_limits()
+                # Hard stop при критически низком балансе (< 20 USDT)
+                if balance < 20.0 and not self._paused:
+                    logger.critical(f"Balance critically low ({balance:.2f} USDT) – pausing trading")
+                    self._paused = True
         except Exception as e:
             logger.debug(f"Equity update error: {e}")
 
@@ -391,3 +396,19 @@ class TradingEngine:
                     'last_3': pnl_list[-3:] if len(pnl_list)>=3 else pnl_list
                 }
         return stats
+
+    # ---------- оптимизация стратегий ----------
+    def optimize_strategies(self):
+        if not self._candle_data:
+            logger.warning("No candle data for optimization")
+            return
+        for name, strat in self.strategies.items():
+            if strat.is_disabled():
+                continue
+            try:
+                best_params = self.optimizer.optimize(strat, self._candle_data)
+                if best_params:
+                    strat.config.update(best_params)
+                    logger.info(f"Optimized {name}: {best_params}")
+            except Exception as e:
+                logger.error(f"Optimization failed for {name}: {e}")

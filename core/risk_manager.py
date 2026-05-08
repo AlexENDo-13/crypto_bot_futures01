@@ -249,7 +249,6 @@ class RiskManager:
         if len(self._trade_pnls) >= 5:
             wins = sum(1 for p in self._trade_pnls if p > 0)
             winrate = wins / len(self._trade_pnls)
-            # Профит-фактор: средняя прибыль / средний убыток
             positive = [p for p in self._trade_pnls if p > 0]
             negative = [abs(p) for p in self._trade_pnls if p <= 0]
             avg_win = sum(positive) / len(positive) if positive else 1.0
@@ -260,7 +259,6 @@ class RiskManager:
                 boost = 1.2
                 risk_amount *= boost
                 logger.debug(f"Dynamic risk boost: winrate={winrate:.1%}, PF={profit_factor:.2f}, boost={boost}")
-                # Ограничиваем сверху: не более 15% на сделку (даже для Turbo)
                 max_risk = free_margin * 0.15
                 if risk_amount > max_risk:
                     risk_amount = max_risk
@@ -314,7 +312,7 @@ class RiskManager:
     def adapt_to_volatility(self, current_atr_pct: float):
         if self._night_mode or self._low_balance_mode:
             return
-        if self.risk_per_trade_pct >= 5.0:  # Не снижаем агрессивные профили
+        if self.risk_per_trade_pct >= 5.0:
             return
         if current_atr_pct > 0.05:
             self.risk_per_trade_pct = max(0.5, self.risk_per_trade_pct * 0.7)
@@ -382,7 +380,7 @@ class RiskManager:
                 'avg_wl': self._kelly_avg_win_loss_ratio
             },
             'user_params': self._profiles.get('User', {'risk_per_trade_pct': 2.0, 'max_leverage': 3}),
-            'previous_profile': self._previous_profile,   # для восстановления после Turbo
+            'previous_profile': self._previous_profile,
         }
         try:
             os.makedirs(os.path.dirname(self.STATE_FILE), exist_ok=True)

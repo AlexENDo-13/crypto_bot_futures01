@@ -1,23 +1,23 @@
 === SYSTEM INFO ===
 {
-  "timestamp": "2026-05-08T00:51:53.652238+00:00",
+  "timestamp": "2026-05-08T22:44:55.351493+00:00",
   "os": "Windows-11-10.0.26100-SP0",
   "python_version": "3.12.13",
   "cpu": {
     "model": "AMD64 Family 23 Model 104 Stepping 1, AuthenticAMD",
     "cores_physical": 4,
     "cores_logical": 8,
-    "usage_percent": 16.5
+    "usage_percent": 4.4
   },
   "memory": {
     "total_gb": 11.35,
-    "available_gb": 3.64,
-    "percent_used": 67.9
+    "available_gb": 3.75,
+    "percent_used": 67.0
   },
   "disk": {
     "total_gb": 238.36,
-    "free_gb": 41.23,
-    "percent_used": 82.7
+    "free_gb": 41.84,
+    "percent_used": 82.4
   }
 }
 
@@ -121,14 +121,14 @@ api_secret =
 [ENGINE]
 scan_interval = 120
 signal_threshold = 0.55
-max_positions = 4
+max_positions = 5
 timeframes = 15m,1h,4h,1d
 top_symbols = 15
 
 [RISK]
-risk_per_trade = 1.5
+risk_per_trade = 2.0
 max_leverage = 3
-profile = Balanced
+profile = Adaptive
 use_day_profile = False
 kelly_enabled = True
 kelly_winrate = 0.5
@@ -203,6 +203,8 @@ milestone_sound = sounds/milestone.wav
 auto_optimize = true
 optimize_interval_hours = 24
 metric = sharpe
+
+
 === END FILE: config.ini ===
 
 === BEGIN FILE: core\__init__.py ===
@@ -1113,6 +1115,7 @@ class TradingEngine:
         self.adaptive_threshold = None
         self.micro_lot_filter = None
 
+        # Загружаем конфиг и состояние
         load_config(self)
         self._init_components()
         self._load_blacklist()
@@ -1181,6 +1184,20 @@ class TradingEngine:
         self.scheduler.stop()
         self.watchdog.stop()
         self._save_state()
+
+        # Остановка всех дополнительных модулей
+        for attr in ['adaptive_threshold', 'moonshot', 'order_guard', 'whale_shield',
+                     'backup_mgr', 'github_backup', 'voice', 'stresstest',
+                     'capital_alloc', 'tf_selector', 'alert_mgr',
+                     'telegram', 'discord', 'web_server', 'webhook']:
+            obj = getattr(self, attr, None)
+            if obj is not None and hasattr(obj, 'stop'):
+                try:
+                    obj.stop()
+                    logger.info(f"Stopped {attr}")
+                except Exception as e:
+                    logger.error(f"Failed to stop {attr}: {e}")
+
         logger.info("Trading engine stopped")
 
     def pause(self):
@@ -1210,6 +1227,10 @@ class TradingEngine:
                 self.portfolio.available_margin = available
                 self.risk_controller.update_drawdown(self.portfolio._equity)
                 self.risk_controller.check_daily_limits()
+                # Hard stop при критически низком балансе (< 20 USDT)
+                if balance < 20.0 and not self._paused:
+                    logger.critical(f"Balance critically low ({balance:.2f} USDT) – pausing trading")
+                    self._paused = True
         except Exception as e:
             logger.debug(f"Equity update error: {e}")
 
@@ -1294,12 +1315,10 @@ class TradingEngine:
         threading.Thread(target=_scan, daemon=True, name="ManualScan").start()
         logger.info("Manual scan started (async)")
 
-    # ---------- ИСПРАВЛЕННЫЙ МЕТОД ----------
     def close_position_manual(self, symbol, side, percent=None):
         try:
             if percent:
                 self.api.close_position_percent(symbol, side, percent)
-                # Получаем актуальные данные с биржи после частичного закрытия
                 positions = self.api.get_positions(symbol)
                 pos = next((p for p in positions if p.get('positionSide') == side), None)
                 if pos:
@@ -1309,14 +1328,12 @@ class TradingEngine:
                     if local_pos:
                         local_pos.quantity = new_qty
                         logger.info(f"Position {symbol} {side} partially closed, new qty: {new_qty}")
-                        # Перевыставляем TP/SL с новым количеством
                         if local_pos.tp_price is not None and local_pos.sl_price is not None:
                             self.executor._place_tpsl_orders(symbol, side, new_qty,
                                                              local_pos.tp_price, local_pos.sl_price)
                     else:
                         logger.warning(f"Partial close: local position not found for {symbol} {side}")
                 else:
-                    # Позиция полностью закрылась
                     self.portfolio.remove_position(symbol, side)
             else:
                 self.api.close_position(symbol, side)
@@ -1421,9 +1438,9 @@ def init_components(engine):
 
 def load_all_modules(engine):
     logger.info("Loading modules...")
-    engine.strategies = _load_from_package('strategies', BaseStrategy)
-    engine.indicators = _load_from_package('indicators', BaseIndicator)
-    engine.filters = _load_from_package('filters', BaseFilter)
+    engine.strategies = _load_from_package('strategies', BaseStrategy, engine)
+    engine.indicators = _load_from_package('indicators', BaseIndicator, engine)
+    engine.filters = _load_from_package('filters', BaseFilter, engine)
 
     for name, strategy in engine.strategies.items():
         engine.voting.register_strategy(name, getattr(strategy, 'weight', 1))
@@ -1431,7 +1448,7 @@ def load_all_modules(engine):
     logger.info(f"Loaded: {len(engine.strategies)} strategies, {len(engine.indicators)} indicators, {len(engine.filters)} filters")
 
 
-def _load_from_package(package_name, base_class):
+def _load_from_package(package_name, base_class, engine=None):
     modules = {}
     try:
         package = importlib.import_module(package_name)
@@ -1456,7 +1473,12 @@ def _load_from_package(package_name, base_class):
             if name.startswith('Base'):
                 continue
             try:
-                instance = obj()
+                # Проверяем, ожидает ли конструктор параметр 'engine'
+                sig = inspect.signature(obj.__init__)
+                if 'engine' in sig.parameters:
+                    instance = obj(engine=engine)
+                else:
+                    instance = obj()
                 modules[getattr(instance, 'NAME', name)] = instance
                 logger.info(f"  Loaded {base_class.__name__}: {getattr(instance, 'NAME', name)}")
             except Exception as e:
@@ -1929,6 +1951,33 @@ class TradeExecutor:
             if final_sl <= 0 or final_sl <= actual_entry:
                 final_sl = actual_entry + max(atr * 1.5, min_sl_distance)
 
+        # ---------------------------------------------------------------
+        # КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: гарантируем корректность SL относительно TP
+        # ---------------------------------------------------------------
+        if pos_side == 'LONG':
+            if final_sl >= actual_entry:
+                final_sl = actual_entry * 0.99
+            if final_tp <= actual_entry:
+                final_tp = actual_entry * 1.01
+            if final_sl >= final_tp:
+                final_sl = final_tp * 0.99  # SL ниже TP
+        else:  # SHORT
+            if final_sl <= actual_entry:
+                final_sl = actual_entry * 1.01
+            if final_tp >= actual_entry:
+                final_tp = actual_entry * 0.99
+            if final_sl <= final_tp:
+                final_sl = final_tp * 1.01  # SL выше TP
+
+        # Дополнительный предохранитель: цены должны быть положительны
+        if final_sl <= 0 or final_tp <= 0:
+            logger.error(f"Invalid SL/TP after corrections for {signal.symbol}: SL={final_sl}, TP={final_tp}. Aborting trade.")
+            try:
+                self.engine.api.cancel_order(signal.symbol, order.get('orderId', ''))
+            except:
+                pass
+            return
+
         self._place_tpsl_orders(signal.symbol, pos_side, quantity, final_tp, final_sl)
 
         position = Position(
@@ -2031,13 +2080,14 @@ class TradeExecutor:
                     logger.error(f"Failed to place TP for {symbol}: {e}")
 
         if sl_price is not None:
-            if tp_price is not None:
-                if pos_side == 'LONG' and sl_price >= tp_price:
-                    logger.error(f"Invalid SL for LONG: {sl_price} >= TP {tp_price}, skipping SL order")
-                    return
-                if pos_side == 'SHORT' and sl_price <= tp_price:
-                    logger.error(f"Invalid SL for SHORT: {sl_price} <= TP {tp_price}, skipping SL order")
-                    return
+            # Гарантируется, что SL и TP корректны по отношению друг к другу,
+            # но дополнительная проверка для логов оставлена.
+            if pos_side == 'LONG' and sl_price >= tp_price:
+                logger.error(f"Invalid SL for LONG: {sl_price} >= TP {tp_price}, skipping SL order")
+                return
+            if pos_side == 'SHORT' and sl_price <= tp_price:
+                logger.error(f"Invalid SL for SHORT: {sl_price} <= TP {tp_price}, skipping SL order")
+                return
             try:
                 self.engine.api.place_order(
                     symbol=symbol, side=close_side, position_side=pos_side,
@@ -2144,6 +2194,335 @@ class GitHubBackup:
         logger.info("GitHubBackup: committed and pushed")
 
 === END FILE: core\github_backup.py ===
+
+=== BEGIN FILE: core\human_emulator.py ===
+"""
+Human Behaviour Emulator – эмуляция действий живого трейдера.
+Делает поведение бота неотличимым от ручной торговли для анти-слежения биржи.
+"""
+import random
+import time
+import logging
+from datetime import datetime, timezone, timedelta
+from typing import Optional, List, Dict, Any, Tuple
+
+logger = logging.getLogger(__name__)
+
+
+class HumanEmulator:
+    """
+    Централизованный эмулятор человеческого поведения.
+    Управляет всеми аспектами имитации: задержки, рандомизация,
+    пропуски действий, разбивка ордеров, плавающие настройки.
+    
+    Подключение к движку:
+        engine.human_emulator = HumanEmulator(engine)
+        engine.human_emulator.start()
+    """
+
+    # ------------------------------------------------------------------
+    # Параметры по умолчанию (переопределяются из config.ini)
+    # ------------------------------------------------------------------
+    # User-Agent rotation
+    USER_AGENTS = [
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:125.0) Gecko/20100101 Firefox/125.0",
+        "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:125.0) Gecko/20100101 Firefox/125.0",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Edg/124.0.0.0",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 OPR/108.0.0.0",
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 Vivaldi/6.5.3206.59",
+    ]
+
+    # ------------------------------------------------------------------
+    def __init__(self, engine):
+        self.engine = engine
+        self._running = False
+
+        # --- Параметры из секции [HUMAN] config.ini (загружаются ниже) ---
+        self.ua_rotation: bool = True
+        self.ua_rotation_interval_minutes: int = 45          # как часто менять User-Agent
+
+        # Задержки между действиями (секунды)
+        self.interface_delay_min: float = 0.3
+        self.interface_delay_max: float = 1.2
+        self.scan_jitter_min: float = 5                     # добавляется к scan_interval
+        self.scan_jitter_max: float = 30
+        self.portfolio_check_jitter_min: float = 10
+        self.portfolio_check_jitter_max: float = 60
+
+        # Таймфреймы
+        self.tf_randomization: bool = True
+        self.tf_pool: List[str] = ['15m', '1h', '4h', '1d']
+        self.tf_min_count: int = 2
+        self.tf_max_count: int = 4
+
+        # Нелинейная задержка API
+        self.api_thinking_min: float = 0.05
+        self.api_thinking_max: float = 0.4
+        self.api_thinking_clusters: bool = True
+
+        # Режимы
+        self.weekend_mode: bool = True
+        self.idle_mode: bool = True
+        self.idle_skip_chance: float = 0.10
+        self.idle_cancel_chance: float = 0.05
+
+        # Разбивка ордеров
+        self.split_entry_enabled: bool = True
+        self.split_parts_min: int = 2
+        self.split_parts_max: int = 4
+        self.split_delay_min: float = 5.0
+        self.split_delay_max: float = 30.0
+
+        # Случайные корректировки SL/TP
+        self.tweak_tpsl_enabled: bool = True
+        self.tweak_percent: float = 0.001                  # ±0.1% от цены
+
+        # Отмены ордеров
+        self.random_cancel_enabled: bool = True
+        self.random_cancel_probability: float = 0.02        # 2% шанс на итерацию
+
+        # Частота проверок
+        self.check_frequency_day: int = 2                   # раз в час
+        self.check_frequency_night: int = 1                 # раз в час
+        self.check_frequency_weekend: int = 1
+
+        # Постепенное изменение настроек
+        self.gradual_tweak_enabled: bool = True
+        self.gradual_step_max: float = 0.05                 # максимальный шаг
+
+        # Рабочие переменные
+        self._ua_index: int = 0
+        self._last_ua_rotation: float = 0.0
+        self._last_scan_time: float = 0.0
+        self._last_portfolio_check: float = 0.0
+        self._scan_interval_cache: float = 0.0
+        self._portfolio_check_interval_cache: float = 0.0
+
+        # Загрузка конфигурации
+        self._load_config()
+
+    def _load_config(self):
+        """Читает секцию [HUMAN] из config.ini."""
+        try:
+            from configparser import ConfigParser
+            cfg = ConfigParser()
+            cfg.read('config.ini')
+            if not cfg.has_section('HUMAN'):
+                logger.info("HumanEmulator: секция [HUMAN] не найдена, используются значения по умолчанию")
+                return
+            c = cfg['HUMAN']
+            self.ua_rotation = c.getboolean('ua_rotation', self.ua_rotation)
+            self.ua_rotation_interval_minutes = c.getint('ua_rotation_interval_minutes', self.ua_rotation_interval_minutes)
+            self.interface_delay_min = c.getfloat('interface_delay_min', self.interface_delay_min)
+            self.interface_delay_max = c.getfloat('interface_delay_max', self.interface_delay_max)
+            self.scan_jitter_min = c.getfloat('scan_jitter_min', self.scan_jitter_min)
+            self.scan_jitter_max = c.getfloat('scan_jitter_max', self.scan_jitter_max)
+            self.portfolio_check_jitter_min = c.getfloat('portfolio_check_jitter_min', self.portfolio_check_jitter_min)
+            self.portfolio_check_jitter_max = c.getfloat('portfolio_check_jitter_max', self.portfolio_check_jitter_max)
+            self.tf_randomization = c.getboolean('tf_randomization', self.tf_randomization)
+            self.tf_min_count = c.getint('tf_min_count', self.tf_min_count)
+            self.tf_max_count = c.getint('tf_max_count', self.tf_max_count)
+            self.api_thinking_min = c.getfloat('api_thinking_min', self.api_thinking_min)
+            self.api_thinking_max = c.getfloat('api_thinking_max', self.api_thinking_max)
+            self.api_thinking_clusters = c.getboolean('api_thinking_clusters', self.api_thinking_clusters)
+            self.weekend_mode = c.getboolean('weekend_mode', self.weekend_mode)
+            self.idle_mode = c.getboolean('idle_mode', self.idle_mode)
+            self.idle_skip_chance = c.getfloat('idle_skip_chance', self.idle_skip_chance)
+            self.idle_cancel_chance = c.getfloat('idle_cancel_chance', self.idle_cancel_chance)
+            self.split_entry_enabled = c.getboolean('split_entry_enabled', self.split_entry_enabled)
+            self.split_parts_min = c.getint('split_parts_min', self.split_parts_min)
+            self.split_parts_max = c.getint('split_parts_max', self.split_parts_max)
+            self.split_delay_min = c.getfloat('split_delay_min', self.split_delay_min)
+            self.split_delay_max = c.getfloat('split_delay_max', self.split_delay_max)
+            self.tweak_tpsl_enabled = c.getboolean('tweak_tpsl_enabled', self.tweak_tpsl_enabled)
+            self.tweak_percent = c.getfloat('tweak_percent', self.tweak_percent)
+            self.random_cancel_enabled = c.getboolean('random_cancel_enabled', self.random_cancel_enabled)
+            self.random_cancel_probability = c.getfloat('random_cancel_probability', self.random_cancel_probability)
+            self.check_frequency_day = c.getint('check_frequency_day', self.check_frequency_day)
+            self.check_frequency_night = c.getint('check_frequency_night', self.check_frequency_night)
+            self.check_frequency_weekend = c.getint('check_frequency_weekend', self.check_frequency_weekend)
+            self.gradual_tweak_enabled = c.getboolean('gradual_tweak_enabled', self.gradual_tweak_enabled)
+            self.gradual_step_max = c.getfloat('gradual_step_max', self.gradual_step_max)
+            logger.info("HumanEmulator config loaded from config.ini")
+        except Exception as e:
+            logger.warning(f"HumanEmulator: ошибка загрузки конфига: {e}")
+
+    def start(self):
+        self._running = True
+        logger.info("HumanEmulator activated")
+
+    def stop(self):
+        self._running = False
+
+    # ------------------------------------------------------------------
+    # 1. User-Agent rotation
+    # ------------------------------------------------------------------
+    def get_user_agent(self) -> str:
+        """Возвращает текущий User-Agent с ротацией."""
+        if not self.ua_rotation:
+            return self.engine.antidetect.get_user_agent()
+        now = time.time()
+        if now - self._last_ua_rotation > self.ua_rotation_interval_minutes * 60:
+            self._ua_index = (self._ua_index + 1) % len(self.USER_AGENTS)
+            self._last_ua_rotation = now
+            logger.debug(f"HumanEmulator: User-Agent rotated to index {self._ua_index}")
+        return self.USER_AGENTS[self._ua_index]
+
+    # ------------------------------------------------------------------
+    # 2. Задержки между действиями
+    # ------------------------------------------------------------------
+    def interface_delay(self):
+        """Эмулирует задержку между кликами в интерфейсе."""
+        time.sleep(random.uniform(self.interface_delay_min, self.interface_delay_max))
+
+    def scan_jitter(self) -> float:
+        """Возвращает добавочное время к scan_interval."""
+        return random.uniform(self.scan_jitter_min, self.scan_jitter_max)
+
+    def portfolio_check_jitter(self) -> float:
+        """Возвращает добавочное время к интервалу проверки портфеля."""
+        return random.uniform(self.portfolio_check_jitter_min, self.portfolio_check_jitter_max)
+
+    # ------------------------------------------------------------------
+    # 3. Случайное изменение количества таймфреймов
+    # ------------------------------------------------------------------
+    def get_randomized_timeframes(self, base_timeframes: List[str]) -> List[str]:
+        """Выбирает случайное подмножество таймфреймов из пула."""
+        if not self.tf_randomization:
+            return base_timeframes
+        count = random.randint(self.tf_min_count, min(self.tf_max_count, len(self.tf_pool)))
+        selected = random.sample(self.tf_pool, count)
+        logger.debug(f"HumanEmulator: randomized timeframes: {selected}")
+        return selected
+
+    # ------------------------------------------------------------------
+    # 4. Нелинейная задержка между API-запросами
+    # ------------------------------------------------------------------
+    def api_thinking_delay(self):
+        """Имитирует 'задумчивость' трейдера с кластеризацией."""
+        delay = random.uniform(self.api_thinking_min, self.api_thinking_max)
+        if self.api_thinking_clusters and random.random() < 0.3:
+            delay *= 2.5  # иногда залипает
+        time.sleep(delay)
+
+    # ------------------------------------------------------------------
+    # 5. Режимы "выходного дня" и "праздности"
+    # ------------------------------------------------------------------
+    def is_weekend(self) -> bool:
+        """Проверяет, выходные ли сейчас (суббота/воскресенье)."""
+        now = datetime.now(timezone.utc)
+        return now.weekday() >= 5
+
+    def should_skip_action(self) -> bool:
+        """Решает, нужно ли пропустить очередное действие (режим праздности)."""
+        if not self.idle_mode:
+            return False
+        if self.is_weekend() and self.weekend_mode:
+            return random.random() < self.idle_skip_chance * 2.5
+        return random.random() < self.idle_skip_chance
+
+    def should_cancel_action(self) -> bool:
+        """Решает, нужно ли симулировать отмену действия."""
+        if not self.idle_mode:
+            return False
+        return random.random() < self.idle_cancel_chance
+
+    # ------------------------------------------------------------------
+    # 6. Эмуляция ручного входа с разбивкой
+    # ------------------------------------------------------------------
+    def split_entry_quantity(self, total_qty: float) -> List[Tuple[float, float]]:
+        """
+        Разбивает общее количество на несколько частей со случайными задержками.
+        Возвращает список: [(количество, задержка), ...]
+        """
+        if not self.split_entry_enabled:
+            return [(total_qty, 0.0)]
+        parts = random.randint(self.split_parts_min, self.split_parts_max)
+        if parts <= 1:
+            return [(total_qty, 0.0)]
+        # Распределяем с небольшим разбросом
+        base = total_qty / parts
+        splits = []
+        remaining = total_qty
+        for i in range(parts - 1):
+            qty = base * random.uniform(0.7, 1.3)
+            qty = round(qty, 8)
+            if qty <= 0:
+                qty = base
+            remaining -= qty
+            delay = random.uniform(self.split_delay_min, self.split_delay_max)
+            splits.append((qty, delay))
+        splits.append((remaining, 0.0))  # последняя часть без задержки
+        logger.debug(f"HumanEmulator: split entry into {len(splits)} parts")
+        return splits
+
+    # ------------------------------------------------------------------
+    # 7. Случайные корректировки параметров ордеров
+    # ------------------------------------------------------------------
+    def tweak_price(self, price: float) -> float:
+        """Слегка изменяет цену (SL/TP) на случайный процент."""
+        if not self.tweak_tpsl_enabled or price <= 0:
+            return price
+        factor = 1.0 + random.uniform(-self.tweak_percent, self.tweak_percent)
+        return round(price * factor, 8)
+
+    # ------------------------------------------------------------------
+    # 8. Симуляция "человеческих" отмен ордеров
+    # ------------------------------------------------------------------
+    def should_random_cancel(self) -> bool:
+        """Случайным образом решает, отменить ли ордер."""
+        if not self.random_cancel_enabled:
+            return False
+        return random.random() < self.random_cancel_probability
+
+    # ------------------------------------------------------------------
+    # 9. Реалистичная частота проверок
+    # ------------------------------------------------------------------
+    def get_check_interval(self) -> float:
+        """
+        Возвращает интервал проверки (в секундах) в зависимости от времени суток.
+        Днём – чаще, ночью – реже, на выходных – ещё реже.
+        """
+        now = datetime.now(timezone.utc)
+        hour = now.hour
+        if self.is_weekend():
+            base_per_hour = self.check_frequency_weekend
+        elif 6 <= hour < 22:
+            base_per_hour = self.check_frequency_day
+        else:
+            base_per_hour = self.check_frequency_night
+        if base_per_hour <= 0:
+            base_per_hour = 1
+        # Преобразуем проверок в час -> интервал в секундах
+        interval = 3600.0 / base_per_hour
+        # Добавляем случайный разброс ±30%
+        interval *= random.uniform(0.7, 1.3)
+        return max(30, interval)  # не чаще чем раз в 30 секунд
+
+    # ------------------------------------------------------------------
+    # 10. Постепенное изменение настроек
+    # ------------------------------------------------------------------
+    def gradual_tweak_parameter(self, current_value: float, target_value: float) -> float:
+        """
+        Медленно сдвигает параметр в сторону целевого значения.
+        Используется для эмуляции ручной подстройки.
+        """
+        if not self.gradual_tweak_enabled:
+            return target_value
+        diff = target_value - current_value
+        step = max(0.01, min(abs(diff) * random.uniform(0.1, 0.5), self.gradual_step_max))
+        if abs(diff) <= step:
+            return target_value
+        return current_value + step * (1 if diff > 0 else -1)
+
+=== END FILE: core\human_emulator.py ===
 
 === BEGIN FILE: core\moonshot.py ===
 """
@@ -2271,7 +2650,8 @@ class MoonshotTrader:
 """
 Order Guard – periodic check and repair of TP/SL orders on the exchange.
 Runs in a separate thread, ensures every open position has valid stop-loss
-and take-profit orders at all times.
+and take-profit orders at all times. Now also detects closed positions and
+removes them instead of trying to recreate orders.
 """
 import logging
 import time
@@ -2319,7 +2699,24 @@ class OrderGuard:
         if not positions:
             return
         logger.debug("OrderGuard: checking %d positions", len(positions))
-        for pos in positions:
+        # Сначала проверим, какие позиции реально существуют на бирже
+        api_positions = []
+        try:
+            api_positions = self.engine.api.get_positions()
+        except Exception as e:
+            logger.warning(f"OrderGuard cannot fetch positions: {e}")
+            return
+
+        api_keys = {f"{p.get('symbol')}_{p.get('positionSide')}" for p in api_positions}
+
+        for pos in list(positions):  # копируем список, чтобы безопасно удалять
+            key = f"{pos.symbol}_{pos.side}"
+            if key not in api_keys:
+                # Позиции больше нет на бирже – удаляем её локально
+                logger.info(f"OrderGuard: Position {pos.symbol} {pos.side} no longer exists on exchange, removing")
+                self.engine.portfolio.remove_position(pos.symbol, pos.side)
+                continue
+
             try:
                 self._check_and_repair(pos)
             except Exception as e:
@@ -3143,7 +3540,6 @@ class RiskManager:
         if len(self._trade_pnls) >= 5:
             wins = sum(1 for p in self._trade_pnls if p > 0)
             winrate = wins / len(self._trade_pnls)
-            # Профит-фактор: средняя прибыль / средний убыток
             positive = [p for p in self._trade_pnls if p > 0]
             negative = [abs(p) for p in self._trade_pnls if p <= 0]
             avg_win = sum(positive) / len(positive) if positive else 1.0
@@ -3154,7 +3550,6 @@ class RiskManager:
                 boost = 1.2
                 risk_amount *= boost
                 logger.debug(f"Dynamic risk boost: winrate={winrate:.1%}, PF={profit_factor:.2f}, boost={boost}")
-                # Ограничиваем сверху: не более 15% на сделку (даже для Turbo)
                 max_risk = free_margin * 0.15
                 if risk_amount > max_risk:
                     risk_amount = max_risk
@@ -3208,7 +3603,7 @@ class RiskManager:
     def adapt_to_volatility(self, current_atr_pct: float):
         if self._night_mode or self._low_balance_mode:
             return
-        if self.risk_per_trade_pct >= 5.0:  # Не снижаем агрессивные профили
+        if self.risk_per_trade_pct >= 5.0:
             return
         if current_atr_pct > 0.05:
             self.risk_per_trade_pct = max(0.5, self.risk_per_trade_pct * 0.7)
@@ -3276,7 +3671,7 @@ class RiskManager:
                 'avg_wl': self._kelly_avg_win_loss_ratio
             },
             'user_params': self._profiles.get('User', {'risk_per_trade_pct': 2.0, 'max_leverage': 3}),
-            'previous_profile': self._previous_profile,   # для восстановления после Turbo
+            'previous_profile': self._previous_profile,
         }
         try:
             os.makedirs(os.path.dirname(self.STATE_FILE), exist_ok=True)
@@ -3518,18 +3913,19 @@ class SignalProcessor:
         self.engine = engine
 
     def process(self, signal: Signal, all_candles: Dict[str, pd.DataFrame]):
+        # --- Принудительная синхронизация перед проверкой лимитов ---
+        if not self.engine.auth.demo_mode:
+            try:
+                self.engine.sync_manager.background_sync()
+            except Exception as e:
+                logger.debug(f"Pre-check sync failed: {e}")
+
         # --- Запрет на дубликаты позиций по символу ---
         current_positions = self.engine.portfolio.get_positions()
         for pos in current_positions:
             if pos.symbol == signal.symbol:
                 logger.info(f"Position already exists for {signal.symbol} ({pos.side}), skipping new signal")
                 return
-
-        if not self.engine.auth.demo_mode:
-            try:
-                self.engine.sync_manager.background_sync()
-            except Exception as e:
-                logger.debug(f"Pre-check sync failed: {e}")
 
         price = self.engine._get_current_price(signal.symbol)
         if price <= 0:
@@ -3578,7 +3974,7 @@ class SignalProcessor:
         onchain_filter = self.engine.filters.get('OnChainFilter')
         if onchain_filter and onchain_filter.enabled:
             new_conf = self._safe_filter_assess(onchain_filter, signal, {})
-            if new_conf is None:               # если фильтр вернул None, пропускаем
+            if new_conf is None:
                 new_conf = signal.confidence
             if new_conf <= 0:
                 logger.info(f"On-chain filter blocked {signal.symbol}")
@@ -3617,7 +4013,7 @@ class SignalProcessor:
             except Exception as e:
                 logger.warning(f"Filter {filter_name} error: {e}")
 
-        # Проверка лимита позиций (без умной замены)
+        # Проверка лимита позиций (после актуализации)
         if len(current_positions) >= self.engine.max_positions:
             logger.info(f"Max positions reached ({self.engine.max_positions}), skipping {signal.symbol}")
             return
@@ -3914,7 +4310,7 @@ class PositionSyncManager:
                     )
                     self.engine.portfolio.record_trade(trade)
                     self.engine.risk_manager.update_adaptive_risk(pnl)
-                    self.engine.risk_manager.record_trade_result(pnl)   # ← для динамического риска
+                    self.engine.risk_manager.record_trade_result(pnl)
                     self.engine.portfolio.remove_position(pos.symbol, pos.side)
                     cache_key = f"{pos.symbol}_{pos.side}"
                     if cache_key in self._tpsl_cache:
@@ -4100,12 +4496,10 @@ class PositionSyncManager:
     def _sync_tpsl_orders(self, symbol, pos_side, quantity, expected_tp, expected_sl):
         cache_key = f"{symbol}_{pos_side}"
         cached = self._tpsl_cache.get(cache_key)
-        # Сравниваем все три параметра
         if (cached and cached['tp'] == expected_tp and cached['sl'] == expected_sl and cached['qty'] == quantity):
             return
 
         try:
-            # Отменяем все существующие TP/SL ордера для этой стороны
             orders = self.engine.api.get_open_orders(symbol)
             for o in orders:
                 if o.get('positionSide') != pos_side:
@@ -4568,19 +4962,19 @@ Whale Shield – автоматическая защита от крупных �
 import logging
 import time
 import threading
+from configparser import ConfigParser
 from datetime import datetime, timezone
 from typing import Dict, Optional
 
 logger = logging.getLogger(__name__)
 
-# Константы по умолчанию
-DEPTH_THRESHOLD_MULT = 3.0          # Во сколько раз объем стакана превысил средний
-BIG_SINGLE_ORDER_BTC = 50           # Размер ордера (в BTC эквиваленте), считающийся китовым
-TRADE_VOLUME_SPIKE_MULT = 20        # Множитель объёма сделки для срабатывания
-FULL_CLOSE_THRESHOLD_BTC = 100      # Сумма ордеров, при которой позиция закрывается полностью
-CHECK_INTERVAL_SECONDS = 10         # Период опроса стакана
-ALERT_COOLDOWN_MINUTES = 5          # Интервал между повторными алертами
-
+# Значения по умолчанию, могут быть переопределены из конфига
+DEPTH_THRESHOLD_MULT = 3.0
+BIG_SINGLE_ORDER_BTC = 50
+TRADE_VOLUME_SPIKE_MULT = 20
+FULL_CLOSE_THRESHOLD_BTC = 100
+CHECK_INTERVAL_SECONDS = 10
+ALERT_COOLDOWN_MINUTES = 5
 
 class WhaleShield:
     """Обнаруживает вход крупных игроков и немедленно защищает позиции."""
@@ -4589,11 +4983,30 @@ class WhaleShield:
         self.engine = engine
         self._running = False
         self._thread: Optional[threading.Thread] = None
-        self._avg_depth_volumes: Dict[str, float] = {}   # символ -> средний объём стакана
-        self._avg_trade_volumes: Dict[str, float] = {}    # символ -> средний объём сделок
-        self._last_alert_time: Dict[str, float] = {}     # символ -> время последнего алерта
-        self._depth_history: Dict[str, list] = {}         # история объёмов стакана
-        self._trade_history: Dict[str, list] = {}         # история объёмов сделок
+        self._avg_depth_volumes: Dict[str, float] = {}
+        self._avg_trade_volumes: Dict[str, float] = {}
+        self._last_alert_time: Dict[str, float] = {}
+        self._depth_history: Dict[str, list] = {}
+        self._trade_history: Dict[str, list] = {}
+        self._load_config()
+
+    def _load_config(self):
+        """Читает параметры из config.ini, если файл существует."""
+        try:
+            cfg = ConfigParser()
+            cfg.read('config.ini')
+            if cfg.has_section('WHALE'):
+                global DEPTH_THRESHOLD_MULT, BIG_SINGLE_ORDER_BTC, TRADE_VOLUME_SPIKE_MULT
+                global FULL_CLOSE_THRESHOLD_BTC, CHECK_INTERVAL_SECONDS, ALERT_COOLDOWN_MINUTES
+                DEPTH_THRESHOLD_MULT = cfg.getfloat('WHALE', 'depth_threshold_mult', fallback=DEPTH_THRESHOLD_MULT)
+                BIG_SINGLE_ORDER_BTC = cfg.getfloat('WHALE', 'big_single_order_btc', fallback=BIG_SINGLE_ORDER_BTC)
+                TRADE_VOLUME_SPIKE_MULT = cfg.getfloat('WHALE', 'trade_volume_spike_mult', fallback=TRADE_VOLUME_SPIKE_MULT)
+                FULL_CLOSE_THRESHOLD_BTC = cfg.getfloat('WHALE', 'full_close_threshold_btc', fallback=FULL_CLOSE_THRESHOLD_BTC)
+                CHECK_INTERVAL_SECONDS = cfg.getint('WHALE', 'scan_interval', fallback=CHECK_INTERVAL_SECONDS)
+                ALERT_COOLDOWN_MINUTES = cfg.getint('WHALE', 'alert_cooldown_min', fallback=ALERT_COOLDOWN_MINUTES)
+                logger.info("WhaleShield config loaded from config.ini")
+        except Exception as e:
+            logger.warning(f"Could not load WhaleShield config: {e}")
 
     def start(self):
         if self._running:
@@ -4607,6 +5020,7 @@ class WhaleShield:
         self._running = False
         if self._thread:
             self._thread.join(timeout=5)
+            self._thread = None
 
     def _loop(self):
         while self._running:
@@ -4636,7 +5050,7 @@ class WhaleShield:
         # Сбор данных
         try:
             depth = self.engine.api.get_depth(symbol, limit=20)
-            trades = self.engine.api.get_ticker(symbol)  # или trades, если доступен
+            ticker = self.engine.api.get_ticker(symbol)
         except Exception as e:
             logger.debug(f"WhaleShield cannot fetch data for {symbol}: {e}")
             return
@@ -4646,7 +5060,7 @@ class WhaleShield:
         bids_vol = sum(float(b[1]) for b in depth.get('data', {}).get('bids', []))
         total_depth_vol = asks_vol + bids_vol
 
-        # Обновление истории
+        # Инициализация истории при необходимости
         if symbol not in self._depth_history:
             self._depth_history[symbol] = []
         self._depth_history[symbol].append(total_depth_vol)
@@ -4655,17 +5069,18 @@ class WhaleShield:
 
         if symbol not in self._trade_history:
             self._trade_history[symbol] = []
-        # Анализируем объём последней сделки
-        last_qty = float(trades.get('data', {}).get('volume', 0))
+        last_qty = float(ticker.get('data', {}).get('volume', 0))
         self._trade_history[symbol].append(last_qty)
         if len(self._trade_history[symbol]) > 30:
             self._trade_history[symbol].pop(0)
 
+        # Проверка прогрева: нужно не менее 10 наблюдений для каждого типа данных
+        if len(self._depth_history[symbol]) < 10 or len(self._trade_history[symbol]) < 10:
+            return
+
         # Средние значения
-        if len(self._depth_history[symbol]) >= 10:
-            self._avg_depth_volumes[symbol] = sum(self._depth_history[symbol][-10:]) / 10
-        if len(self._trade_history[symbol]) >= 10:
-            self._avg_trade_volumes[symbol] = sum(self._trade_history[symbol][-10:]) / 10
+        self._avg_depth_volumes[symbol] = sum(self._depth_history[symbol][-10:]) / 10
+        self._avg_trade_volumes[symbol] = sum(self._trade_history[symbol][-10:]) / 10
 
         # --- Оценка аномалии ---
         threat_level = 0
@@ -4679,9 +5094,8 @@ class WhaleShield:
         # 2. Крупный одиночный ордер в стакане
         max_bid_qty = max((float(b[1]) for b in depth.get('data', {}).get('bids', [])), default=0)
         max_ask_qty = max((float(a[1]) for a in depth.get('data', {}).get('asks', [])), default=0)
-        # Конвертация в BTC эквивалент (грубо)
         price = self.engine._get_current_price(symbol) or 1
-        max_order_btc = max(max_bid_qty, max_ask_qty) * price / 50000  # допускаем, что 1 BTC = 50000 USDT
+        max_order_btc = max(max_bid_qty, max_ask_qty) * price / 50000
         if max_order_btc > BIG_SINGLE_ORDER_BTC:
             threat_level += 5
             logger.warning(f"WhaleShield: single giant order on {symbol} ({max_order_btc:.1f} BTC eq.)")
@@ -4694,7 +5108,7 @@ class WhaleShield:
 
         # 4. Критический уровень – полное закрытие
         if max_order_btc > FULL_CLOSE_THRESHOLD_BTC:
-            threat_level = 10  # максимальная тревога
+            threat_level = 10
 
         if threat_level == 0:
             return
@@ -4708,20 +5122,18 @@ class WhaleShield:
 
         # --- Реакция ---
         if threat_level >= 10:
-            # Полное закрытие позиции
             logger.critical(f"WhaleShield: EMERGENCY CLOSE {pos.symbol} {pos.side} (threat={threat_level})")
             try:
-                self.engine.executor.api.close_position(pos.symbol, pos.side)
+                self.engine.api.close_position(pos.symbol, pos.side)
                 self.engine.portfolio.remove_position(pos.symbol, pos.side)
                 if hasattr(self.engine, 'telegram'):
                     self.engine.telegram.send_message(f"🚨 WhaleShield экстренно закрыл {symbol} {pos.side}")
             except Exception as e:
                 logger.error(f"WhaleShield emergency close failed: {e}")
         elif threat_level >= 5:
-            # Закрыть 50% позиции
             try:
                 close_qty = pos.quantity * 0.5
-                self.engine.executor.api.close_position(pos.symbol, pos.side, close_qty)
+                self.engine.api.close_position(pos.symbol, pos.side, close_qty)
                 pos.quantity -= close_qty
                 if pos.quantity > 0:
                     self.engine.executor._place_tpsl_orders(pos.symbol, pos.side, pos.quantity,
@@ -4732,7 +5144,6 @@ class WhaleShield:
             except Exception as e:
                 logger.error(f"WhaleShield partial close failed: {e}")
         elif threat_level >= 3:
-            # Подтянуть SL в безубыток (или очень близко)
             if pos.side == 'LONG':
                 new_sl = pos.entry_price * 1.001
             else:
@@ -4750,7 +5161,7 @@ class WhaleShield:
 {
   "daily_pnl": 0.0,
   "last_day": 6,
-  "updated": "2026-05-07T23:21:39.724645+00:00"
+  "updated": "2026-05-08T06:09:51.762542+00:00"
 }
 === END FILE: data\engine_state.json ===
 
@@ -4758,8 +5169,8 @@ class WhaleShield:
 {
   "atr_multipliers": {
     "__default__": {
-      "sl": 2.2,
-      "tp": 3.8
+      "sl": 2.0,
+      "tp": 3.5
     }
   },
   "kelly": {
@@ -4770,14 +5181,15 @@ class WhaleShield:
   "user_params": {
     "risk_per_trade_pct": 8.0,
     "max_leverage": 10
-  }
+  },
+  "previous_profile": "Balanced"
 }
 === END FILE: data\risk_state.json ===
 
 === BEGIN FILE: data\strategy_weights.json ===
 {
   "AdaptiveCombiner": {
-    "weight": 1.1448990498679565,
+    "weight": 1.0,
     "trades": 0,
     "wins": 0,
     "total_pnl": 0.0,
@@ -4788,7 +5200,7 @@ class WhaleShield:
     "disabled_reason": null
   },
   "DualThrust": {
-    "weight": 0.8014293349075694,
+    "weight": 0.7,
     "trades": 0,
     "wins": 0,
     "total_pnl": 0.0,
@@ -4799,7 +5211,7 @@ class WhaleShield:
     "disabled_reason": null
   },
   "Ichimoku": {
-    "weight": 1.1448990498679565,
+    "weight": 1.0,
     "trades": 0,
     "wins": 0,
     "total_pnl": 0.0,
@@ -4810,7 +5222,7 @@ class WhaleShield:
     "disabled_reason": null
   },
   "MeanReversion": {
-    "weight": 1.1448990498679565,
+    "weight": 1.8639779313273752,
     "trades": 0,
     "wins": 0,
     "total_pnl": 0.0,
@@ -4821,19 +5233,19 @@ class WhaleShield:
     "disabled_reason": null
   },
   "Momentum": {
-    "weight": 0.10019655591110038,
-    "trades": 9,
+    "weight": 1.2,
+    "trades": 18,
     "wins": 0,
     "total_pnl": 0.0,
     "avg_pnl": 0.0,
     "winrate": 0.0,
-    "consecutive_losses": 9,
+    "consecutive_losses": 18,
     "disabled": true,
     "disabled_reason": "5 consecutive losses",
     "disabled_at": 1778183780.051129
   },
   "RSIDivergence": {
-    "weight": 1.0304091448811608,
+    "weight": 0.6294113526940414,
     "trades": 0,
     "wins": 0,
     "total_pnl": 0.0,
@@ -4844,7 +5256,7 @@ class WhaleShield:
     "disabled_reason": null
   },
   "Squeeze": {
-    "weight": 0.9159192398943652,
+    "weight": 0.8,
     "trades": 0,
     "wins": 0,
     "total_pnl": 0.0,
@@ -4855,13 +5267,24 @@ class WhaleShield:
     "disabled_reason": null
   },
   "TrendFollowing": {
-    "weight": 1.7173485748019348,
+    "weight": 1.1203363600115201,
     "trades": 0,
     "wins": 0,
     "total_pnl": 0.0,
     "avg_pnl": 0.0,
     "winrate": 0.0,
     "consecutive_losses": 0,
+    "disabled": false,
+    "disabled_reason": null
+  },
+  "SmartPyramiding": {
+    "weight": 1.0094435986789285,
+    "trades": 2,
+    "wins": 0,
+    "total_pnl": 0.0,
+    "avg_pnl": 0.0,
+    "winrate": 0.0,
+    "consecutive_losses": 2,
     "disabled": false,
     "disabled_reason": null
   }
@@ -5410,12 +5833,12 @@ class MicroLotFilter(BaseFilter):
 
     PARAMS = {'enabled': True}
 
-    def assess(self, signal: Signal, data: dict) -> float:
-        if not self.enabled:
-            return signal.confidence
+    def __init__(self, params=None, engine=None):
+        super().__init__(params)
+        self.engine = engine
 
-        engine = self._get_engine()
-        if engine is None:
+    def assess(self, signal: Signal, data: dict) -> float:
+        if not self.enabled or self.engine is None:
             return signal.confidence
 
         symbol = signal.symbol
@@ -5423,14 +5846,14 @@ class MicroLotFilter(BaseFilter):
         if price <= 0:
             return signal.confidence
 
-        contract_info = engine._contracts_info.get(symbol, {})
+        contract_info = self.engine._contracts_info.get(symbol, {})
         min_qty = contract_info.get('minQty', 0)
         if min_qty <= 0:
             return signal.confidence
 
         min_order_value = min_qty * price
-        free_margin = data.get('available_margin', 0) or engine.portfolio.available_margin or 0
-        max_leverage = engine.risk_manager.max_leverage
+        free_margin = data.get('available_margin', 0) or self.engine.portfolio.available_margin or 0
+        max_leverage = self.engine.risk_manager.max_leverage
         required_margin = min_order_value / max_leverage
 
         if free_margin < required_margin:
@@ -5438,14 +5861,6 @@ class MicroLotFilter(BaseFilter):
             return 0.0
 
         return signal.confidence
-
-    def _get_engine(self):
-        import gc
-        from core.engine import TradingEngine
-        for obj in gc.get_objects():
-            if isinstance(obj, TradingEngine):
-                return obj
-        return None
 
 === END FILE: filters\micro_lot_filter.py ===
 
@@ -6514,10 +6929,19 @@ def main():
     # 2. Микро‑лотовый фильтр (блокирует сигналы, на которые не хватит маржи)
     try:
         from filters.micro_lot_filter import MicroLotFilter
-        engine.filters['MicroLotFilter'] = MicroLotFilter()
+        engine.filters['MicroLotFilter'] = MicroLotFilter(engine=engine)
         logging.info("MicroLotFilter added")
     except Exception as e:
         logging.warning(f"MicroLotFilter not added: {e}")
+
+    # 3. Human Emulator (эмуляция поведения человека)
+    try:
+        from core.human_emulator import HumanEmulator
+        engine.human_emulator = HumanEmulator(engine)
+        engine.human_emulator.start()
+        logging.info("HumanEmulator started")
+    except Exception as e:
+        logging.warning(f"HumanEmulator not started: {e}")
 
     # ------------------- ОСТАЛЬНЫЕ МОДУЛИ -------------------
     try:
@@ -8181,6 +8605,290 @@ psutil>=5.9.0
 
 === END FILE: requirements.txt ===
 
+=== BEGIN FILE: rollback_from_github.py ===
+#!/usr/bin/env python3
+"""
+GitHub Restore Script – скачивает актуальную версию бота с GitHub.
+Если локальный репозиторий уже существует, он будет принудительно сброшен
+до последнего коммита из ветки main. Иначе репозиторий будет клонирован.
+"""
+
+import subprocess
+import sys
+import os
+import shutil
+
+def run_cmd(cmd, check=True, capture_output=False):
+    try:
+        if capture_output:
+            result = subprocess.run(cmd, check=check, capture_output=True, text=True)
+            return result.stdout.strip()
+        else:
+            subprocess.run(cmd, check=check)
+            return None
+    except subprocess.CalledProcessError as e:
+        if not check and capture_output:
+            return None
+        print(f"ERROR: Command '{' '.join(cmd)}' failed with code {e.returncode}")
+        if e.output:
+            print(e.output)
+        sys.exit(1)
+    except FileNotFoundError:
+        print(f"ERROR: Command not found: {cmd[0]}")
+        sys.exit(1)
+
+def main():
+    print("=" * 60)
+    print("  GitHub Restore Script – восстановление бота из репозитория")
+    print("=" * 60)
+
+    # Проверка git
+    git_version = run_cmd(["git", "--version"], capture_output=True)
+    if git_version:
+        print(f"Найден Git: {git_version}")
+    else:
+        print("Ошибка: Git не установлен или не найден в PATH.")
+        print("Установите Git с https://git-scm.com/download/win")
+        input("Нажмите Enter для выхода...")
+        sys.exit(1)
+
+    # Запрос данных
+    username = input("Введите ваш GitHub username: ").strip()
+    repo_name = input("Введите название репозитория (по умолчанию crypto_bot_futures01): ").strip()
+    if not repo_name:
+        repo_name = "crypto_bot_futures01"
+    repo_url = f"https://github.com/{username}/{repo_name}.git"
+
+    # Путь к папке проекта (текущая директория)
+    local_dir = os.getcwd()
+    print(f"\nВосстанавливаем репозиторий в: {local_dir}")
+
+    # Проверяем, есть ли уже локальный репозиторий
+    if os.path.isdir(os.path.join(local_dir, ".git")):
+        print("Локальный репозиторий найден.")
+        print("Будет выполнен принудительный сброс до состояния origin/main.")
+        confirm = input("Все локальные изменения будут потеряны. Продолжить? (y/n): ").lower()
+        if confirm != 'y':
+            print("Отмена.")
+            sys.exit(0)
+
+        # Убеждаемся, что remote origin указывает на правильный URL
+        current_origin = run_cmd(["git", "remote", "get-url", "origin"], check=False, capture_output=True)
+        if current_origin and current_origin != repo_url:
+            print(f"Текущий origin: {current_origin}, меняем на {repo_url}")
+            run_cmd(["git", "remote", "set-url", "origin", repo_url])
+        elif not current_origin:
+            run_cmd(["git", "remote", "add", "origin", repo_url])
+
+        # Скачиваем все изменения с удалённого репозитория
+        print("Загрузка последних изменений с GitHub...")
+        run_cmd(["git", "fetch", "origin", "main"])
+
+        # Жёсткий сброс до состояния origin/main
+        print("Сброс к последнему коммиту...")
+        run_cmd(["git", "reset", "--hard", "origin/main"])
+
+        print("\nЛокальные файлы приведены к состоянию удалённого репозитория.")
+    else:
+        # Локального репозитория нет – клонируем во временную папку и переносим
+        print("Локальный репозиторий отсутствует. Будет выполнено клонирование.")
+        tmp_dir = os.path.join(local_dir, "tmp_restore")
+        if os.path.exists(tmp_dir):
+            shutil.rmtree(tmp_dir)
+
+        try:
+            print(f"Клонирование {repo_url} во временную папку...")
+            run_cmd(["git", "clone", "--branch", "main", repo_url, tmp_dir])
+
+            # Перенос файлов из временной папки в текущую (кроме самой временной)
+            print("Перенос файлов в проект...")
+            for item in os.listdir(tmp_dir):
+                if item == ".git":
+                    continue  # перенесём позже
+                s = os.path.join(tmp_dir, item)
+                d = os.path.join(local_dir, item)
+                if os.path.isdir(s):
+                    if os.path.exists(d):
+                        shutil.rmtree(d)
+                    shutil.copytree(s, d)
+                else:
+                    shutil.copy2(s, d)
+
+            # Переносим и скрытую папку .git, если её ещё нет
+            git_dir_src = os.path.join(tmp_dir, ".git")
+            git_dir_dst = os.path.join(local_dir, ".git")
+            if not os.path.exists(git_dir_dst):
+                shutil.copytree(git_dir_src, git_dir_dst)
+
+            print("Клонирование завершено успешно.")
+        finally:
+            # Удаляем временную папку
+            if os.path.exists(tmp_dir):
+                shutil.rmtree(tmp_dir)
+
+    print("\nВосстановление завершено. Проверьте файлы проекта.")
+    input("Нажмите Enter для выхода...")
+
+if __name__ == "__main__":
+    main()
+
+=== END FILE: rollback_from_github.py ===
+
+=== BEGIN FILE: send_to_github.py ===
+#!/usr/bin/env python3
+"""
+GitHub Upload Script for Trading Bot
+Выполняет автоматический git add, commit и push с force в репозиторий.
+Аналог git_commit.bat, но на Python.
+"""
+
+import subprocess
+import sys
+import os
+from datetime import datetime
+
+def run_cmd(cmd, check=True, capture_output=False):
+    """Выполняет команду через subprocess с обработкой ошибок."""
+    try:
+        if capture_output:
+            result = subprocess.run(cmd, check=check, capture_output=True, text=True)
+            return result.stdout.strip()
+        else:
+            subprocess.run(cmd, check=check)
+            return None
+    except subprocess.CalledProcessError as e:
+        if not check and capture_output:
+            return None
+        print(f"ERROR: Command '{' '.join(cmd)}' failed with code {e.returncode}")
+        if e.output:
+            print(e.output)
+        sys.exit(1)
+    except FileNotFoundError:
+        print(f"ERROR: Command not found: {cmd[0]}")
+        sys.exit(1)
+
+
+def main():
+    print("=" * 50)
+    print("  GitHub Upload Script for Trading Bot")
+    print("=" * 50)
+
+    # Проверяем, установлен ли git
+    git_version = run_cmd(["git", "--version"], capture_output=True)
+    if git_version:
+        print(f"Found: {git_version}")
+    else:
+        print("ERROR: Git is not installed or not in PATH.")
+        print("Please install Git from https://git-scm.com/download/win")
+        input("Press Enter to exit...")
+        sys.exit(1)
+
+    # Читаем глобальные настройки
+    git_email = run_cmd(["git", "config", "--global", "user.email"], check=False, capture_output=True) or ""
+    git_username = run_cmd(["git", "config", "--global", "user.name"], check=False, capture_output=True) or ""
+
+    print("\nCurrent global Git settings:")
+    print(f"  Email   : [{git_email}]")
+    print(f"  Username: [{git_username}]\n")
+
+    # Запрашиваем, если не заданы
+    changed = False
+    if not git_email:
+        git_email = input("Enter your GitHub email: ").strip()
+        run_cmd(["git", "config", "--global", "user.email", git_email])
+        changed = True
+    if not git_username:
+        git_username = input("Enter your GitHub username: ").strip()
+        run_cmd(["git", "config", "--global", "user.name", git_username])
+        changed = True
+    if changed:
+        print("\nUpdated global Git settings.\n")
+    else:
+        print(f"Using email   : {git_email}")
+        print(f"Using username: {git_username}\n")
+
+    # Создаём .gitignore, если его нет
+    if not os.path.exists(".gitignore"):
+        print("Creating .gitignore...")
+        with open(".gitignore", "w") as f:
+            f.write("""keys.json
+*.log
+data/*.db
+project_base64.txt
+__pycache__/
+*.pyc
+Thumbs.db
+""")
+        print(".gitignore created.\n")
+
+    # Инициализируем репозиторий, если нет
+    if not os.path.isdir(".git"):
+        print("Initializing git repository...")
+        run_cmd(["git", "init"])
+    else:
+        print("Git repository already exists.\n")
+
+    # Добавляем все файлы
+    print("Adding files...")
+    run_cmd(["git", "add", "."])
+
+    # Формируем сообщение коммита с временной меткой
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    commit_msg = f"Update {timestamp}"
+    print(f"Committing with message: {commit_msg}")
+    # Если нечего коммитить, git commit вернёт ошибку, но мы не хотим падать
+    commit_result = subprocess.run(["git", "commit", "-m", commit_msg], capture_output=True, text=True)
+    if commit_result.returncode != 0:
+        # Проверим, есть ли вообще изменения
+        status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True).stdout
+        if not status.strip():
+            print("Nothing to commit, but continuing to push...")
+        else:
+            print(f"ERROR: git commit failed:\n{commit_result.stderr}")
+            # Не выходим, возможно пользователь хочет пропустить
+    else:
+        print(commit_result.stdout.strip())
+
+    # Настраиваем remote origin
+    repo_url = f"https://github.com/{git_username}/crypto_bot_futures01.git"
+    print(f"\nSetting remote origin to: {repo_url}")
+    # Удаляем старый origin, если есть
+    run_cmd(["git", "remote", "remove", "origin"], check=False)
+    run_cmd(["git", "remote", "add", "origin", repo_url])
+
+    # Переключаемся на ветку main (если ещё не)
+    print("Switching to branch main...")
+    # Создаём ветку main, если её нет (git branch -M main)
+    run_cmd(["git", "branch", "-M", "main"])
+
+    # Пушим с force
+    print("\nPushing to GitHub...")
+    push_result = subprocess.run(["git", "push", "-u", "origin", "main", "--force"], capture_output=True, text=True)
+    if push_result.returncode == 0:
+        print("=" * 50)
+        print("  Upload successful!")
+        print(f"  Repository: {repo_url}")
+        print("=" * 50)
+    else:
+        print("=" * 50)
+        print("  Push failed. Possible reasons:")
+        print(f"  1. The repository {repo_url} does not exist.")
+        print("     Create it first on GitHub (make sure it's empty).")
+        print("  2. Authentication error – use a personal access token")
+        print("     or configure SSH key or Git Credential Manager.")
+        print("  3. Network error or repository already has unrelated history.")
+        print("     Force push may be blocked.")
+        print("=" * 50)
+        print(f"\nGit push output:\n{push_result.stderr}")
+
+    input("\nPress Enter to exit...")
+
+
+if __name__ == "__main__":
+    main()
+
+=== END FILE: send_to_github.py ===
+
 === BEGIN FILE: sounds\README.txt ===
 Sound files for notifications:
 - profit.wav   : Played when a profitable trade closes
@@ -8253,32 +8961,31 @@ class BaseStrategy(ABC):
     4. Implement evaluate() method
     """
     
-    # Strategy metadata - override in subclass
     NAME: str = "BaseStrategy"
     DESCRIPTION: str = "Base strategy description"
     VERSION: str = "1.0.0"
     AUTHOR: str = ""
     
-    # Configurable parameters - define defaults here
-    # GUI will auto-generate controls from this dict
     PARAMS: Dict[str, Any] = {
         'enabled': True,
-        'weight': 1.0,  # Voting weight in ensemble
+        'weight': 1.0,
         'timeframes': ['15m', '1h', '4h'],
     }
     
-    def __init__(self, params: Optional[Dict[str, Any]] = None):
+    def __init__(self, params: Optional[Dict[str, Any]] = None, engine: Any = None):
         """
         Initialize strategy with parameters.
         
         Args:
             params: Override default PARAMS values
+            engine: TradingEngine instance (if needed by strategy)
         """
         self.config = dict(self.PARAMS)
         if params:
             self.config.update(params)
         self.enabled = self.config.get('enabled', True)
         self.weight = self.config.get('weight', 1.0)
+        self.engine = engine  # сохраняем движок, если передан
         self._error_count = 0
         self._last_error_time = None
         self._disabled_until = None
@@ -8299,25 +9006,9 @@ class BaseStrategy(ABC):
         pass
     
     def on_trade_completed(self, signal: Signal, pnl: float, duration_seconds: float):
-        """
-        Called when a trade based on this strategy's signal completes.
-        Use this for strategy self-optimization / learning.
-        
-        Args:
-            signal: The original signal
-            pnl: Profit/loss in quote currency (positive = profit)
-            duration_seconds: How long the position was held
-        """
         pass
     
     def get_params_schema(self) -> Dict[str, Dict[str, Any]]:
-        """
-        Return parameter schema for GUI auto-generation.
-        Override to provide type hints, ranges, descriptions.
-        
-        Returns:
-            Dict of param_name -> {type, default, min, max, description}
-        """
         schema = {}
         for key, value in self.config.items():
             param_info = {
@@ -8345,7 +9036,6 @@ class BaseStrategy(ABC):
         return schema
     
     def is_disabled(self) -> bool:
-        """Check if strategy is temporarily disabled due to errors."""
         if not self.enabled:
             return True
         if self._disabled_until is not None:
@@ -8356,19 +9046,16 @@ class BaseStrategy(ABC):
         return False
     
     def disable_temporarily(self, seconds: float = 3600):
-        """Temporarily disable strategy after repeated errors."""
         from datetime import datetime, timezone
         self._disabled_until = datetime.now(timezone.utc).timestamp() + seconds
         
     def record_error(self):
-        """Record an error occurrence. Disable if too many errors."""
         self._error_count += 1
         if self._error_count >= 3:
-            self.disable_temporarily(3600)  # 1 hour
+            self.disable_temporarily(3600)
             self._error_count = 0
     
     def reset_error_count(self):
-        """Reset error counter after successful execution."""
         self._error_count = 0
         self._disabled_until = None
         
@@ -8376,6 +9063,69 @@ class BaseStrategy(ABC):
         return f"{self.NAME}(weight={self.weight}, enabled={self.enabled})"
 
 === END FILE: strategies\base.py ===
+
+=== BEGIN FILE: strategies\breakout_strategy.py ===
+"""
+Breakout Strategy – for high volatility markets.
+Uses Bollinger Band squeeze + volume surge.
+No scalping – 1h/4h timeframes.
+"""
+import pandas as pd
+import numpy as np
+from typing import Optional
+from strategies.base import BaseStrategy, Signal
+from indicators.base import BollingerBands, ATR, EMA
+
+class BreakoutStrategy(BaseStrategy):
+    NAME = "Breakout"
+    DESCRIPTION = "Bollinger squeeze breakout with volume confirmation"
+    VERSION = "1.0.0"
+    PARAMS = {
+        'enabled': True, 'weight': 1.0, 'timeframes': ['1h', '4h'],
+        'bb_period': 20, 'bb_std_dev': 2.0, 'atr_period': 14,
+        'squeeze_threshold': 1.5, 'volume_ma_period': 20, 'min_volume_ratio': 1.5, 'ema_period': 50,
+    }
+    def __init__(self, params=None):
+        super().__init__(params)
+        self.bb = BollingerBands({'period': self.config['bb_period'], 'std_dev': self.config['bb_std_dev']})
+        self.atr = ATR({'period': self.config['atr_period']})
+        self.ema = EMA({'period': self.config['ema_period']})
+        self.volume_sma = EMA({'period': self.config['volume_ma_period']})
+    def evaluate(self, symbol: str, timeframe: str, candles: pd.DataFrame) -> Optional[Signal]:
+        if len(candles) < self.config['bb_period'] + 10:
+            return None
+        bb = self.bb.calculate(candles)
+        atr = self.atr.calculate(candles)
+        ema = self.ema.calculate(candles)
+        vol_ma = self.volume_sma.calculate(candles)
+        current_price = candles['close'].iloc[-1]
+        prev_price = candles['close'].iloc[-2]
+        current_vol = candles['volume'].iloc[-1]
+        upper = bb['upper'].iloc[-1]
+        lower = bb['lower'].iloc[-1]
+        bb_width = upper - lower
+        atr_val = atr.iloc[-1]
+        if atr_val == 0:
+            return None
+        is_squeeze = bb_width < self.config['squeeze_threshold'] * atr_val
+        if not is_squeeze:
+            return None
+        vol_ratio = current_vol / vol_ma.iloc[-1] if vol_ma.iloc[-1] > 0 else 1.0
+        if vol_ratio < self.config['min_volume_ratio']:
+            return None
+        ema_val = ema.iloc[-1]
+        trend_up = current_price > ema_val
+        if prev_price <= upper and current_price > upper and trend_up:
+            confidence = 0.6 + min(0.3, (vol_ratio - 1) * 0.15)
+            return Signal(symbol=symbol, action='BUY', confidence=min(0.95, confidence),
+                          meta={'strategy': self.NAME, 'timeframe': timeframe, 'reason': f'BB breakout up, vol={vol_ratio:.2f}'})
+        elif prev_price >= lower and current_price < lower and not trend_up:
+            confidence = 0.6 + min(0.3, (vol_ratio - 1) * 0.15)
+            return Signal(symbol=symbol, action='SELL', confidence=min(0.95, confidence),
+                          meta={'strategy': self.NAME, 'timeframe': timeframe, 'reason': f'BB breakout down, vol={vol_ratio:.2f}'})
+        return None
+
+=== END FILE: strategies\breakout_strategy.py ===
 
 === BEGIN FILE: strategies\dual_thrust.py ===
 from strategies.base import BaseStrategy, Signal
@@ -8664,6 +9414,63 @@ class MomentumStrategy(BaseStrategy):
 
 === END FILE: strategies\momentum.py ===
 
+=== BEGIN FILE: strategies\range_strategy.py ===
+"""
+Range Strategy – for sideways markets.
+Uses RSI + support/resistance levels.
+No scalping – 1h/4h timeframes.
+"""
+import pandas as pd
+import numpy as np
+from typing import Optional
+from strategies.base import BaseStrategy, Signal
+from indicators.base import RSI, ATR, EMA
+
+class RangeStrategy(BaseStrategy):
+    NAME = "Range"
+    DESCRIPTION = "RSI mean reversion in ranging markets"
+    VERSION = "1.0.0"
+    PARAMS = {
+        'enabled': True, 'weight': 1.0, 'timeframes': ['1h', '4h'],
+        'rsi_period': 14, 'rsi_overbought': 72, 'rsi_oversold': 28,
+        'atr_period': 14, 'lookback': 50, 'min_bars': 20,
+    }
+    def __init__(self, params=None):
+        super().__init__(params)
+        self.rsi = RSI({'period': self.config['rsi_period']})
+        self.atr = ATR({'period': self.config['atr_period']})
+        self.ema = EMA({'period': 50})
+    def evaluate(self, symbol: str, timeframe: str, candles: pd.DataFrame) -> Optional[Signal]:
+        if len(candles) < self.config['lookback'] + 10:
+            return None
+        rsi_vals = self.rsi.calculate(candles)
+        atr = self.atr.calculate(candles)
+        ema = self.ema.calculate(candles)
+        current_price = candles['close'].iloc[-1]
+        current_rsi = rsi_vals.iloc[-1]
+        atr_val = atr.iloc[-1]
+        ema_val = ema.iloc[-1]
+        recent_high = candles['high'].iloc[-self.config['lookback']:].max()
+        recent_low = candles['low'].iloc[-self.config['lookback']:].min()
+        range_height = recent_high - recent_low
+        if range_height == 0 or atr_val == 0:
+            return None
+        price_vs_ema = abs(current_price - ema_val) / ema_val if ema_val > 0 else 0
+        if price_vs_ema > 0.03:
+            return None
+        position_in_range = (current_price - recent_low) / range_height
+        if position_in_range < 0.15 and current_rsi < self.config['rsi_oversold']:
+            confidence = 0.55 + min(0.35, (self.config['rsi_oversold'] - current_rsi) / 50)
+            return Signal(symbol=symbol, action='BUY', confidence=min(0.9, confidence),
+                          meta={'strategy': self.NAME, 'timeframe': timeframe, 'reason': f'Range bottom, RSI={current_rsi:.1f}'})
+        if position_in_range > 0.85 and current_rsi > self.config['rsi_overbought']:
+            confidence = 0.55 + min(0.35, (current_rsi - self.config['rsi_overbought']) / 50)
+            return Signal(symbol=symbol, action='SELL', confidence=min(0.9, confidence),
+                          meta={'strategy': self.NAME, 'timeframe': timeframe, 'reason': f'Range top, RSI={current_rsi:.1f}'})
+        return None
+
+=== END FILE: strategies\range_strategy.py ===
+
 === BEGIN FILE: strategies\rsi_divergence.py ===
 from strategies.base import BaseStrategy, Signal
 from indicators.base import RSI
@@ -8703,12 +9510,15 @@ Smart Pyramiding Strategy – наращивает позицию в сторо�
 Заменяет скальпинг, не нарушает лимиты API.
 """
 import logging
+import time
 import pandas as pd
 from datetime import datetime, timezone
 from typing import Optional
 
 from strategies.base import BaseStrategy, Signal
-from indicators.base import EMA, ATR, ADX
+from indicators.base import EMA, ATR
+from indicators.adx import ADX                         # <-- ИСПРАВЛЕНО
+from core.whale_shield import ALERT_COOLDOWN_MINUTES
 
 logger = logging.getLogger(__name__)
 
@@ -8727,52 +9537,44 @@ class SmartPyramidingStrategy(BaseStrategy):
         'adx_period': 14,
         'min_adx': 25,
         'atr_period': 14,
-        'pyramid_max_additions': 3,   # максимальное количество добавлений к позиции
-        'pyramid_profit_threshold': 0.02,  # 2% прибыли от текущей позиции для добавления
+        'pyramid_max_additions': 3,
+        'pyramid_profit_threshold': 0.02,
     }
 
-    def __init__(self, params=None):
-        super().__init__(params)
+    def __init__(self, params=None, engine=None):
+        super().__init__(params, engine=engine)
         self.ema_fast = EMA({'period': self.config['ema_fast']})
         self.ema_slow = EMA({'period': self.config['ema_slow']})
         self.adx = ADX({'period': self.config['adx_period']})
         self.atr = ATR({'period': self.config['atr_period']})
-        self._pyramid_counters = {}  # symbol_side -> количество добавлений
+        self._pyramid_counters = {}
 
     def evaluate(self, symbol: str, timeframe: str, candles: pd.DataFrame) -> Optional[Signal]:
         if len(candles) < self.config['ema_slow'] + 10:
             return None
 
-        # Индикаторы
         ema_fast_vals = self.ema_fast.calculate(candles)
         ema_slow_vals = self.ema_slow.calculate(candles)
         adx_vals = self.adx.calculate(candles)
         atr_vals = self.atr.calculate(candles)
 
         current_price = candles['close'].iloc[-1]
-        prev_price = candles['close'].iloc[-2]
-
-        # Тренд определяется пересечением EMA
         fast_above_slow = ema_fast_vals.iloc[-1] > ema_slow_vals.iloc[-1]
-        prev_fast_above = ema_fast_vals.iloc[-2] > ema_slow_vals.iloc[-2]
         adx_value = adx_vals.iloc[-1] if not adx_vals.empty else 0
 
-        # Сильный тренд
         strong_trend_up = fast_above_slow and adx_value > self.config['min_adx']
         strong_trend_down = not fast_above_slow and adx_value > self.config['min_adx']
 
-        # Проверка пирамидинга: есть ли уже позиция по этому символу
-        engine = self._get_engine()
+        engine = self.engine
         if engine is None:
+            logger.error("SmartPyramiding: engine not set, cannot evaluate")
             return None
 
         existing_positions = engine.portfolio.get_positions()
         current_pos = next((p for p in existing_positions if p.symbol == symbol), None)
 
-        # Если позиции нет — первичный вход по тренду
         if current_pos is None:
             if strong_trend_up:
-                # Проверка, что Whale Shield не блокирует (если активен)
                 if not self._is_whale_safe(symbol, engine):
                     return None
                 confidence = self._calc_confidence(adx_value, True, atr_vals.iloc[-1], current_price)
@@ -8789,15 +9591,12 @@ class SmartPyramidingStrategy(BaseStrategy):
                     meta={'reason': 'SmartPyramiding initial SELL trend'}
                 )
         else:
-            # Позиция уже есть — проверка на добавление (пирамидинг)
             key = f"{symbol}_{current_pos.side}"
             pyramid_count = self._pyramid_counters.get(key, 0)
             if pyramid_count >= self.config['pyramid_max_additions']:
-                return None  # больше не добавляем
+                return None
 
-            # Условие: позиция в плюсе > порога
             if current_pos.pnl_pct >= self.config['pyramid_profit_threshold'] * 100:
-                # Подтверждение тренда всё ещё есть
                 if current_pos.side == 'LONG' and strong_trend_up:
                     if not self._is_whale_safe(symbol, engine):
                         return None
@@ -8827,24 +9626,12 @@ class SmartPyramidingStrategy(BaseStrategy):
         return min(1.0, max(0.1, conf))
 
     def _is_whale_safe(self, symbol: str, engine) -> bool:
-        """Проверяет, не блокирует ли Whale Shield этот символ."""
         if hasattr(engine, 'whale_shield') and engine.whale_shield._running:
-            # Если Whale Shield активен, проверяем, нет ли недавнего алерта
             last_alert = engine.whale_shield._last_alert_time.get(symbol, 0)
-            import time
-            if time.time() - last_alert < 60 * engine.whale_shield.ALERT_COOLDOWN_MINUTES:
+            if time.time() - last_alert < 60 * ALERT_COOLDOWN_MINUTES:
                 logger.debug(f"SmartPyramiding blocked by Whale Shield for {symbol}")
                 return False
         return True
-
-    def _get_engine(self):
-        """Получает ссылку на движок."""
-        import gc
-        from core.engine import TradingEngine
-        for obj in gc.get_objects():
-            if isinstance(obj, TradingEngine):
-                return obj
-        return None
 
 === END FILE: strategies\smart_pyramiding.py ===
 
@@ -9098,6 +9885,7 @@ class TelegramBot:
         self._running = False
         if self._thread:
             self._thread.join(timeout=5)
+            self._thread = None
 
     def send_message(self, text: str, parse_mode: str = 'HTML', reply_markup: dict = None) -> bool:
         if not self.enabled:
@@ -9196,7 +9984,7 @@ class TelegramBot:
         symbol = args[0].upper()
         side = args[1].upper()
         try:
-            self.engine.executor.api.close_position(symbol, side)
+            self.engine.api.close_position(symbol, side)          # ИСПРАВЛЕНО
             self.send_message(f"✅ Закрываю {symbol} {side}")
         except Exception as e:
             self.send_message(f"❌ Ошибка: {e}")
@@ -9216,7 +10004,6 @@ class TelegramBot:
         if not self.engine:
             return
         logger.critical("EMERGENCY STOP via Telegram")
-        # Закрываем все позиции
         for pos in self.engine.portfolio.get_positions():
             try:
                 self.engine.api.close_position(pos.symbol, pos.side)
@@ -11499,6 +12286,61 @@ class StrategyStatsTab(QWidget):
 
 === END FILE: ui\strategy_stats.py ===
 
+=== BEGIN FILE: ui\styles\__init__.py ===
+from ui.styles.theme import theme
+
+=== END FILE: ui\styles\__init__.py ===
+
+=== BEGIN FILE: ui\styles\theme.py ===
+"""Minimal theme module."""
+from PyQt5.QtGui import QFont
+
+class Theme:
+    def __init__(self):
+        self.colors = {
+            'accent': '#00d4aa', 'accent_hover': '#00b894', 'success': '#34d399',
+            'danger': '#f87171', 'warning': '#fbbf24', 'bg_primary': '#0f172a',
+            'bg_secondary': '#1e293b', 'text_primary': '#f1f5f9',
+            'text_secondary': '#94a3b8', 'text_muted': '#64748b', 'border': '#334155',
+        }
+        self.FONTS = {
+            'header': QFont("Segoe UI", 14, QFont.Bold),
+            'large': QFont("Segoe UI", 18, QFont.Bold),
+            'mono': QFont("Consolas", 10),
+            'small': QFont("Segoe UI", 9),
+        }
+        self._dark = True
+
+    def get_stylesheet(self):
+        c = self.colors
+        return f"""
+        QMainWindow {{ background-color: {c['bg_primary']}; color: {c['text_primary']}; }}
+        QWidget {{ background-color: {c['bg_primary']}; color: {c['text_primary']}; }}
+        QTabWidget::pane {{ border: 1px solid {c['border']}; background: {c['bg_primary']}; }}
+        QTabBar::tab {{ background: {c['bg_secondary']}; color: {c['text_secondary']}; padding: 8px 16px; border: 1px solid {c['border']}; }}
+        QTabBar::tab:selected {{ background: {c['bg_primary']}; color: {c['text_primary']}; border-bottom: 2px solid {c['accent']}; }}
+        QPushButton {{ background-color: {c['bg_secondary']}; color: {c['text_primary']}; border: 1px solid {c['border']}; padding: 6px 12px; border-radius: 4px; }}
+        QPushButton:hover {{ background-color: {c['border']}; }}
+        QPushButton#success {{ background-color: {c['success']}; color: #000; }}
+        QPushButton#danger {{ background-color: {c['danger']}; color: #000; }}
+        QPushButton#warning {{ background-color: {c['warning']}; color: #000; }}
+        QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {{ background: {c['bg_secondary']}; color: {c['text_primary']}; border: 1px solid {c['border']}; padding: 4px; }}
+        QTableWidget {{ background: {c['bg_secondary']}; color: {c['text_primary']}; gridline-color: {c['border']}; }}
+        QHeaderView::section {{ background: {c['bg_primary']}; color: {c['text_primary']}; padding: 4px; border: 1px solid {c['border']}; }}
+        QGroupBox {{ border: 1px solid {c['border']}; margin-top: 10px; padding-top: 10px; }}
+        QLabel {{ color: {c['text_primary']}; }}
+        QStatusBar {{ background: {c['bg_secondary']}; color: {c['text_secondary']}; }}
+        """
+
+    def toggle(self):
+        self._dark = not self._dark
+    def apply_theme(self):
+        pass
+
+theme = Theme()
+
+=== END FILE: ui\styles\theme.py ===
+
 === BEGIN FILE: ui\styles.py ===
 """
 Theme management: dark and light themes with high contrast.
@@ -11791,6 +12633,10 @@ class SystemTab(QWidget):
         pass
 
 === END FILE: ui\system.py ===
+
+=== BEGIN FILE: web\__init__.py ===
+
+=== END FILE: web\__init__.py ===
 
 === BEGIN FILE: web\server.py ===
 """

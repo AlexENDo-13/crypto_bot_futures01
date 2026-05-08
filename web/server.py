@@ -150,7 +150,7 @@ class WebServer:
             filepath = os.path.join(self.app.config['UPLOAD_FOLDER'], filename)
             file.save(filepath)
             try:
-                self.engine.reload_modules()
+                self.engine.load_all_modules()   # исправлено: раньше было reload_modules()
                 return jsonify({"status":"uploaded", "reloaded": True})
             except Exception as e:
                 return jsonify({"error": str(e)}), 500

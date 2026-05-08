@@ -157,7 +157,6 @@ class TradeExecutor:
         # Дополнительный предохранитель: цены должны быть положительны
         if final_sl <= 0 or final_tp <= 0:
             logger.error(f"Invalid SL/TP after corrections for {signal.symbol}: SL={final_sl}, TP={final_tp}. Aborting trade.")
-            # Отменяем ордер
             try:
                 self.engine.api.cancel_order(signal.symbol, order.get('orderId', ''))
             except:

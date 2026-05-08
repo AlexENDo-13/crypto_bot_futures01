@@ -436,7 +436,7 @@ class SettingsTab(QWidget):
 
     def _reload_modules(self):
         try:
-            self.engine.reload_modules()
+            self.engine.load_all_modules()   # исправлено: раньше было reload_modules()
             QMessageBox.information(self, "Success", "Modules reloaded!")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Reload failed: {e}")
