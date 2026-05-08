@@ -87,5 +87,16 @@
     "consecutive_losses": 0,
     "disabled": false,
     "disabled_reason": null
+  },
+  "SmartPyramiding": {
+    "weight": 0.9032685632326924,
+    "trades": 0,
+    "wins": 0,
+    "total_pnl": 0.0,
+    "avg_pnl": 0.0,
+    "winrate": 0.0,
+    "consecutive_losses": 0,
+    "disabled": false,
+    "disabled_reason": null
   }
 }

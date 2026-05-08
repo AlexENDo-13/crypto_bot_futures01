@@ -9,7 +9,8 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from strategies.base import BaseStrategy, Signal
-from indicators.base import EMA, ATR, ADX
+from indicators.base import EMA, ATR
+from indicators.adx import ADX                         # <-- ИСПРАВЛЕНО
 from core.whale_shield import ALERT_COOLDOWN_MINUTES
 
 logger = logging.getLogger(__name__)

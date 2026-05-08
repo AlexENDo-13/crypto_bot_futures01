@@ -20,7 +20,6 @@ FULL_CLOSE_THRESHOLD_BTC = 100
 CHECK_INTERVAL_SECONDS = 10
 ALERT_COOLDOWN_MINUTES = 5
 
-
 class WhaleShield:
     """Обнаруживает вход крупных игроков и немедленно защищает позиции."""
 
@@ -33,6 +32,7 @@ class WhaleShield:
         self._last_alert_time: Dict[str, float] = {}
         self._depth_history: Dict[str, list] = {}
         self._trade_history: Dict[str, list] = {}
+        self._warmup_complete: Dict[str, bool] = {}   # защита от холодного старта
         self._load_config()
 
     def _load_config(self):
@@ -95,7 +95,7 @@ class WhaleShield:
         # Сбор данных
         try:
             depth = self.engine.api.get_depth(symbol, limit=20)
-            ticker = self.engine.api.get_ticker(symbol)  # используется для объёма последней сделки
+            ticker = self.engine.api.get_ticker(symbol)
         except Exception as e:
             logger.debug(f"WhaleShield cannot fetch data for {symbol}: {e}")
             return
@@ -105,7 +105,7 @@ class WhaleShield:
         bids_vol = sum(float(b[1]) for b in depth.get('data', {}).get('bids', []))
         total_depth_vol = asks_vol + bids_vol
 
-        # Обновление истории
+        # Инициализация истории при необходимости
         if symbol not in self._depth_history:
             self._depth_history[symbol] = []
         self._depth_history[symbol].append(total_depth_vol)
@@ -119,11 +119,13 @@ class WhaleShield:
         if len(self._trade_history[symbol]) > 30:
             self._trade_history[symbol].pop(0)
 
+        # Проверка прогрева: нужно не менее 10 наблюдений для каждого типа данных
+        if len(self._depth_history[symbol]) < 10 or len(self._trade_history[symbol]) < 10:
+            return  # ждём накопления истории, чтобы избежать ложных срабатываний
+
         # Средние значения
-        if len(self._depth_history[symbol]) >= 10:
-            self._avg_depth_volumes[symbol] = sum(self._depth_history[symbol][-10:]) / 10
-        if len(self._trade_history[symbol]) >= 10:
-            self._avg_trade_volumes[symbol] = sum(self._trade_history[symbol][-10:]) / 10
+        self._avg_depth_volumes[symbol] = sum(self._depth_history[symbol][-10:]) / 10
+        self._avg_trade_volumes[symbol] = sum(self._trade_history[symbol][-10:]) / 10
 
         # --- Оценка аномалии ---
         threat_level = 0
@@ -138,7 +140,6 @@ class WhaleShield:
         max_bid_qty = max((float(b[1]) for b in depth.get('data', {}).get('bids', [])), default=0)
         max_ask_qty = max((float(a[1]) for a in depth.get('data', {}).get('asks', [])), default=0)
         price = self.engine._get_current_price(symbol) or 1
-        # грубая конвертация в BTC эквивалент (допустим, 1 BTC = 50000 USDT)
         max_order_btc = max(max_bid_qty, max_ask_qty) * price / 50000
         if max_order_btc > BIG_SINGLE_ORDER_BTC:
             threat_level += 5
@@ -166,23 +167,20 @@ class WhaleShield:
 
         # --- Реакция ---
         if threat_level >= 10:
-            # Полное закрытие позиции
             logger.critical(f"WhaleShield: EMERGENCY CLOSE {pos.symbol} {pos.side} (threat={threat_level})")
             try:
-                self.engine.api.close_position(pos.symbol, pos.side)       # ИСПРАВЛЕНО
+                self.engine.api.close_position(pos.symbol, pos.side)
                 self.engine.portfolio.remove_position(pos.symbol, pos.side)
                 if hasattr(self.engine, 'telegram'):
                     self.engine.telegram.send_message(f"🚨 WhaleShield экстренно закрыл {symbol} {pos.side}")
             except Exception as e:
                 logger.error(f"WhaleShield emergency close failed: {e}")
         elif threat_level >= 5:
-            # Закрыть 50% позиции
             try:
                 close_qty = pos.quantity * 0.5
-                self.engine.api.close_position(pos.symbol, pos.side, close_qty)   # ИСПРАВЛЕНО
+                self.engine.api.close_position(pos.symbol, pos.side, close_qty)
                 pos.quantity -= close_qty
                 if pos.quantity > 0:
-                    # Перевыставить TP/SL с новым количеством (защищённый метод, допустимо)
                     self.engine.executor._place_tpsl_orders(pos.symbol, pos.side, pos.quantity,
                                                             pos.tp_price, pos.sl_price)
                 logger.warning(f"WhaleShield: 50% close on {symbol} (threat={threat_level})")
@@ -191,7 +189,6 @@ class WhaleShield:
             except Exception as e:
                 logger.error(f"WhaleShield partial close failed: {e}")
         elif threat_level >= 3:
-            # Подтянуть SL в безубыток (или очень близко)
             if pos.side == 'LONG':
                 new_sl = pos.entry_price * 1.001
             else:
