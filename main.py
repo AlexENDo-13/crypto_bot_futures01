@@ -87,7 +87,9 @@ def main():
 
     setup_logging()
     logging.info(f"BingX Trading Bot v{__version__}")
-    missing_pkgs = check_and_install_dependencies(auto_install=args.auto_install)
+
+    # ВСЕГДА устанавливаем недостающие зависимости при запуске (двойной клик тоже)
+    missing_pkgs = check_and_install_dependencies(auto_install=True)
     if missing_pkgs:
         logging.error(f"Missing packages: {', '.join(missing_pkgs)}. Please install them manually or use --auto-install flag.")
         if not args.console:
