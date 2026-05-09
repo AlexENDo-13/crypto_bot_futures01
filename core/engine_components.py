@@ -23,6 +23,9 @@ def init_components(engine):
     engine.scheduler.register_task('position_sync', 30, engine._sync_positions_task, enabled=True)
     engine.scheduler.register_task('watchdog_heartbeat', 10, engine._heartbeat_task, enabled=True)
 
+    # Периодическое обновление сеток GridStrategy
+    engine.scheduler.register_task('grid_renew', 3600, engine._grid_renew_task, enabled=True)
+
 
 def load_all_modules(engine):
     logger.info("Loading modules...")

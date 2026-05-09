@@ -94,10 +94,14 @@ class BayesianOptimizer:
             if key in ('enabled', 'weight', 'timeframes'):
                 continue
             if isinstance(val, int):
-                space.append(Integer(max(1, int(val*0.5)), int(val*1.5), name=key))
+                low = max(1, int(val * 0.5))
+                high = int(val * 1.5)
+                if high <= low:      # <-- ИСПРАВЛЕНИЕ: не даём high быть равным или меньше low
+                    high = low + 1
+                space.append(Integer(low, high, name=key))
                 param_names.append(key)
             elif isinstance(val, float):
-                space.append(Real(max(0.001, val*0.5), val*1.5, name=key))
+                space.append(Real(max(0.001, val * 0.5), val * 1.5, name=key))
                 param_names.append(key)
 
         if not space:

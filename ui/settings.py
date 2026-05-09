@@ -1,11 +1,11 @@
-"""Settings tab: API keys, risk, strategies/indicators/filters, Moonshot configuration."""
+"""Settings tab: API keys, risk, strategies/indicators/filters, Moonshot, PRESETS."""
 import logging
 from configparser import ConfigParser
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
     QComboBox, QCheckBox, QGroupBox, QFormLayout, QMessageBox,
     QSpinBox, QDoubleSpinBox, QFileDialog, QScrollArea, QFrame,
-    QDialog, QDialogButtonBox
+    QDialog, QDialogButtonBox, QInputDialog
 )
 from PyQt5.QtCore import Qt
 
@@ -258,6 +258,20 @@ class SettingsTab(QWidget):
         moonshot_layout.addRow("Scan Interval:", self.moonshot_scan)
         content_layout.addWidget(moonshot_group)
 
+        # === PRESETS ===
+        presets_group = QGroupBox("Configuration Presets")
+        presets_layout = QHBoxLayout(presets_group)
+        self.btn_save_preset = QPushButton("Save Preset As…")
+        self.btn_save_preset.clicked.connect(self._save_preset)
+        presets_layout.addWidget(self.btn_save_preset)
+        self.btn_load_preset = QPushButton("Load Preset")
+        self.btn_load_preset.clicked.connect(self._load_preset)
+        presets_layout.addWidget(self.btn_load_preset)
+        self.btn_delete_preset = QPushButton("Delete Preset")
+        self.btn_delete_preset.clicked.connect(self._delete_preset)
+        presets_layout.addWidget(self.btn_delete_preset)
+        content_layout.addWidget(presets_group)
+
         # === Strategies ===
         strat_group = QGroupBox("Strategies")
         strat_layout = QVBoxLayout(strat_group)
@@ -405,6 +419,62 @@ class SettingsTab(QWidget):
         logger.info("Settings loaded from engine into UI")
         self._log_current_state()
 
+    # ---------- PRESET METHODS ----------
+    def _save_preset(self):
+        name, ok = QInputDialog.getText(self, "Save Preset", "Preset name:")
+        if not ok or not name.strip():
+            return
+        name = name.strip()
+        try:
+            from core.preset_manager import PresetManager
+            pm = PresetManager(self.engine)
+            if pm.save_preset(name):
+                QMessageBox.information(self, "Saved", f"Preset '{name}' saved successfully.")
+            else:
+                QMessageBox.warning(self, "Error", "Could not save preset.")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to save preset: {e}")
+
+    def _load_preset(self):
+        try:
+            from core.preset_manager import PresetManager
+            pm = PresetManager(self.engine)
+            presets = pm.list_presets()
+            if not presets:
+                QMessageBox.information(self, "No Presets", "No saved presets found.")
+                return
+            name, ok = QInputDialog.getItem(self, "Load Preset", "Select preset:", presets, 0, False)
+            if ok and name:
+                if pm.load_preset(name):
+                    QMessageBox.information(self, "Loaded", f"Preset '{name}' loaded successfully.")
+                    # Обновить UI в соответствии с новыми настройками
+                    self._load_settings()
+                else:
+                    QMessageBox.warning(self, "Error", f"Failed to load preset '{name}'.")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to load preset: {e}")
+
+    def _delete_preset(self):
+        try:
+            from core.preset_manager import PresetManager
+            pm = PresetManager(self.engine)
+            presets = pm.list_presets()
+            if not presets:
+                QMessageBox.information(self, "No Presets", "No saved presets found.")
+                return
+            name, ok = QInputDialog.getItem(self, "Delete Preset", "Select preset to delete:", presets, 0, False)
+            if ok and name:
+                reply = QMessageBox.question(self, "Delete", f"Delete preset '{name}'?",
+                                             QMessageBox.Yes | QMessageBox.No)
+                if reply == QMessageBox.Yes:
+                    if pm.delete_preset(name):
+                        QMessageBox.information(self, "Deleted", f"Preset '{name}' deleted.")
+                    else:
+                        QMessageBox.warning(self, "Error", f"Could not delete preset '{name}'.")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to delete preset: {e}")
+
+    # ---------- ОСТАЛЬНЫЕ МЕТОДЫ (БЕЗ ИЗМЕНЕНИЙ) ----------
     def _save_keys(self):
         key = self.api_key_input.text().strip()
         secret = self.api_secret_input.text().strip()
@@ -471,7 +541,6 @@ class SettingsTab(QWidget):
                 QMessageBox.warning(self, "Error", "Failed to export trades")
 
     def _refresh_balance(self):
-        """Принудительно запрашивает баланс с биржи и обновляет информацию в движке."""
         if self.engine.auth.demo_mode:
             QMessageBox.information(self, "Refresh Balance", "Демо‑режим: баланс не обновляется с биржи.")
             return
@@ -483,14 +552,12 @@ class SettingsTab(QWidget):
 
     def _save_settings(self):
         try:
-            # Main params
             self.engine.max_positions = self.max_positions.value()
             self.engine.scan_interval = self.scan_interval.value()
             self.engine.signal_threshold = self.signal_threshold.value()
             self.engine.timeframes = self.timeframes.text().split(',')
             self.engine.top_n_symbols = self.top_symbols.value()
 
-            # Risk manager
             risk_pct = self.risk_per_trade.value()
             leverage = self.max_leverage.value()
             profile = self.risk_profile.currentText()
@@ -510,7 +577,6 @@ class SettingsTab(QWidget):
             self.engine.risk_manager._kelly_winrate = self.kelly_winrate.value()
             self.engine.risk_manager._kelly_avg_win_loss_ratio = self.kelly_avg_win_loss.value()
 
-            # Trading
             self.engine.trailing_sl_enabled = self.trailing_sl.isChecked()
             self.engine.trailing_distance_pct = self.trailing_distance.value()
             self.engine.partial_close_enabled = self.partial_close.isChecked()
@@ -519,7 +585,6 @@ class SettingsTab(QWidget):
             self.engine.breakeven_atr_mult = self.breakeven_atr_mult.value()
             self.engine.slippage_timeout_sec = self.slippage_timeout.value()
 
-            # Moonshot
             if hasattr(self.engine, 'moonshot') and self.engine.moonshot:
                 self.engine.moonshot.capital_pct = self.moonshot_capital_pct.value()
                 self.engine.moonshot.max_risk_pct = self.moonshot_max_risk_pct.value()
@@ -529,24 +594,19 @@ class SettingsTab(QWidget):
                     self.engine.moonshot.start()
                 logger.info("Moonshot parameters updated")
 
-            # Save filter params to config.ini
             try:
                 cfg = ConfigParser()
                 cfg.read('config.ini')
-
                 if not cfg.has_section('FILTERS'):
                     cfg.add_section('FILTERS')
-
                 volume_surge = self.engine.filters.get('VolumeSurgeFilter')
                 if volume_surge:
                     val = volume_surge.config.get('min_volume_mult', 1.5)
                     cfg.set('FILTERS', 'volume_surge_min_mult', str(val))
-
                 liquidity = self.engine.filters.get('LiquidityFilter')
                 if liquidity:
                     val = liquidity.config.get('min_volume_ratio', 0.3)
                     cfg.set('FILTERS', 'liquidity_min_ratio', str(val))
-
                 with open('config.ini', 'w') as f:
                     cfg.write(f)
                 logger.info("Filter parameters saved to config.ini")
@@ -555,24 +615,19 @@ class SettingsTab(QWidget):
 
             self.engine.risk_manager._save_state()
             self.engine._save_config()
-
             QMessageBox.information(self, "Success", "Settings saved to config.ini")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Save failed: {e}")
         finally:
-            # Детальное логирование всех сохранённых настроек
             self._log_current_state()
 
     def _log_current_state(self):
-        """Выводит в лог все текущие настройки бота."""
         logger.info("=== CURRENT BOT SETTINGS ===")
-        # Engine
         logger.info(f"Engine: max_positions={self.engine.max_positions}, "
                     f"scan_interval={self.engine.scan_interval}s, "
                     f"signal_threshold={self.engine.signal_threshold}, "
                     f"timeframes={self.engine.timeframes}, "
                     f"top_symbols={self.engine.top_n_symbols}")
-        # Risk Manager
         rm = self.engine.risk_manager
         logger.info(f"Risk: profile={self.risk_profile.currentText()}, "
                     f"risk_per_trade={rm.risk_per_trade_pct}%, "
@@ -582,7 +637,6 @@ class SettingsTab(QWidget):
                     f"kelly_enabled={rm._kelly_enabled}, "
                     f"kelly_winrate={rm._kelly_winrate}, "
                     f"kelly_avg_win_loss={rm._kelly_avg_win_loss_ratio}")
-        # Trading
         logger.info(f"Trading: trailing_sl={self.engine.trailing_sl_enabled} "
                     f"({self.engine.trailing_distance_pct}%), "
                     f"partial_close={self.engine.partial_close_enabled} "
@@ -591,18 +645,15 @@ class SettingsTab(QWidget):
                     f"(ATR mult={self.engine.breakeven_atr_mult}), "
                     f"slippage_timeout={self.engine.slippage_timeout_sec}s, "
                     f"reinvest={self.engine.reinvest_profits}")
-        # Filters
         active_filters = [name for name, f in self.engine.filters.items() if f.enabled]
         disabled_filters = [name for name, f in self.engine.filters.items() if not f.enabled]
         logger.info(f"Filters active ({len(active_filters)}): {', '.join(active_filters)}")
         if disabled_filters:
             logger.info(f"Filters disabled ({len(disabled_filters)}): {', '.join(disabled_filters)}")
-        # Strategies
         active_strats = [name for name, s in self.engine.strategies.items() if s.enabled]
         disabled_strats = [name for name, s in self.engine.strategies.items() if not s.enabled]
         logger.info(f"Strategies active ({len(active_strats)}): {', '.join(active_strats)}")
         if disabled_strats:
             logger.info(f"Strategies disabled ({len(disabled_strats)}): {', '.join(disabled_strats)}")
-        # Indicators
         logger.info(f"Indicators loaded: {', '.join(self.engine.indicators.keys())}")
         logger.info("=== END BOT SETTINGS ===")

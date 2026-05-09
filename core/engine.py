@@ -164,6 +164,16 @@ class TradingEngine:
             logger.error(f"Initial symbol discovery failed: {e}")
         if not self.auth.demo_mode:
             self.risk_controller.peak_equity = self.portfolio._equity
+
+        # --- Native BingX Trailing Stop ---
+        if not self.auth.demo_mode:
+            try:
+                from core.trailing_stop_order import NativeBingXTrailingStop
+                self.native_trailing_stop = NativeBingXTrailingStop(self)
+                logger.info("NativeBingXTrailingStop initialized")
+            except Exception as e:
+                logger.warning(f"NativeBingXTrailingStop not initialized: {e}")
+
         logger.info("Trading engine started")
         if not self.auth.demo_mode:
             threading.Thread(target=self.risk_controller.connection_monitor, daemon=True).start()
@@ -180,7 +190,8 @@ class TradingEngine:
                      'backup_mgr', 'github_backup', 'voice', 'stress_test',
                      'capital_alloc', 'tf_selector', 'alert_mgr',
                      'telegram', 'discord', 'web_server', 'webhook',
-                     'bayes_opt', 'backtest', 'human_emulator', 'onchain']:
+                     'bayes_opt', 'backtest', 'human_emulator', 'onchain',
+                     'native_trailing_stop']:
             obj = getattr(self, attr, None)
             if obj is not None and hasattr(obj, 'stop'):
                 try:
@@ -211,11 +222,10 @@ class TradingEngine:
                 self.portfolio.available_margin = 1000.0
             else:
                 response = self.api.get_balance()
-                # v3 ответ: data – массив
                 data = response.get('data', [])
                 if not data:
                     return
-                bal = data[0]  # берём первый элемент
+                bal = data[0]
                 balance = _safe_float(bal.get('balance', 0))
                 available = _safe_float(bal.get('availableMargin', balance))
                 unrealized = _safe_float(bal.get('unrealizedProfit', 0))
@@ -241,6 +251,14 @@ class TradingEngine:
             self.voting.update_weights()
         except Exception as e:
             logger.error(f"Weight update error: {e}")
+
+    # ---------- Grid Strategy support ----------
+    def _grid_renew_task(self):
+        """Периодически обновляет сетки GridStrategy."""
+        if hasattr(self, 'strategies'):
+            grid_strat = self.strategies.get('GridStrategy')
+            if grid_strat and hasattr(grid_strat, 'check_grids'):
+                grid_strat.check_grids()
 
     # ---------- колбэки ----------
     def _on_watchdog_restart(self):

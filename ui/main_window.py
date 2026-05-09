@@ -1,5 +1,5 @@
 """
-Main application window with all tabs (including orders).
+Main application window with all tabs (including orders, portfolio, analytics).
 """
 import sys, os, logging
 from PyQt5.QtWidgets import (
@@ -13,7 +13,7 @@ from ui.styles import theme
 from ui.dashboard import DashboardTab
 from ui.signals import SignalsTab
 from ui.positions import PositionsTab
-from ui.orders_tab import OrdersTab          # новая вкладка
+from ui.orders_tab import OrdersTab
 from ui.settings import SettingsTab
 from ui.logs import LogsTab
 from ui.backtest import BacktestTab
@@ -21,6 +21,9 @@ from ui.blacklist import BlacklistTab
 from ui.system import SystemTab
 from ui.chart import ChartTab
 from ui.strategy_stats import StrategyStatsTab
+from ui.portfolio import PortfolioTab
+from ui.analytics import AnalyticsTab
+from ui.quick_setup_wizard import QuickSetupDialog
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +66,9 @@ class MainWindow(QMainWindow):
         self.tab_dashboard = DashboardTab(self.engine)
         self.tab_signals = SignalsTab(self.engine)
         self.tab_positions = PositionsTab(self.engine)
-        self.tab_orders = OrdersTab(self.engine)               # ← новая вкладка
+        self.tab_orders = OrdersTab(self.engine)
+        self.tab_portfolio = PortfolioTab(self.engine)
+        self.tab_analytics = AnalyticsTab(self.engine)
         self.tab_settings = SettingsTab(self.engine)
         self.tab_logs = LogsTab(self.engine)
         self.tab_backtest = BacktestTab(self.engine)
@@ -75,7 +80,9 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.tab_dashboard, "Dashboard")
         self.tabs.addTab(self.tab_signals, "Signals")
         self.tabs.addTab(self.tab_positions, "Positions")
-        self.tabs.addTab(self.tab_orders, "Orders")            # ←
+        self.tabs.addTab(self.tab_orders, "Orders")
+        self.tabs.addTab(self.tab_portfolio, "Portfolio")
+        self.tabs.addTab(self.tab_analytics, "Analytics")
         self.tabs.addTab(self.tab_settings, "Settings")
         self.tabs.addTab(self.tab_logs, "Logs")
         self.tabs.addTab(self.tab_backtest, "Backtest")
@@ -122,6 +129,12 @@ class MainWindow(QMainWindow):
         layout.addWidget(title)
 
         layout.addStretch()
+
+        # Кнопка мастера быстрой настройки
+        self.btn_quick_setup = QPushButton("Quick Setup")
+        self.btn_quick_setup.setFixedWidth(100)
+        self.btn_quick_setup.clicked.connect(self._open_quick_setup)
+        layout.addWidget(self.btn_quick_setup)
 
         self.btn_start = QPushButton("Start")
         self.btn_start.setObjectName("success")
@@ -175,7 +188,9 @@ class MainWindow(QMainWindow):
             self.tab_positions.update_positions(pos_data)
             self.status_positions.setText(f"Positions: {len(positions)}")
 
-            self.tab_orders.update_data()                # обновляем вкладку ордеров
+            self.tab_orders.update_data()
+            self.tab_portfolio.refresh()
+            self.tab_analytics.refresh()
 
             self.tab_strategy_stats.update_data(status)
 
@@ -276,8 +291,9 @@ class MainWindow(QMainWindow):
         stylesheet = theme.get_stylesheet()
         QApplication.instance().setStyleSheet(stylesheet)
         for tab_attr in ['tab_dashboard', 'tab_signals', 'tab_positions', 'tab_orders',
-                         'tab_settings', 'tab_logs', 'tab_backtest', 'tab_blacklist',
-                         'tab_system', 'tab_chart', 'tab_strategy_stats']:
+                         'tab_portfolio', 'tab_analytics', 'tab_settings', 'tab_logs',
+                         'tab_backtest', 'tab_blacklist', 'tab_system', 'tab_chart',
+                         'tab_strategy_stats']:
             tab = getattr(self, tab_attr, None)
             if tab and hasattr(tab, 'apply_theme'):
                 tab.apply_theme()
@@ -312,3 +328,7 @@ class MainWindow(QMainWindow):
     def _close_50_percent(self):
         for pos in self.engine.portfolio.get_positions():
             self.engine.close_position_manual(pos.symbol, pos.side, percent=50.0)
+
+    def _open_quick_setup(self):
+        dialog = QuickSetupDialog(self.engine, self)
+        dialog.exec_()

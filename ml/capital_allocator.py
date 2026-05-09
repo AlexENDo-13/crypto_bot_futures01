@@ -1,6 +1,7 @@
 """
 Adaptive Capital Allocator.
 Periodically adjusts strategy weights in the VotingSystem based on recent performance.
+Now skips disabled strategies so they don't receive capital.
 """
 import logging
 import time
@@ -47,6 +48,11 @@ class CapitalAllocator:
 
         scores = {}
         for name, stats in all_stats.items():
+            # --- Пропускаем отключённые стратегии (disabled) ---
+            strategy = self.engine.strategies.get(name)
+            if strategy is None or strategy.is_disabled():
+                continue
+
             trades = stats.get('trades', 0)
             if trades < 3:
                 scores[name] = stats.get('weight', 1.0)
@@ -59,6 +65,9 @@ class CapitalAllocator:
             else:
                 score = winrate * avg_pnl
             scores[name] = score
+
+        if not scores:
+            return
 
         total = sum(scores.values())
         if total == 0:

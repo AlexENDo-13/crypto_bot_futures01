@@ -205,6 +205,27 @@ def main():
     except Exception as e:
         logging.warning(f"Bayesian optimizer not started: {e}")
 
+    # --- Walk-Forward Optimizer ---
+    try:
+        auto_opt = cfg.getboolean('OPTIMIZER', 'auto_optimize', fallback=True)
+        if auto_opt and not auth.demo_mode:
+            from ml.walk_forward_optimizer import WalkForwardOptimizer
+            interval_hours = cfg.getint('OPTIMIZER', 'optimize_interval_hours', fallback=12)
+            engine.walk_forward = WalkForwardOptimizer(engine, update_interval_hours=interval_hours)
+            engine.walk_forward.start()
+            logging.info(f"WalkForwardOptimizer started (interval {interval_hours}h)")
+    except Exception as e:
+        logging.warning(f"WalkForwardOptimizer not started: {e}")
+
+    # --- Auto Strategy Selector ---
+    try:
+        from ml.auto_strategy_selector import AutoStrategySelector
+        engine.auto_selector = AutoStrategySelector(engine, check_interval_seconds=300)
+        engine.auto_selector.start()
+        logging.info("AutoStrategySelector started")
+    except Exception as e:
+        logging.warning(f"AutoStrategySelector not started: {e}")
+
     try:
         from ml.capital_allocator import CapitalAllocator
         engine.capital_alloc = CapitalAllocator(engine)

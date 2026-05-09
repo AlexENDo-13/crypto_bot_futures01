@@ -129,9 +129,21 @@ class PositionSyncManager:
                     if existing.margin > 0:
                         existing.pnl_pct = (unrealized / existing.margin) * 100
 
+                    # ---------- Адаптивный трейлинг стоп ----------
                     if current_price > 0 and existing.sl_price is not None:
                         if self.engine.trailing_sl_enabled:
-                            self.engine.executor.apply_trailing_stop(existing, current_price)
+                            # Используем новый адаптивный трейлинг вместо старого процентного
+                            if not hasattr(self.engine, 'adaptive_trailing_stop'):
+                                from core.adaptive_trailing_stop import AdaptiveTrailingStop
+                                self.engine.adaptive_trailing_stop = AdaptiveTrailingStop(self.engine)
+                            updated = self.engine.adaptive_trailing_stop.update(existing, current_price)
+                            if updated:
+                                # Если стоп изменился, синхронизируем ордер с биржей
+                                self._sync_tpsl_orders(
+                                    symbol, pos_side, existing.quantity,
+                                    existing.tp_price, existing.sl_price
+                                )
+
                         if self.engine.breakeven_enabled:
                             atr = self.engine._get_current_atr(symbol)
                             self.engine.executor.apply_breakeven(existing, current_price, atr)

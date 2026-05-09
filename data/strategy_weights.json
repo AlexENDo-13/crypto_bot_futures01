@@ -45,12 +45,12 @@
   },
   "Momentum": {
     "weight": 1.2,
-    "trades": 25,
+    "trades": 29,
     "wins": 0,
     "total_pnl": 0.0,
     "avg_pnl": 0.0,
     "winrate": 0.0,
-    "consecutive_losses": 7,
+    "consecutive_losses": 11,
     "disabled": true,
     "disabled_reason": "winrate 0.0% < 40%",
     "disabled_at": 1778282113.5879831
@@ -78,7 +78,7 @@
     "disabled_reason": null
   },
   "TrendFollowing": {
-    "weight": 1.505227358830569,
+    "weight": 1.5056363938964181,
     "trades": 0,
     "wins": 0,
     "total_pnl": 0.0,
@@ -89,13 +89,13 @@
     "disabled_reason": null
   },
   "SmartPyramiding": {
-    "weight": 0.902057736591707,
-    "trades": 5,
+    "weight": 0.9016822963410696,
+    "trades": 6,
     "wins": 0,
     "total_pnl": 0.0,
     "avg_pnl": 0.0,
     "winrate": 0.0,
-    "consecutive_losses": 5,
+    "consecutive_losses": 6,
     "disabled": true,
     "disabled_reason": "5 consecutive losses",
     "disabled_at": 1778302758.3151503
@@ -145,7 +145,19 @@
     "disabled_reason": null
   },
   "EMACrossoverSwing": {
-    "weight": 0.9525770424193082,
+    "weight": 0.9447214304167275,
+    "trades": 5,
+    "wins": 0,
+    "total_pnl": 0.0,
+    "avg_pnl": 0.0,
+    "winrate": 0.0,
+    "consecutive_losses": 5,
+    "disabled": true,
+    "disabled_reason": "5 consecutive losses",
+    "disabled_at": 1778337047.2596035
+  },
+  "SuperTrendSwing": {
+    "weight": 0.996335778592819,
     "trades": 1,
     "wins": 0,
     "total_pnl": 0.0,
@@ -155,8 +167,19 @@
     "disabled": false,
     "disabled_reason": null
   },
-  "SuperTrendSwing": {
-    "weight": 0.9813157283778641,
+  "GridStrategy": {
+    "weight": 0.8,
+    "trades": 0,
+    "wins": 0,
+    "total_pnl": 0.0,
+    "avg_pnl": 0.0,
+    "winrate": 0.0,
+    "consecutive_losses": 0,
+    "disabled": false,
+    "disabled_reason": null
+  },
+  "TurtleTrading": {
+    "weight": 1.3265306122448979,
     "trades": 0,
     "wins": 0,
     "total_pnl": 0.0,

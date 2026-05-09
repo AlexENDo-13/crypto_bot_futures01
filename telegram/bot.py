@@ -1,6 +1,8 @@
 """
 Enhanced Telegram bot for remote control and monitoring.
-Supports commands, inline keyboard, emergency stop, daily reports.
+Supports commands: /start, /status, /positions, /close, /pause, /resume,
+/stop, /risk, /report, /performance, /switch_profile, /enable_strat,
+/disable_strat, /strategies, /filter_toggle, /filters.
 """
 import logging
 import threading
@@ -43,6 +45,13 @@ class TelegramBot:
             '/stop': self._cmd_emergency_stop,
             '/risk': self._cmd_risk,
             '/report': self._cmd_daily_report,
+            '/performance': self._cmd_performance,
+            '/switch_profile': self._cmd_switch_profile,
+            '/enable_strat': self._cmd_enable_strategy,
+            '/disable_strat': self._cmd_disable_strategy,
+            '/strategies': self._cmd_list_strategies,
+            '/filter_toggle': self._cmd_filter_toggle,
+            '/filters': self._cmd_list_filters,
         }
 
     def start(self):
@@ -106,14 +115,17 @@ class TelegramBot:
                 if handler:
                     handler(msg, parts[1:])
 
-    # ---------- Команды ----------
+    # ---------- Стандартные команды ----------
     def _cmd_start(self, msg, args):
         keyboard = {
             'keyboard': [
                 ['/status', '/positions'],
                 ['/pause', '/resume'],
                 ['/stop', '/risk'],
-                ['/report']
+                ['/report', '/performance'],
+                ['/strategies', '/filters'],
+                ['/enable_strat', '/disable_strat'],
+                ['/switch_profile', '/filter_toggle']
             ],
             'resize_keyboard': True,
             'one_time_keyboard': False
@@ -157,7 +169,7 @@ class TelegramBot:
         symbol = args[0].upper()
         side = args[1].upper()
         try:
-            self.engine.api.close_position(symbol, side)          # ИСПРАВЛЕНО
+            self.engine.api.close_position(symbol, side)
             self.send_message(f"✅ Закрываю {symbol} {side}")
         except Exception as e:
             self.send_message(f"❌ Ошибка: {e}")
@@ -173,7 +185,6 @@ class TelegramBot:
             self.send_message("▶ Бот возобновлён")
 
     def _cmd_emergency_stop(self, msg, args):
-        """Экстренный стоп: закрывает все позиции, отменяет ордера, ставит локдаун."""
         if not self.engine:
             return
         logger.critical("EMERGENCY STOP via Telegram")
@@ -212,3 +223,97 @@ PnL за день: {s['daily_pnl']:+.2f} USDT
 Эквити: {s['equity']:.2f}
         """
         self.send_message(text.strip())
+
+    # ---------- НОВЫЕ КОМАНДЫ ----------
+    def _cmd_performance(self, msg, args):
+        if not self.engine:
+            return
+        stats = self.engine.portfolio.get_stats()
+        s = self.engine.get_status()
+        text = f"""
+📈 **Производительность**
+Баланс: {stats['balance']:.2f} USDT
+Эквити: {stats['equity']:.2f} USDT
+Нереализованный PnL: {stats['unrealized_pnl']:.2f} USDT
+Дневной PnL: {stats['daily_pnl']:.2f} USDT
+Всего сделок: {stats['total_trades']}
+Винрейт: {stats['win_rate']:.1f}%
+Текущая просадка: {stats.get('current_drawdown_pct', 0):.2f}%
+Активных стратегий: {s.get('strategies_loaded', 0)}
+        """
+        self.send_message(text.strip())
+
+    def _cmd_switch_profile(self, msg, args):
+        if not self.engine or not args:
+            profiles = ", ".join(self.engine.risk_manager._profiles.keys())
+            self.send_message(f"Доступные профили: {profiles}\nИспользуйте: /switch_profile ProfileName")
+            return
+        profile = args[0].capitalize()
+        try:
+            self.engine.risk_manager.set_profile(profile)
+            self.send_message(f"✅ Профиль риска изменён на {profile}")
+        except Exception as e:
+            self.send_message(f"❌ Ошибка: {e}")
+
+    def _cmd_list_strategies(self, msg, args):
+        if not self.engine:
+            return
+        lines = ["🧠 **Стратегии**:"]
+        for name, s in self.engine.strategies.items():
+            status = "✅" if s.enabled else "❌"
+            lines.append(f"{status} {name} (weight={s.weight:.2f})")
+        self.send_message("\n".join(lines))
+
+    def _cmd_enable_strategy(self, msg, args):
+        if not self.engine or not args:
+            self.send_message("Используйте: /enable_strat StrategyName")
+            return
+        name = args[0]
+        if name in self.engine.strategies:
+            self.engine.strategies[name].enabled = True
+            if name in self.engine.voting._weights:
+                self.engine.voting._weights[name]['disabled'] = False
+                self.engine.voting._weights[name]['disabled_reason'] = None
+                self.engine.voting._weights[name]['weight'] = 1.0
+                self.engine.voting._save_weights()
+            self.send_message(f"✅ Стратегия {name} включена")
+        else:
+            self.send_message(f"❌ Стратегия {name} не найдена")
+
+    def _cmd_disable_strategy(self, msg, args):
+        if not self.engine or not args:
+            self.send_message("Используйте: /disable_strat StrategyName")
+            return
+        name = args[0]
+        if name in self.engine.strategies:
+            self.engine.strategies[name].enabled = False
+            if name in self.engine.voting._weights:
+                self.engine.voting._weights[name]['disabled'] = True
+                self.engine.voting._weights[name]['disabled_reason'] = 'manual_telegram'
+                self.engine.voting._weights[name]['weight'] = 0.0
+                self.engine.voting._save_weights()
+            self.send_message(f"⛔ Стратегия {name} отключена")
+        else:
+            self.send_message(f"❌ Стратегия {name} не найдена")
+
+    def _cmd_list_filters(self, msg, args):
+        if not self.engine:
+            return
+        lines = ["🔍 **Фильтры**:"]
+        for name, f in self.engine.filters.items():
+            status = "✅" if f.enabled else "❌"
+            lines.append(f"{status} {name}")
+        self.send_message("\n".join(lines))
+
+    def _cmd_filter_toggle(self, msg, args):
+        if not self.engine or not args:
+            self.send_message("Используйте: /filter_toggle FilterName")
+            return
+        name = args[0]
+        if name in self.engine.filters:
+            flt = self.engine.filters[name]
+            flt.enabled = not flt.enabled
+            state = "включен" if flt.enabled else "отключен"
+            self.send_message(f"🔁 Фильтр {name} {state}")
+        else:
+            self.send_message(f"❌ Фильтр {name} не найден")
