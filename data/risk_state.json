@@ -14,5 +14,5 @@
     "risk_per_trade_pct": 8.0,
     "max_leverage": 10
   },
-  "previous_profile": "Balanced"
+  "previous_profile": "Adaptive"
 }

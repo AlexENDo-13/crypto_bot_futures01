@@ -126,16 +126,6 @@ class TradeExecutor:
         final_tp = sl_tp['tp2']
         final_sl = sl_tp['sl']
 
-        min_sl_distance = actual_entry * 0.005
-        if pos_side == 'LONG':
-            if final_sl <= 0 or final_sl >= actual_entry:
-                final_sl = actual_entry - max(atr * 1.5, min_sl_distance)
-            if final_sl <= 0:
-                final_sl = actual_entry * 0.995
-        else:
-            if final_sl <= 0 or final_sl <= actual_entry:
-                final_sl = actual_entry + max(atr * 1.5, min_sl_distance)
-
         # ---------------------------------------------------------------
         # КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: гарантируем корректность SL относительно TP
         # ---------------------------------------------------------------

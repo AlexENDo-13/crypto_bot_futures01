@@ -18,7 +18,7 @@ class LiquidityFilter(BaseFilter):
     PRIORITY = 15
     PARAMS = {
         'enabled': True,
-        'min_volume_ratio': 0.5,          # было 0.3, поднято до 0.5
+        'min_volume_ratio': 0.5,          # поднято до 0.5
         'lookback_bars': 20,
         'recent_bars': 5,
         'adaptive_relax': True,
@@ -64,7 +64,7 @@ class LiquidityFilter(BaseFilter):
         if self.config.get('adaptive_relax'):
             time_since_last_trade = time.time() - self._last_trade_time
             if time_since_last_trade > self.config.get('relax_after_seconds', 180):
-                threshold = max(0.1, threshold * 0.5)    # минимальный порог 0.1 при адаптации
+                threshold = max(0.15, threshold * 0.5)    # минимальный порог 0.15 при адаптации
 
         if ratio < threshold:
             logger.info(f"Liquidity filter blocked {signal.symbol}: volume ratio {ratio:.2f} < {threshold:.2f}")

@@ -18,7 +18,7 @@ class VolumeSurgeFilter(BaseFilter):
     PRIORITY = 12
     PARAMS = {
         'enabled': True,
-        'min_volume_mult': 1.2,          # было 0.15, поднято до 1.2
+        'min_volume_mult': 0.8,          # повышено до 0.8 (было 1.2, но теперь адаптивно)
         'lookback_bars': 20,
         'timeframe': '1h',
         'adaptive_relax': True,
@@ -74,7 +74,7 @@ class VolumeSurgeFilter(BaseFilter):
         if self.config.get('adaptive_relax'):
             time_since_last_trade = time.time() - self._last_trade_time
             if time_since_last_trade > self.config.get('relax_after_seconds', 180):
-                threshold = max(0.2, threshold * 0.5)   # минимум 0.2 при адаптации
+                threshold = max(0.3, threshold * 0.5)   # минимум 0.3 при адаптации
 
         if ratio < threshold:
             logger.info(f"VolumeSurge blocked {signal.symbol}: vol ratio {ratio:.2f} < {threshold}")

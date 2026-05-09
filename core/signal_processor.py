@@ -1,6 +1,6 @@
 """
 Signal Processor: validates signals through filters, risk controller,
-on-chain checks, and delegates execution.
+on-chain checks, correlation checks, and delegates execution.
 """
 import logging
 from typing import Dict
@@ -65,6 +65,11 @@ class SignalProcessor:
             logger.info(f"Signal confidence {signal.confidence:.2f} below adaptive threshold {threshold:.2f}, skipping {signal.symbol}")
             return
 
+        # --- Проверка корреляции ---
+        if not self._check_correlation(signal.symbol, all_candles):
+            logger.info(f"Correlation limit reached, skipping {signal.symbol}")
+            return
+
         # --- Предторговая проверка ---
         allowed, reason = self.engine.risk_controller.pre_trade_check(
             signal.symbol, signal, all_candles, 0, price
@@ -86,9 +91,6 @@ class SignalProcessor:
 
         signal = self._apply_tradingview_boost(signal)
 
-        current_positions = self.engine.portfolio.get_positions()
-        available_margin = self.engine.portfolio.available_margin or self._get_free_margin()
-
         # --- Каскад фильтров ---
         filter_data = {
             'open_positions': [{'symbol': p.symbol, 'side': p.side} for p in current_positions],
@@ -97,7 +99,7 @@ class SignalProcessor:
             'current_price': price,
             'market_regime': regime,
             'candle_data': all_candles,
-            'available_margin': available_margin,
+            'available_margin': self.engine.portfolio.available_margin or self._get_free_margin(),
             'correlations': self._calculate_correlations(signal.symbol, current_positions, all_candles),
         }
 
@@ -116,12 +118,12 @@ class SignalProcessor:
             except Exception as e:
                 logger.warning(f"Filter {filter_name} error: {e}")
 
-        # Проверка лимита позиций (после актуализации)
+        # Проверка лимита позиций (после актуализации через background_sync)
         if len(current_positions) >= self.engine.max_positions:
             logger.info(f"Max positions reached ({self.engine.max_positions}), skipping {signal.symbol}")
             return
 
-        free_margin = available_margin
+        free_margin = self.engine.portfolio.available_margin or self._get_free_margin()
         sl_tp = self.engine.risk_manager.get_sl_tp_levels(price, signal.action, atr_val, signal.symbol)
         equity = self.engine.portfolio._equity or free_margin
         reinvest = getattr(self.engine, 'reinvest_profits', True)
@@ -190,6 +192,20 @@ class SignalProcessor:
         except Exception as e:
             logger.debug(f"Correlation calc failed: {e}")
         return correlations
+
+    def _check_correlation(self, symbol, all_candles):
+        """Проверяет, не превышен ли лимит коррелирующих позиций."""
+        positions = self.engine.portfolio.get_positions()
+        if not positions:
+            return True
+        corr_count = 0
+        for pos in positions:
+            corr = self.engine.risk_controller._get_pair_correlation(symbol, pos.symbol, all_candles)
+            if abs(corr) > self.engine.risk_controller.correlation_threshold:
+                corr_count += 1
+                if corr_count >= self.engine.risk_controller.max_correlation_positions:
+                    return False
+        return True
 
     def _get_free_margin(self):
         try:

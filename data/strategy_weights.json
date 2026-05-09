@@ -23,12 +23,12 @@
   },
   "Ichimoku": {
     "weight": 0.9738191626150199,
-    "trades": 0,
+    "trades": 1,
     "wins": 0,
     "total_pnl": 0.0,
     "avg_pnl": 0.0,
     "winrate": 0.0,
-    "consecutive_losses": 0,
+    "consecutive_losses": 1,
     "disabled": false,
     "disabled_reason": null
   },
@@ -45,14 +45,15 @@
   },
   "Momentum": {
     "weight": 1.2,
-    "trades": 18,
+    "trades": 20,
     "wins": 0,
     "total_pnl": 0.0,
     "avg_pnl": 0.0,
     "winrate": 0.0,
-    "consecutive_losses": 0,
-    "disabled": false,
-    "disabled_reason": null
+    "consecutive_losses": 2,
+    "disabled": true,
+    "disabled_reason": "winrate 0.0% < 40%",
+    "disabled_at": 1778282113.5879831
   },
   "RSIDivergence": {
     "weight": 0.8952528307490183,
@@ -77,7 +78,7 @@
     "disabled_reason": null
   },
   "TrendFollowing": {
-    "weight": 1.5050727331447455,
+    "weight": 1.50504632322379,
     "trades": 0,
     "wins": 0,
     "total_pnl": 0.0,
@@ -88,13 +89,13 @@
     "disabled_reason": null
   },
   "SmartPyramiding": {
-    "weight": 0.9028267487588476,
-    "trades": 2,
+    "weight": 0.9029013950121167,
+    "trades": 4,
     "wins": 0,
     "total_pnl": 0.0,
     "avg_pnl": 0.0,
     "winrate": 0.0,
-    "consecutive_losses": 2,
+    "consecutive_losses": 4,
     "disabled": false,
     "disabled_reason": null
   },

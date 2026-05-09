@@ -52,7 +52,7 @@ class TradingEngine:
     def __init__(self, auth: AuthManager):
         self.auth = auth
         self.api = BingXAPI(auth)
-        self.risk_manager = RiskManager()
+        self.risk_manager = RiskManager(engine=self)
         self.portfolio = PortfolioManager()
         self.scheduler = Scheduler()
         self.antidetect = AntiDetect()
@@ -176,7 +176,7 @@ class TradingEngine:
 
         # Остановка всех дополнительных модулей
         for attr in ['adaptive_threshold', 'moonshot', 'order_guard', 'whale_shield',
-                     'backup_mgr', 'github_backup', 'voice', 'stress_test',  # исправлено
+                     'backup_mgr', 'github_backup', 'voice', 'stress_test',
                      'capital_alloc', 'tf_selector', 'alert_mgr',
                      'telegram', 'discord', 'web_server', 'webhook',
                      'bayes_opt', 'backtest', 'human_emulator', 'onchain']:
@@ -217,8 +217,10 @@ class TradingEngine:
                 self.portfolio.available_margin = available
                 self.risk_controller.update_drawdown(self.portfolio._equity)
                 self.risk_controller.check_daily_limits()
-                # Hard stop при критически низком балансе (< 20 USDT)
-                if balance < 20.0 and not self._paused:
+                # === Адаптивная корректировка риска ===
+                self.risk_manager.adapt_to_market(self)
+                # Hard stop при критически низком балансе (< 15 USDT)
+                if balance < 15.0 and not self._paused:
                     logger.critical(f"Balance critically low ({balance:.2f} USDT) – pausing trading")
                     self._paused = True
         except Exception as e:

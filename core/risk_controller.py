@@ -1,5 +1,5 @@
 """
-Risk Controller: daily loss/profit limits, liquidity, spread, VaR, on-chain,
+Risk Controller: daily loss/profit limits, liquidity, spread, VaR, correlation-based protection,
 multi-level drawdown protection, and auto-rebalance when free margin is low.
 """
 import logging
@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 class RiskController:
     def __init__(self, engine):
         self.engine = engine
-        # Параметры дневных лимитов
+        # Дневные лимиты
         self.daily_loss_limit_pct = 5.0
         self.daily_profit_limit_pct = 0.0     # 0 = без ограничения
         self.spread_max_pct = 1.0
@@ -40,12 +40,17 @@ class RiskController:
         self.drawdown_enabled = True
         self.peak_equity = 0.0                # исторический максимум эквити
         self.drawdown_pct = 0.0               # текущая просадка в %
-        # Уровни:
-        self.dd_level1 = 10.0                 # снизить риск до Conservative
-        self.dd_level2 = 20.0                 # закрыть все позиции + пауза 1 час
-        self.dd_level3 = 30.0                 # аварийный локдаун до ручного вмешательства
-        self._emergency_lock = False          # флаг полной блокировки
-        self._dd_pause_until = 0.0            # время окончания паузы второго уровня
+        # Уровни (адаптированы под SmartTurbo)
+        self.dd_level1 = 5.0                  # снизить риск до Conservative
+        self.dd_level2 = 10.0                 # закрыть все позиции + пауза 30 минут
+        self.dd_level3 = 15.0                 # аварийный локдаун до нового дня
+        self._emergency_lock = False
+        self._dd_pause_until = 0.0
+
+        # Корреляционный фильтр
+        self.max_correlation_positions = 2     # максимум коррелирующих позиций
+        self.correlation_threshold = 0.7      # порог корреляции Пирсона
+        self._correlation_cache = {}
 
     # ------------------------------------------------------------------
     def reset_daily(self):
@@ -84,9 +89,9 @@ class RiskController:
 
         # Уровень 2 – закрыть всё и пауза
         elif self.drawdown_pct >= self.dd_level2 and not self._dd_pause_until:
-            logger.warning(f"DRAWDOWN LEVEL 2: {self.drawdown_pct:.1f}%. Closing all positions, pause 1h")
+            logger.warning(f"DRAWDOWN LEVEL 2: {self.drawdown_pct:.1f}%. Closing all positions, pause 30 min")
             self._close_all_positions()
-            self._dd_pause_until = time.time() + 3600.0
+            self._dd_pause_until = time.time() + 1800.0  # 30 минут
             self.engine._paused = True
 
         # Уровень 1 – снижение риска
@@ -154,11 +159,11 @@ class RiskController:
 
     # ------------------------------------------------------------------
     def pre_trade_check(self, symbol: str, signal, all_candles: dict, quantity: float, price: float):
-        """Предторговая проверка: спред, ликвидность (через фильтр), VaR, маржа."""
-        # Если аварийный локдаун – все сделки запрещены
+        """Предторговая проверка: спред, корреляция, VaR, маржа."""
         if self._emergency_lock:
             return False, "emergency lock"
 
+        # Проверка спреда
         if self.spread_max_pct > 0:
             try:
                 depth = self.engine.api.get_depth(symbol, limit=5)
@@ -174,27 +179,19 @@ class RiskController:
             except Exception as e:
                 logger.debug(f"Spread check failed: {e}")
 
-        # Ликвидность через фильтр – теперь передаём полный контекст
-        liquidity_filter = self.engine.filters.get('LiquidityFilter')
-        if liquidity_filter and getattr(liquidity_filter, 'enabled', True):
-            try:
-                current_positions = self.engine.portfolio.get_positions()
-                filter_data = {
-                    'open_positions': [{'symbol': p.symbol, 'side': p.side} for p in current_positions],
-                    'current_drawdown_pct': self.engine.portfolio.get_stats().get('current_drawdown_pct', 0.0),
-                    'current_atr': self.engine._get_current_atr(symbol, all_candles),
-                    'current_price': price,
-                    'market_regime': signal.meta.get('regime', 'unknown'),
-                    'candle_data': all_candles,
-                    'available_margin': self.engine.portfolio.available_margin or self._get_free_margin(),
-                }
-                new_conf = liquidity_filter.assess(signal, filter_data)
-                if new_conf <= 0:
-                    logger.info(f"Liquidity filter blocked {symbol}")
-                    return False, "low liquidity (filter)"
-            except Exception as e:
-                logger.debug(f"Liquidity filter error: {e}")
+        # Проверка корреляции с уже открытыми позициями
+        positions = self.engine.portfolio.get_positions()
+        if positions and self.max_correlation_positions > 0:
+            correlated_count = 0
+            for pos in positions:
+                corr = self._get_pair_correlation(symbol, pos.symbol, all_candles)
+                if abs(corr) > self.correlation_threshold:
+                    correlated_count += 1
+                    if correlated_count >= self.max_correlation_positions:
+                        logger.info(f"Correlation filter: {symbol} blocked (too many correlated positions)")
+                        return False, "correlation limit"
 
+        # VaR
         try:
             var_amount = self._calculate_var(symbol, quantity, price)
             free_margin = self.engine.portfolio.available_margin or self._get_free_margin()
@@ -204,9 +201,10 @@ class RiskController:
         except Exception:
             pass
 
+        # Автоосвобождение маржи при необходимости
         if self.auto_rebalance:
             free_margin = self.engine.portfolio.available_margin or self._get_free_margin()
-            required_margin = (quantity * price) / 2
+            required_margin = (quantity * price) / (self.engine.risk_manager.max_leverage or 1)
             if free_margin < required_margin:
                 if not self._free_up_margin(required_margin):
                     logger.info(f"Not enough free margin ({free_margin:.2f}) and cannot free up, skipping")
@@ -289,9 +287,39 @@ class RiskController:
                 pos.quantity -= close_qty
                 if pos.quantity <= 0:
                     self.engine.portfolio.remove_position(pos.symbol, pos.side)
-                freed += (close_qty * pos.entry_price) / pos.leverage
+                freed += (close_qty * pos.entry_price) / max(pos.leverage, 1)
                 time.sleep(0.5)
             except Exception as e:
                 logger.error(f"Auto-rebalance failed for {pos.symbol}: {e}")
         free_margin = self.engine.portfolio.available_margin or self._get_free_margin()
         return free_margin >= required_margin
+
+    def _get_pair_correlation(self, sym1: str, sym2: str, all_candles: dict) -> float:
+        """Рассчитывает корреляцию между двумя символами по 1h свечам (последние 50)."""
+        if sym1 == sym2:
+            return 1.0
+        key = f"{sym1}-{sym2}"
+        if key in self._correlation_cache:
+            return self._correlation_cache[key]
+        try:
+            # Получаем данные из переданного словаря all_candles
+            data1 = all_candles.get(sym1, {}).get('1h')
+            data2 = all_candles.get(sym2, {}).get('1h')
+            if data1 is None or data2 is None:
+                return 0.0
+            closes1 = data1['close'].values[-50:]
+            closes2 = data2['close'].values[-50:]
+            if len(closes1) < 2 or len(closes2) < 2:
+                return 0.0
+            # Выравниваем длину
+            min_len = min(len(closes1), len(closes2))
+            closes1 = closes1[-min_len:]
+            closes2 = closes2[-min_len:]
+            corr = np.corrcoef(closes1, closes2)[0, 1]
+            if np.isnan(corr):
+                corr = 0.0
+            self._correlation_cache[key] = corr
+            return corr
+        except Exception as e:
+            logger.debug(f"Correlation calculation failed for {sym1}/{sym2}: {e}")
+            return 0.0
