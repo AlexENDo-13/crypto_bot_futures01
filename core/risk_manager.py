@@ -116,18 +116,28 @@ class RiskManager:
             distance = max(atr * sl_mult, min_sl_distance)
             sl = entry_price - distance
             tp = entry_price + atr * tp_mult
+            # Защита от отрицательных / некорректных уровней
+            if sl <= 0 or sl >= entry_price:
+                sl = entry_price * 0.98
+            if tp <= 0 or tp <= entry_price:
+                tp = entry_price * 1.02
         else:
             distance = max(atr * sl_mult, min_sl_distance)
             sl = entry_price + distance
             tp = entry_price - atr * tp_mult
+            if sl <= 0 or sl <= entry_price:
+                sl = entry_price * 1.02
+            if tp <= 0 or tp >= entry_price:
+                tp = entry_price * 0.98
+
+        # Финальная проверка соотношения SL/TP
         if side == 'BUY':
-            if sl >= entry_price: sl = entry_price * 0.999
-            if tp <= entry_price: tp = entry_price * 1.001
-            if sl >= tp: sl = tp * 0.99
+            if sl >= tp:
+                sl = tp * 0.99
         else:
-            if sl <= entry_price: sl = entry_price * 1.001
-            if tp >= entry_price: tp = entry_price * 0.999
-            if sl <= tp: sl = tp * 1.01
+            if sl <= tp:
+                sl = tp * 1.01
+
         return {'sl': max(sl, 1e-8), 'tp': max(tp, 1e-8), 'tp2': tp}
 
     def calculate_position_size(self, free_margin: float, entry_price: float,
