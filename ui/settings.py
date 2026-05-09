@@ -402,6 +402,8 @@ class SettingsTab(QWidget):
             self.moonshot_capital_pct.setValue(self.engine.moonshot.capital_pct)
             self.moonshot_max_risk_pct.setValue(self.engine.moonshot.max_risk_pct)
             self.moonshot_scan.setValue(self.engine.moonshot.scan_interval)
+        logger.info("Settings loaded from engine into UI")
+        self._log_current_state()
 
     def _save_keys(self):
         key = self.api_key_input.text().strip()
@@ -497,7 +499,6 @@ class SettingsTab(QWidget):
             self.engine.risk_manager.max_leverage = leverage
             self.engine.risk_manager.set_profile(profile)
 
-            # Фиксируем пользовательские лимиты
             self.engine.risk_manager.set_user_limits(
                 risk_pct=risk_pct,
                 max_lev=leverage,
@@ -558,3 +559,50 @@ class SettingsTab(QWidget):
             QMessageBox.information(self, "Success", "Settings saved to config.ini")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Save failed: {e}")
+        finally:
+            # Детальное логирование всех сохранённых настроек
+            self._log_current_state()
+
+    def _log_current_state(self):
+        """Выводит в лог все текущие настройки бота."""
+        logger.info("=== CURRENT BOT SETTINGS ===")
+        # Engine
+        logger.info(f"Engine: max_positions={self.engine.max_positions}, "
+                    f"scan_interval={self.engine.scan_interval}s, "
+                    f"signal_threshold={self.engine.signal_threshold}, "
+                    f"timeframes={self.engine.timeframes}, "
+                    f"top_symbols={self.engine.top_n_symbols}")
+        # Risk Manager
+        rm = self.engine.risk_manager
+        logger.info(f"Risk: profile={self.risk_profile.currentText()}, "
+                    f"risk_per_trade={rm.risk_per_trade_pct}%, "
+                    f"max_leverage={rm.max_leverage}x, "
+                    f"max_positions={self.engine.max_positions}, "
+                    f"use_day_profile={rm.use_day_profile}, "
+                    f"kelly_enabled={rm._kelly_enabled}, "
+                    f"kelly_winrate={rm._kelly_winrate}, "
+                    f"kelly_avg_win_loss={rm._kelly_avg_win_loss_ratio}")
+        # Trading
+        logger.info(f"Trading: trailing_sl={self.engine.trailing_sl_enabled} "
+                    f"({self.engine.trailing_distance_pct}%), "
+                    f"partial_close={self.engine.partial_close_enabled} "
+                    f"({self.engine.partial_close_pct}%), "
+                    f"breakeven={self.engine.breakeven_enabled} "
+                    f"(ATR mult={self.engine.breakeven_atr_mult}), "
+                    f"slippage_timeout={self.engine.slippage_timeout_sec}s, "
+                    f"reinvest={self.engine.reinvest_profits}")
+        # Filters
+        active_filters = [name for name, f in self.engine.filters.items() if f.enabled]
+        disabled_filters = [name for name, f in self.engine.filters.items() if not f.enabled]
+        logger.info(f"Filters active ({len(active_filters)}): {', '.join(active_filters)}")
+        if disabled_filters:
+            logger.info(f"Filters disabled ({len(disabled_filters)}): {', '.join(disabled_filters)}")
+        # Strategies
+        active_strats = [name for name, s in self.engine.strategies.items() if s.enabled]
+        disabled_strats = [name for name, s in self.engine.strategies.items() if not s.enabled]
+        logger.info(f"Strategies active ({len(active_strats)}): {', '.join(active_strats)}")
+        if disabled_strats:
+            logger.info(f"Strategies disabled ({len(disabled_strats)}): {', '.join(disabled_strats)}")
+        # Indicators
+        logger.info(f"Indicators loaded: {', '.join(self.engine.indicators.keys())}")
+        logger.info("=== END BOT SETTINGS ===")
