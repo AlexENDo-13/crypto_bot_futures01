@@ -78,7 +78,7 @@
     "disabled_reason": null
   },
   "TrendFollowing": {
-    "weight": 1.50553618835126,
+    "weight": 1.5055160065946167,
     "trades": 0,
     "wins": 0,
     "total_pnl": 0.0,
@@ -89,7 +89,7 @@
     "disabled_reason": null
   },
   "SmartPyramiding": {
-    "weight": 0.9022974353268268,
+    "weight": 0.9023194311739549,
     "trades": 5,
     "wins": 0,
     "total_pnl": 0.0,

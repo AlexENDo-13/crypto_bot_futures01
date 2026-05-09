@@ -324,6 +324,10 @@ class SettingsTab(QWidget):
         self.btn_save_settings = QPushButton("Save Settings")
         self.btn_save_settings.clicked.connect(self._save_settings)
         actions_layout.addWidget(self.btn_save_settings)
+        # НОВАЯ КНОПКА: обновить баланс
+        self.btn_refresh_balance = QPushButton("Refresh Balance")
+        self.btn_refresh_balance.clicked.connect(self._refresh_balance)
+        actions_layout.addWidget(self.btn_refresh_balance)
         actions_layout.addStretch()
         content_layout.addWidget(actions_group)
 
@@ -465,6 +469,17 @@ class SettingsTab(QWidget):
             else:
                 QMessageBox.warning(self, "Error", "Failed to export trades")
 
+    def _refresh_balance(self):
+        """Принудительно запрашивает баланс с биржи и обновляет информацию в движке."""
+        if self.engine.auth.demo_mode:
+            QMessageBox.information(self, "Refresh Balance", "Демо‑режим: баланс не обновляется с биржи.")
+            return
+        try:
+            self.engine._equity_update_task()
+            QMessageBox.information(self, "Refresh Balance", "Баланс успешно обновлён с биржи.")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Не удалось обновить баланс: {e}")
+
     def _save_settings(self):
         try:
             # Main params
@@ -479,12 +494,11 @@ class SettingsTab(QWidget):
             leverage = self.max_leverage.value()
             profile = self.risk_profile.currentText()
 
-            # Устанавливаем параметры в риск-менеджер
             self.engine.risk_manager.risk_per_trade_pct = risk_pct
             self.engine.risk_manager.max_leverage = leverage
             self.engine.risk_manager.set_profile(profile)
 
-            # Фиксируем пользовательские лимиты (единый метод, работает для всех профилей)
+            # Фиксируем пользовательские лимиты
             self.engine.risk_manager.set_user_limits(
                 risk_pct=risk_pct,
                 max_lev=leverage,
