@@ -132,7 +132,11 @@ class SettingsTab(QWidget):
         risk_group = QGroupBox("Risk Management")
         risk_layout = QFormLayout(risk_group)
         self.risk_profile = QComboBox()
-        self.risk_profile.addItems(["Conservative", "Balanced", "Aggressive", "Adaptive", "User"])
+        # Добавлены Turbo и SmartTurbo
+        self.risk_profile.addItems([
+            "Conservative", "Balanced", "Aggressive",
+            "Adaptive", "Turbo", "SmartTurbo", "User"
+        ])
         self.risk_profile.currentTextChanged.connect(self._on_profile_change)
         risk_layout.addRow("Risk Profile:", self.risk_profile)
         self.risk_per_trade = QDoubleSpinBox()
@@ -428,15 +432,15 @@ class SettingsTab(QWidget):
         self.api_secret_input.setEchoMode(mode)
 
     def _on_profile_change(self, profile):
+        # Убираем вызов несуществующего метода, достаточно set_profile
         self.engine.risk_manager.set_profile(profile)
-        # Apply max_positions from profile
-        max_pos = self.engine.risk_manager.get_profile_max_positions(profile)
+        max_pos = self.engine.risk_manager.max_positions
         self.engine.max_positions = max_pos
         self.max_positions.setValue(max_pos)
 
     def _reload_modules(self):
         try:
-            self.engine.load_all_modules()   # исправлено: раньше было reload_modules()
+            self.engine.load_all_modules()
             QMessageBox.information(self, "Success", "Modules reloaded!")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Reload failed: {e}")
@@ -499,9 +503,6 @@ class SettingsTab(QWidget):
             self.engine.slippage_timeout_sec = self.slippage_timeout.value()
 
             # Moonshot
-            moonshot_capital = 0.0
-            moonshot_risk = 0.0
-            moonshot_scan = 0
             if hasattr(self.engine, 'moonshot') and self.engine.moonshot:
                 self.engine.moonshot.capital_pct = self.moonshot_capital_pct.value()
                 self.engine.moonshot.max_risk_pct = self.moonshot_max_risk_pct.value()
@@ -509,14 +510,9 @@ class SettingsTab(QWidget):
                 if self.engine.moonshot._running:
                     self.engine.moonshot.stop()
                     self.engine.moonshot.start()
-                moonshot_capital = self.engine.moonshot.capital_pct
-                moonshot_risk = self.engine.moonshot.max_risk_pct
-                moonshot_scan = self.engine.moonshot.scan_interval
                 logger.info("Moonshot parameters updated")
 
-            # Save filter params to config.ini and collect current values
-            volume_surge_val = 1.5
-            liquidity_val = 0.3
+            # Save filter params to config.ini
             try:
                 cfg = ConfigParser()
                 cfg.read('config.ini')
@@ -528,13 +524,11 @@ class SettingsTab(QWidget):
                 if volume_surge:
                     val = volume_surge.config.get('min_volume_mult', 1.5)
                     cfg.set('FILTERS', 'volume_surge_min_mult', str(val))
-                    volume_surge_val = val
 
                 liquidity = self.engine.filters.get('LiquidityFilter')
                 if liquidity:
                     val = liquidity.config.get('min_volume_ratio', 0.3)
                     cfg.set('FILTERS', 'liquidity_min_ratio', str(val))
-                    liquidity_val = val
 
                 with open('config.ini', 'w') as f:
                     cfg.write(f)
@@ -545,22 +539,6 @@ class SettingsTab(QWidget):
             self.engine.risk_manager._save_state()
             self.engine._save_config()
 
-            # Расширенное логирование
-            logger.info(
-                "Settings saved: risk=%.1f%%, leverage=%dx, positions=%d, profile=%s, "
-                "signal_threshold=%.2f, trailing_distance=%.2f%%, breakeven_atr=%.2f, "
-                "volume_surge_min_mult=%.2f, liquidity_min_ratio=%.2f, "
-                "moonshot_capital=%.1f%%, moonshot_risk=%.1f%%, moonshot_scan=%ds",
-                risk_pct, leverage, self.engine.max_positions, profile,
-                self.engine.signal_threshold,
-                self.engine.trailing_distance_pct,
-                self.engine.breakeven_atr_mult,
-                volume_surge_val,
-                liquidity_val,
-                moonshot_capital,
-                moonshot_risk,
-                moonshot_scan
-            )
             QMessageBox.information(self, "Success", "Settings saved to config.ini")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Save failed: {e}")
