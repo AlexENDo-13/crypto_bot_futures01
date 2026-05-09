@@ -132,7 +132,6 @@ class SettingsTab(QWidget):
         risk_group = QGroupBox("Risk Management")
         risk_layout = QFormLayout(risk_group)
         self.risk_profile = QComboBox()
-        # Добавлены Turbo и SmartTurbo
         self.risk_profile.addItems([
             "Conservative", "Balanced", "Aggressive",
             "Adaptive", "Turbo", "SmartTurbo", "User"
@@ -432,7 +431,6 @@ class SettingsTab(QWidget):
         self.api_secret_input.setEchoMode(mode)
 
     def _on_profile_change(self, profile):
-        # Убираем вызов несуществующего метода, достаточно set_profile
         self.engine.risk_manager.set_profile(profile)
         max_pos = self.engine.risk_manager.max_positions
         self.engine.max_positions = max_pos
@@ -487,6 +485,13 @@ class SettingsTab(QWidget):
                 self.engine.risk_manager.risk_per_trade_pct = risk_pct
                 self.engine.risk_manager.max_leverage = leverage
                 self.engine.risk_manager.set_profile(profile)
+
+            # Фиксируем пользовательские лимиты, чтобы адаптация не урезала ниже
+            self.engine.risk_manager.set_user_limits(
+                risk_pct=risk_pct,
+                max_lev=leverage,
+                max_pos=self.max_positions.value()
+            )
 
             self.engine.risk_manager.use_day_profile = self.use_day_profile.isChecked()
             self.engine.risk_manager._kelly_enabled = self.kelly_enabled.isChecked()

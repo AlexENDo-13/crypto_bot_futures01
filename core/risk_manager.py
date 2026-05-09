@@ -16,6 +16,7 @@ MIN_SL_RATIO_LONG = 0.98
 MIN_SL_RATIO_SHORT = 1.02
 MIN_TP_RATIO = 0.005
 
+
 class RiskManager:
     STATE_FILE = 'data/risk_state.json'
 
@@ -51,6 +52,11 @@ class RiskManager:
         self._last_adaptation_time = 0
         self._adaptation_interval = 300
 
+        # Пользовательские максимумы (не будут уменьшаться адаптацией)
+        self._user_max_positions: Optional[int] = None
+        self._user_risk_pct: Optional[float] = None
+        self._user_max_leverage: Optional[int] = None
+
         # Профили
         self._profiles = {
             'Conservative': {'risk_pct': 0.5, 'max_lev': 2, 'max_pos': 2, 'atr_mult': {'sl': 3.0, 'tp': 5.0}},
@@ -76,6 +82,18 @@ class RiskManager:
             self._atr_multipliers['__default__'] = p['atr_mult']
         logger.info(f"Risk profile switched to: {profile} (risk={self.risk_per_trade_pct}%, lev={self.max_leverage}, pos={self.max_positions})")
 
+    def set_user_limits(self, risk_pct: float, max_lev: int, max_pos: int):
+        """Сохраняет пользовательские лимиты, которые адаптация не будет уменьшать."""
+        self._user_risk_pct = risk_pct
+        self._user_max_leverage = max_lev
+        self._user_max_positions = max_pos
+        # Сразу применяем
+        self.risk_per_trade_pct = risk_pct
+        self.max_leverage = max_lev
+        if self.engine:
+            self.engine.max_positions = max_pos
+        logger.info(f"User limits set: risk={risk_pct}%, leverage={max_lev}, positions={max_pos}")
+
     def adapt_to_market(self, engine):
         """Периодическая адаптация к рынку."""
         if not self.adaptive_risk_enabled or not engine:
@@ -92,15 +110,24 @@ class RiskManager:
         dyn_risk, dyn_lev, dyn_pos = self._calculate_dynamic_parameters(regime, winrate, pf, dd_pct)
 
         if not getattr(getattr(engine, 'risk_controller', None), '_emergency_lock', False):
+            # Применяем, но не опускаемся ниже пользовательских минимумов
+            if self._user_risk_pct is not None and dyn_risk < self._user_risk_pct:
+                dyn_risk = self._user_risk_pct
+            if self._user_max_leverage is not None and dyn_lev < self._user_max_leverage:
+                dyn_lev = self._user_max_leverage
+            if self._user_max_positions is not None and dyn_pos < self._user_max_positions:
+                dyn_pos = self._user_max_positions
+
             self.risk_per_trade_pct = dyn_risk
             self.max_leverage = dyn_lev
-            if engine.max_positions != dyn_pos:
+            if engine.max_positions < dyn_pos:   # только увеличиваем, если адаптация советует
                 engine.max_positions = dyn_pos
             logger.debug(f"Dynamic risk: risk={dyn_risk:.2f}%, lev={dyn_lev}, pos={dyn_pos}")
 
         self._adapt_atr_multipliers(regime, winrate)
 
     def _calculate_dynamic_parameters(self, regime, winrate, profit_factor, dd_pct):
+        """Вычисляет динамические риск, плечо и количество позиций с учётом ограничений."""
         base = self._profiles['SmartTurbo']
         vol_factor = 1.0
         if self.engine and self.engine._candle_data:
@@ -127,10 +154,20 @@ class RiskManager:
         elif dd_pct > 2: dd_factor = 0.8
 
         risk = base['risk_pct'] * vol_factor * wr_factor * dd_factor
-        risk = max(0.5, min(5.0, risk))
+        # Ограничиваем верхней планкой из SmartTurbo и пользовательским значением
+        max_risk = self.turbo_max_risk_pct if self._user_risk_pct is None else max(self.turbo_max_risk_pct, self._user_risk_pct)
+        min_risk = self.turbo_min_risk_pct if self._user_risk_pct is None else self._user_risk_pct
+        risk = max(min_risk, min(max_risk, risk))
+
         lev = int(base['max_lev'] * vol_factor)
-        lev = max(1, min(5, lev))
+        max_lev = self.turbo_max_leverage if self._user_max_leverage is None else max(self.turbo_max_leverage, self._user_max_leverage)
+        lev = max(1, min(max_lev, lev))
+
+        # Позиции: не снижаем ниже пользовательского лимита
         pos = max(1, min(5, base['max_pos']))
+        if self._user_max_positions is not None:
+            pos = max(pos, self._user_max_positions)
+
         return risk, lev, pos
 
     def _calculate_recent_stats(self):
@@ -226,13 +263,10 @@ class RiskManager:
         default = self._atr_multipliers.get('__default__', {'sl': DEFAULT_ATR_MULT_SL, 'tp': DEFAULT_ATR_MULT_TP})
         return default['sl'], default['tp']
 
-    # ---------- Методы, требуемые для совместимости ----------
     def check_low_balance(self, balance: float):
-        """Пустая заглушка, так как SmartTurbo сам управляет риском."""
         pass
 
     def get_optimal_leverage(self, symbol: str, price: float, atr: float) -> int:
-        """Возвращает плечо с поправкой на волатильность, но не выше максимального."""
         if price <= 0:
             return self.max_leverage
         atr_pct = atr / price
@@ -245,23 +279,20 @@ class RiskManager:
         return self.max_leverage
 
     def apply_day_profile(self):
-        """Оставлено для совместимости, если не используется."""
         pass
 
     def adapt_to_volatility(self, current_atr_pct: float):
-        """Адаптация риска к текущей волатильности."""
         if self._night_mode:
             return
         if current_atr_pct > 0.05:
-            self.risk_per_trade_pct = max(0.5, self.risk_per_trade_pct * 0.7)
+            self.risk_per_trade_pct = max(self.turbo_min_risk_pct, self.risk_per_trade_pct * 0.7)
             self.max_leverage = max(1, self.max_leverage - 1)
             logger.info(f"High volatility ({current_atr_pct:.2%}), risk reduced")
         elif current_atr_pct < 0.01:
-            self.risk_per_trade_pct = min(2.5, self.risk_per_trade_pct * 1.2)
-            self.max_leverage = min(5, self.max_leverage + 1)
+            self.risk_per_trade_pct = min(self.turbo_max_risk_pct, self.risk_per_trade_pct * 1.2)
+            self.max_leverage = min(self.turbo_max_leverage, self.max_leverage + 1)
             logger.info(f"Low volatility ({current_atr_pct:.2%}), risk increased")
 
-    # Вспомогательные методы
     def _load_state(self):
         if not os.path.exists(self.STATE_FILE): return
         try:

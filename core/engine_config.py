@@ -16,6 +16,7 @@ def load_config(engine):
 
     cfg.read(CONFIG_FILE)
     try:
+        # --- ENGINE ------------------------------------------------
         if cfg.has_section('ENGINE'):
             engine.scan_interval = cfg.getint('ENGINE', 'scan_interval', fallback=60)
             engine.signal_threshold = cfg.getfloat('ENGINE', 'signal_threshold', fallback=0.5)
@@ -23,10 +24,18 @@ def load_config(engine):
             engine.timeframes = cfg.get('ENGINE', 'timeframes', fallback='15m,1h,4h').split(',')
             engine.top_n_symbols = cfg.getint('ENGINE', 'top_symbols', fallback=50)
 
+        # --- RISK --------------------------------------------------
         if cfg.has_section('RISK'):
-            engine.risk_manager.risk_per_trade_pct = cfg.getfloat('RISK', 'risk_per_trade', fallback=2.0)
-            engine.risk_manager.max_leverage = cfg.getint('RISK', 'max_leverage', fallback=3)
-            engine.risk_manager.set_profile(cfg.get('RISK', 'profile', fallback='Balanced'))
+            # 1. Сначала устанавливаем профиль (из конфига или SmartTurbo по умолчанию)
+            profile = cfg.get('RISK', 'profile', fallback='SmartTurbo')
+            engine.risk_manager.set_profile(profile)
+
+            # 2. Затем переопределяем риск/плечо, если они явно заданы в конфиге
+            if cfg.has_option('RISK', 'risk_per_trade'):
+                engine.risk_manager.risk_per_trade_pct = cfg.getfloat('RISK', 'risk_per_trade')
+            if cfg.has_option('RISK', 'max_leverage'):
+                engine.risk_manager.max_leverage = cfg.getint('RISK', 'max_leverage')
+
             if cfg.has_option('RISK', 'use_day_profile'):
                 engine.risk_manager.use_day_profile = cfg.getboolean('RISK', 'use_day_profile')
             if cfg.has_option('RISK', 'kelly_enabled'):
@@ -36,6 +45,7 @@ def load_config(engine):
             if cfg.has_option('RISK', 'kelly_avg_win_loss'):
                 engine.risk_manager._kelly_avg_win_loss_ratio = cfg.getfloat('RISK', 'kelly_avg_win_loss')
 
+        # --- TRADING -----------------------------------------------
         if cfg.has_section('TRADING'):
             engine.trailing_sl_enabled = cfg.getboolean('TRADING', 'trailing_sl', fallback=True)
             engine.trailing_distance_pct = cfg.getfloat('TRADING', 'trailing_distance_pct', fallback=0.5)
@@ -62,7 +72,6 @@ def save_config(engine):
     if os.path.exists(CONFIG_FILE):
         cfg.read(CONFIG_FILE)
 
-    # Ensure sections exist
     for section in ['ENGINE', 'RISK', 'TRADING']:
         if not cfg.has_section(section):
             cfg.add_section(section)
