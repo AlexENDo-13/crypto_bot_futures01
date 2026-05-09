@@ -16,7 +16,6 @@ def load_config(engine):
 
     cfg.read(CONFIG_FILE)
     try:
-        # --- ENGINE ------------------------------------------------
         if cfg.has_section('ENGINE'):
             engine.scan_interval = cfg.getint('ENGINE', 'scan_interval', fallback=60)
             engine.signal_threshold = cfg.getfloat('ENGINE', 'signal_threshold', fallback=0.5)
@@ -24,13 +23,10 @@ def load_config(engine):
             engine.timeframes = cfg.get('ENGINE', 'timeframes', fallback='15m,1h,4h').split(',')
             engine.top_n_symbols = cfg.getint('ENGINE', 'top_symbols', fallback=50)
 
-        # --- RISK --------------------------------------------------
         if cfg.has_section('RISK'):
-            # 1. Устанавливаем профиль
             profile = cfg.get('RISK', 'profile', fallback='SmartTurbo')
             engine.risk_manager.set_profile(profile)
 
-            # 2. Применяем значения из конфига
             risk_pct = cfg.getfloat('RISK', 'risk_per_trade', fallback=None)
             max_lev = cfg.getint('RISK', 'max_leverage', fallback=None)
 
@@ -39,7 +35,6 @@ def load_config(engine):
             if max_lev is not None:
                 engine.risk_manager.max_leverage = max_lev
 
-            # 3. Фиксируем пользовательские лимиты для адаптивной системы
             engine.risk_manager.set_user_limits(
                 risk_pct=risk_pct or engine.risk_manager.risk_per_trade_pct,
                 max_lev=max_lev or engine.risk_manager.max_leverage,
@@ -55,7 +50,6 @@ def load_config(engine):
             if cfg.has_option('RISK', 'kelly_avg_win_loss'):
                 engine.risk_manager._kelly_avg_win_loss_ratio = cfg.getfloat('RISK', 'kelly_avg_win_loss')
 
-        # --- TRADING -----------------------------------------------
         if cfg.has_section('TRADING'):
             engine.trailing_sl_enabled = cfg.getboolean('TRADING', 'trailing_sl', fallback=True)
             engine.trailing_distance_pct = cfg.getfloat('TRADING', 'trailing_distance_pct', fallback=0.5)

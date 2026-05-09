@@ -1,14 +1,23 @@
-"""Minimal theme module."""
+"""Minimal theme module – dark only."""
 from PyQt5.QtGui import QFont
 
 class Theme:
     def __init__(self):
+        self._dark = True
         self.colors = {
-            'accent': '#00d4aa', 'accent_hover': '#00b894', 'success': '#34d399',
-            'danger': '#f87171', 'warning': '#fbbf24', 'bg_primary': '#0f172a',
-            'bg_secondary': '#1e293b', 'bg_tertiary': '#1e293b',  # ← добавлено (можно выбрать другой оттенок)
-            'text_primary': '#f1f5f9',
-            'text_secondary': '#94a3b8', 'text_muted': '#64748b', 'border': '#334155',
+            'bg_primary': '#0b0f19',
+            'bg_secondary': '#131a2b',
+            'bg_tertiary': '#1c2541',
+            'text_primary': '#e0e6f0',
+            'text_secondary': '#8892b0',
+            'text_muted': '#5a6785',
+            'accent': '#00d4aa',
+            'accent_hover': '#00b894',
+            'success': '#34d399',
+            'warning': '#fbbf24',
+            'danger': '#f87171',
+            'border': '#2a3650',
+            'input_bg': '#0d1424',
         }
         self.FONTS = {
             'header': QFont("Segoe UI", 14, QFont.Bold),
@@ -16,32 +25,112 @@ class Theme:
             'mono': QFont("Consolas", 10),
             'small': QFont("Segoe UI", 9),
         }
-        self._dark = True
 
     def get_stylesheet(self):
         c = self.colors
         return f"""
-        QMainWindow {{ background-color: {c['bg_primary']}; color: {c['text_primary']}; }}
-        QWidget {{ background-color: {c['bg_primary']}; color: {c['text_primary']}; }}
-        QTabWidget::pane {{ border: 1px solid {c['border']}; background: {c['bg_primary']}; }}
-        QTabBar::tab {{ background: {c['bg_secondary']}; color: {c['text_secondary']}; padding: 8px 16px; border: 1px solid {c['border']}; }}
-        QTabBar::tab:selected {{ background: {c['bg_primary']}; color: {c['text_primary']}; border-bottom: 2px solid {c['accent']}; }}
-        QPushButton {{ background-color: {c['bg_secondary']}; color: {c['text_primary']}; border: 1px solid {c['border']}; padding: 6px 12px; border-radius: 4px; }}
-        QPushButton:hover {{ background-color: {c['border']}; }}
-        QPushButton#success {{ background-color: {c['success']}; color: #000; }}
-        QPushButton#danger {{ background-color: {c['danger']}; color: #000; }}
-        QPushButton#warning {{ background-color: {c['warning']}; color: #000; }}
-        QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {{ background: {c['bg_secondary']}; color: {c['text_primary']}; border: 1px solid {c['border']}; padding: 4px; }}
-        QTableWidget {{ background: {c['bg_secondary']}; color: {c['text_primary']}; gridline-color: {c['border']}; }}
-        QHeaderView::section {{ background: {c['bg_primary']}; color: {c['text_primary']}; padding: 4px; border: 1px solid {c['border']}; }}
-        QGroupBox {{ border: 1px solid {c['border']}; margin-top: 10px; padding-top: 10px; }}
-        QLabel {{ color: {c['text_primary']}; }}
-        QStatusBar {{ background: {c['bg_secondary']}; color: {c['text_secondary']}; }}
+        QMainWindow {{
+            background-color: {c['bg_primary']};
+        }}
+        QWidget {{
+            background-color: {c['bg_primary']};
+            color: {c['text_primary']};
+            font-family: 'Segoe UI';
+            font-size: 9pt;
+        }}
+        QLabel {{
+            background: transparent;
+            color: {c['text_primary']};
+        }}
+        QPushButton {{
+            background-color: {c['bg_tertiary']};
+            color: {c['text_primary']};
+            border: 1px solid {c['border']};
+            border-radius: 4px;
+            padding: 6px 14px;
+            font-weight: 500;
+        }}
+        QPushButton:hover {{
+            background-color: {c['accent']};
+            color: #000000;
+        }}
+        QPushButton#success {{
+            background-color: {c['success']};
+            color: #000000;
+        }}
+        QPushButton#warning {{
+            background-color: {c['warning']};
+            color: #000000;
+        }}
+        QPushButton#danger {{
+            background-color: {c['danger']};
+            color: #000000;
+        }}
+        QLineEdit, QComboBox, QDoubleSpinBox, QSpinBox {{
+            background-color: {c['input_bg']};
+            color: {c['text_primary']};
+            border: 1px solid {c['border']};
+            border-radius: 3px;
+            padding: 5px;
+        }}
+        QTableWidget {{
+            background-color: {c['bg_secondary']};
+            color: {c['text_primary']};
+            gridline-color: {c['border']};
+            border: 1px solid {c['border']};
+        }}
+        QHeaderView::section {{
+            background-color: {c['bg_tertiary']};
+            color: {c['text_primary']};
+            padding: 4px;
+            border: 1px solid {c['border']};
+        }}
+        QTabWidget::pane {{
+            border: 1px solid {c['border']};
+            background-color: {c['bg_primary']};
+        }}
+        QTabBar::tab {{
+            background-color: {c['bg_secondary']};
+            color: {c['text_secondary']};
+            padding: 8px 16px;
+            margin-right: 2px;
+            border-top-left-radius: 4px;
+            border-top-right-radius: 4px;
+        }}
+        QTabBar::tab:selected {{
+            background-color: {c['bg_primary']};
+            color: {c['accent']};
+        }}
+        QStatusBar {{
+            background-color: {c['bg_tertiary']};
+            color: {c['text_secondary']};
+        }}
+        QScrollArea {{
+            border: none;
+            background-color: transparent;
+        }}
+        QGroupBox {{
+            border: 1px solid {c['border']};
+            border-radius: 6px;
+            margin-top: 8px;
+            padding-top: 16px;
+            font-weight: bold;
+        }}
+        QGroupBox::title {{
+            subcontrol-origin: margin;
+            left: 10px;
+            padding: 0 5px;
+        }}
+        QCheckBox {{
+            spacing: 6px;
+        }}
+        QCheckBox::indicator {{
+            width: 16px;
+            height: 16px;
+        }}
         """
-    
+
     def toggle(self):
-        self._dark = not self._dark
-    def apply_theme(self):
         pass
 
 theme = Theme()

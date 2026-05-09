@@ -78,7 +78,7 @@
     "disabled_reason": null
   },
   "TrendFollowing": {
-    "weight": 1.5055160065946167,
+    "weight": 1.5053764243239276,
     "trades": 0,
     "wins": 0,
     "total_pnl": 0.0,
@@ -89,7 +89,7 @@
     "disabled_reason": null
   },
   "SmartPyramiding": {
-    "weight": 0.9023194311739549,
+    "weight": 0.9021206953170843,
     "trades": 5,
     "wins": 0,
     "total_pnl": 0.0,
@@ -113,6 +113,50 @@
   },
   "Range": {
     "weight": 1.0027773864062621,
+    "trades": 0,
+    "wins": 0,
+    "total_pnl": 0.0,
+    "avg_pnl": 0.0,
+    "winrate": 0.0,
+    "consecutive_losses": 0,
+    "disabled": false,
+    "disabled_reason": null
+  },
+  "BreakoutSwing": {
+    "weight": 1.0,
+    "trades": 0,
+    "wins": 0,
+    "total_pnl": 0.0,
+    "avg_pnl": 0.0,
+    "winrate": 0.0,
+    "consecutive_losses": 0,
+    "disabled": false,
+    "disabled_reason": null
+  },
+  "DynamicRebalance": {
+    "weight": 0.5,
+    "trades": 0,
+    "wins": 0,
+    "total_pnl": 0.0,
+    "avg_pnl": 0.0,
+    "winrate": 0.0,
+    "consecutive_losses": 0,
+    "disabled": false,
+    "disabled_reason": null
+  },
+  "EMACrossoverSwing": {
+    "weight": 0.9525770424193082,
+    "trades": 0,
+    "wins": 0,
+    "total_pnl": 0.0,
+    "avg_pnl": 0.0,
+    "winrate": 0.0,
+    "consecutive_losses": 0,
+    "disabled": false,
+    "disabled_reason": null
+  },
+  "SuperTrendSwing": {
+    "weight": 0.9813157283778641,
     "trades": 0,
     "wins": 0,
     "total_pnl": 0.0,

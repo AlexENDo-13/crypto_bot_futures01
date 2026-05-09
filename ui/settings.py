@@ -324,7 +324,6 @@ class SettingsTab(QWidget):
         self.btn_save_settings = QPushButton("Save Settings")
         self.btn_save_settings.clicked.connect(self._save_settings)
         actions_layout.addWidget(self.btn_save_settings)
-        # НОВАЯ КНОПКА: обновить баланс
         self.btn_refresh_balance = QPushButton("Refresh Balance")
         self.btn_refresh_balance.clicked.connect(self._refresh_balance)
         actions_layout.addWidget(self.btn_refresh_balance)

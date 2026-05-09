@@ -28,8 +28,10 @@ def load_contracts_info(engine):
             if not sym.endswith('USDT'):
                 continue
             try:
+                # Поля из документации: tradeMinQuantity и pricePrecision
                 min_qty = float(c.get('tradeMinQuantity', 0))
-                step_size = float(c.get('stepSize', 0.001))
+                price_precision = int(c.get('pricePrecision', 1))
+                step_size = 10.0 ** (-price_precision) if price_precision > 0 else 0.001
             except (TypeError, ValueError):
                 logger.debug(f"Skipping contract info for {sym} due to invalid numeric values")
                 continue

@@ -1,6 +1,7 @@
 """
-BingX Perpetual Futures (Swap v2) API client.
-Handles authentication, rate limiting, and request management.
+BingX Perpetual Futures (Swap v2/v3) API client.
+Исправлено: все параметры передаются в URL, тело запроса всегда пустое.
+Баланс запрашивается по v3, ответ приходит массивом.
 """
 import hmac
 import hashlib
@@ -45,10 +46,11 @@ class RateLimiter:
 class BingXAPI:
     BASE_URL = "https://open-api.bingx.com"
 
-    BALANCE = "/openApi/swap/v2/user/balance"
+    # v3 для баланса
+    BALANCE = "/openApi/swap/v3/user/balance"
     POSITIONS = "/openApi/swap/v2/user/positions"
     ORDER = "/openApi/swap/v2/trade/order"
-    OPEN_ORDERS = "/openApi/swap/v2/trade/openOrders"  # Правильный эндпоинт
+    OPEN_ORDERS = "/openApi/swap/v2/trade/openOrders"
     LEVERAGE = "/openApi/swap/v2/trade/leverage"
     CONTRACTS = "/openApi/swap/v2/quote/contracts"
     KLINES = "/openApi/swap/v2/quote/klines"
@@ -81,30 +83,23 @@ class BingXAPI:
             try:
                 self.rate_limiter.wait()
 
+                params = params or {}
+                params['timestamp'] = int(time.time() * 1000)
+                signature = self._sign_params(params)
+                params['signature'] = signature
+
+                # Все параметры – в URL, тело всегда пустое (кроме GET, где тело не передаётся)
+                url = f"{self.BASE_URL}{endpoint}?{urlencode(params)}"
+                headers = {"X-BX-APIKEY": self.auth.api_key}
+
                 if method.upper() == 'GET':
-                    params = params or {}
-                    params['timestamp'] = int(time.time() * 1000)
-                    signature = self._sign_params(params)
-                    params['signature'] = signature
-                    url = f"{self.BASE_URL}{endpoint}?{urlencode(params)}"
-                    headers = {"X-BX-APIKEY": self.auth.api_key}
                     response = self.session.get(url, headers=headers, timeout=15)
+                elif method.upper() == 'POST':
+                    response = self.session.post(url, headers=headers, data={}, timeout=15)
+                elif method.upper() == 'DELETE':
+                    response = self.session.delete(url, headers=headers, data={}, timeout=15)
                 else:
-                    body = dict(params) if params else {}
-                    body['timestamp'] = int(time.time() * 1000)
-                    signature = self._sign_params(body)
-                    body['signature'] = signature
-                    url = f"{self.BASE_URL}{endpoint}"
-                    headers = {
-                        "X-BX-APIKEY": self.auth.api_key,
-                        "Content-Type": "application/json"
-                    }
-                    if method.upper() == 'POST':
-                        response = self.session.post(url, headers=headers, json=body, timeout=15)
-                    elif method.upper() == 'DELETE':
-                        response = self.session.delete(url, headers=headers, json=body, timeout=15)
-                    else:
-                        response = self.session.get(url, headers=headers, timeout=15)
+                    response = self.session.get(url, headers=headers, timeout=15)
 
                 status_code = response.status_code
                 if status_code == 200:
@@ -161,6 +156,7 @@ class BingXAPI:
 
     # Account
     def get_balance(self) -> Dict:
+        """Возвращает словарь с данными баланса (v3, массив)."""
         return self._request('GET', self.BALANCE)
 
     def get_positions(self, symbol: Optional[str] = None) -> List[Dict]:
@@ -241,7 +237,6 @@ class BingXAPI:
         if symbol:
             params['symbol'] = symbol
         response = self._request('GET', self.OPEN_ORDERS, params)
-        # Правильный путь к массиву ордеров: data.orders
         return response.get('data', {}).get('orders', [])
 
     # Market Data
@@ -256,7 +251,6 @@ class BingXAPI:
         return self._request('GET', self.TICKER, params)
 
     def get_depth(self, symbol: str, limit: int = 20) -> Dict:
-        """Возвращает полный ответ глубины стакана."""
         params = {'symbol': symbol, 'limit': limit}
         return self._request('GET', self.DEPTH, params)
 
