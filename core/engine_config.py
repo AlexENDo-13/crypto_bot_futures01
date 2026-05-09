@@ -26,15 +26,25 @@ def load_config(engine):
 
         # --- RISK --------------------------------------------------
         if cfg.has_section('RISK'):
-            # 1. Сначала устанавливаем профиль (из конфига или SmartTurbo по умолчанию)
+            # 1. Устанавливаем профиль
             profile = cfg.get('RISK', 'profile', fallback='SmartTurbo')
             engine.risk_manager.set_profile(profile)
 
-            # 2. Затем переопределяем риск/плечо, если они явно заданы в конфиге
-            if cfg.has_option('RISK', 'risk_per_trade'):
-                engine.risk_manager.risk_per_trade_pct = cfg.getfloat('RISK', 'risk_per_trade')
-            if cfg.has_option('RISK', 'max_leverage'):
-                engine.risk_manager.max_leverage = cfg.getint('RISK', 'max_leverage')
+            # 2. Применяем значения из конфига
+            risk_pct = cfg.getfloat('RISK', 'risk_per_trade', fallback=None)
+            max_lev = cfg.getint('RISK', 'max_leverage', fallback=None)
+
+            if risk_pct is not None:
+                engine.risk_manager.risk_per_trade_pct = risk_pct
+            if max_lev is not None:
+                engine.risk_manager.max_leverage = max_lev
+
+            # 3. Фиксируем пользовательские лимиты для адаптивной системы
+            engine.risk_manager.set_user_limits(
+                risk_pct=risk_pct or engine.risk_manager.risk_per_trade_pct,
+                max_lev=max_lev or engine.risk_manager.max_leverage,
+                max_pos=engine.max_positions
+            )
 
             if cfg.has_option('RISK', 'use_day_profile'):
                 engine.risk_manager.use_day_profile = cfg.getboolean('RISK', 'use_day_profile')
