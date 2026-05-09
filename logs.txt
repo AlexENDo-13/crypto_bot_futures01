@@ -1,0 +1,1340 @@
+PS C:\Users\AlexENDo\Desktop\crypto_bot_futures> python main.py --auto-install
+[2026-05-09 21:29:00,000] [INFO] [root] BingX Trading Bot v2.0.0
+[2026-05-09 21:29:00,002] [WARNING] [root] Missing packages: scikit-optimize>=0.9.0
+[2026-05-09 21:29:00,003] [INFO] [root] Attempting to install missing packages...
+[2026-05-09 21:29:01,243] [INFO] [root] Dependencies installed successfully.
+[2026-05-09 21:29:02,238] [INFO] [root] Bot is up-to-date.
+[2026-05-09 21:29:03,029] [INFO] [core.risk_manager] Risk profile switched to: SmartTurbo (risk=2.0%, lev=3, pos=3)
+[2026-05-09 21:29:03,073] [INFO] [comtypes.client._code_cache] Imported existing <module 'comtypes.gen' from 'C:\\Users\\AlexENDo\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\comtypes\\gen\\__init__.py'>
+[2026-05-09 21:29:03,074] [INFO] [comtypes.client._code_cache] Using writeable comtypes cache directory: 'C:\Users\AlexENDo\AppData\Local\Programs\Python\Python312\Lib\site-packages\comtypes\gen'
+[2026-05-09 21:29:03,206] [INFO] [core.sound_manager] TTS engine initialised for SoundManager
+[2026-05-09 21:29:03,208] [INFO] [core.risk_manager] Risk profile switched to: User (risk=5.0%, lev=5, pos=5)
+[2026-05-09 21:29:03,208] [INFO] [core.risk_manager] User caps set: risk≤5.9999999999999964%, leverage≤13, positions≤6
+[2026-05-09 21:29:03,209] [INFO] [core.scheduler] Registered task 'market_scan' (interval: 60s)
+[2026-05-09 21:29:03,210] [INFO] [core.scheduler] Registered task 'weight_update' (interval: 3600s)
+[2026-05-09 21:29:03,210] [INFO] [core.scheduler] Registered task 'equity_update' (interval: 60s)
+[2026-05-09 21:29:03,210] [INFO] [core.scheduler] Registered task 'position_sync' (interval: 30s)
+[2026-05-09 21:29:03,210] [INFO] [core.scheduler] Registered task 'watchdog_heartbeat' (interval: 10s)
+[2026-05-09 21:29:03,210] [INFO] [core.scheduler] Registered task 'grid_renew' (interval: 3600s)
+[2026-05-09 21:29:03,211] [INFO] [core.engine_components] Loading modules...
+[2026-05-09 21:29:03,212] [INFO] [core.engine_components]   Loaded BaseStrategy: AdaptiveCombiner
+[2026-05-09 21:29:03,214] [INFO] [core.engine_components]   Loaded BaseStrategy: Breakout
+[2026-05-09 21:29:03,215] [INFO] [core.engine_components]   Loaded BaseStrategy: BreakoutSwing
+[2026-05-09 21:29:03,216] [INFO] [core.engine_components]   Loaded BaseStrategy: DualThrust
+[2026-05-09 21:29:03,217] [INFO] [core.engine_components]   Loaded BaseStrategy: DynamicRebalance
+[2026-05-09 21:29:03,218] [INFO] [core.engine_components]   Loaded BaseStrategy: EMACrossoverSwing
+[2026-05-09 21:29:03,219] [INFO] [core.engine_components]   Loaded BaseStrategy: GridStrategy
+[2026-05-09 21:29:03,220] [INFO] [core.engine_components]   Loaded BaseStrategy: Ichimoku
+[2026-05-09 21:29:03,221] [INFO] [core.engine_components]   Loaded BaseStrategy: MeanReversion
+[2026-05-09 21:29:03,222] [INFO] [core.engine_components]   Loaded BaseStrategy: Momentum
+[2026-05-09 21:29:03,224] [INFO] [core.engine_components]   Loaded BaseStrategy: Range
+[2026-05-09 21:29:03,225] [INFO] [core.engine_components]   Loaded BaseStrategy: RSIDivergence
+[2026-05-09 21:29:03,226] [INFO] [core.engine_components]   Loaded BaseStrategy: SmartPyramiding
+[2026-05-09 21:29:03,227] [INFO] [core.engine_components]   Loaded BaseStrategy: Squeeze
+[2026-05-09 21:29:03,229] [INFO] [core.engine_components]   Loaded BaseStrategy: SuperTrendSwing
+[2026-05-09 21:29:03,230] [INFO] [core.engine_components]   Loaded BaseStrategy: TrendFollowing
+[2026-05-09 21:29:03,232] [INFO] [core.engine_components]   Loaded BaseStrategy: TurtleTrading
+[2026-05-09 21:29:03,233] [INFO] [core.engine_components]   Loaded BaseIndicator: ADX
+[2026-05-09 21:29:03,233] [INFO] [core.engine_components]   Loaded BaseIndicator: Ichimoku
+[2026-05-09 21:29:03,234] [INFO] [core.engine_components]   Loaded BaseIndicator: KeltnerChannels
+[2026-05-09 21:29:03,235] [INFO] [core.engine_components]   Loaded BaseIndicator: MFI
+[2026-05-09 21:29:03,236] [INFO] [core.engine_components]   Loaded BaseIndicator: OBV
+[2026-05-09 21:29:03,236] [INFO] [core.engine_components]   Loaded BaseIndicator: SuperTrend
+[2026-05-09 21:29:03,237] [INFO] [core.engine_components]   Loaded BaseIndicator: VolumeProfile
+[2026-05-09 21:29:03,238] [INFO] [core.engine_components]   Loaded BaseFilter: AdaptiveLeverage
+[2026-05-09 21:29:03,240] [WARNING] [filters.advanced_candlestick_filter] pandas-ta not installed. AdvancedCandlestick disabled. Install: pip install pandas-ta
+[2026-05-09 21:29:03,240] [INFO] [core.engine_components]   Loaded BaseFilter: AdvancedCandlestick
+[2026-05-09 21:29:03,241] [INFO] [core.engine_components]   Loaded BaseFilter: ATRFilter
+[2026-05-09 21:29:03,242] [INFO] [core.engine_components]   Loaded BaseFilter: CandlestickPattern
+[2026-05-09 21:29:03,243] [INFO] [core.engine_components]   Loaded BaseFilter: CorrelationFilter
+[2026-05-09 21:29:03,243] [INFO] [core.engine_components]   Loaded BaseFilter: DrawdownLimiter
+[2026-05-09 21:29:03,248] [INFO] [core.engine_components]   Loaded BaseFilter: LiquidityFilter
+[2026-05-09 21:29:03,249] [INFO] [core.engine_components]   Loaded BaseFilter: MarketProfile
+[2026-05-09 21:29:03,250] [INFO] [core.engine_components]   Loaded BaseFilter: MicroLotFilter
+[2026-05-09 21:29:03,251] [INFO] [core.engine_components]   Loaded BaseFilter: MultiTFConfluenceFilter
+[2026-05-09 21:29:03,252] [INFO] [core.engine_components]   Loaded BaseFilter: OnChainFilter
+[2026-05-09 21:29:03,253] [INFO] [core.engine_components]   Loaded BaseFilter: OrderFlowImbalance
+[2026-05-09 21:29:03,255] [INFO] [core.engine_components]   Loaded BaseFilter: PortfolioCorrelation
+[2026-05-09 21:29:03,255] [INFO] [core.engine_components]   Loaded BaseFilter: SentimentFilter
+[2026-05-09 21:29:03,256] [INFO] [core.engine_components]   Loaded BaseFilter: SessionFilter
+[2026-05-09 21:29:03,257] [INFO] [core.engine_components]   Loaded BaseFilter: SmartMoneyFilter
+[2026-05-09 21:29:03,258] [INFO] [core.engine_components]   Loaded BaseFilter: TrendFilter
+[2026-05-09 21:29:03,259] [INFO] [core.engine_components]   Loaded BaseFilter: VolumeDelta
+[2026-05-09 21:29:03,260] [INFO] [core.engine_components]   Loaded BaseFilter: VolumeFilter
+[2026-05-09 21:29:03,260] [INFO] [core.engine_components]   Loaded BaseFilter: VolumeProfile
+[2026-05-09 21:29:03,262] [INFO] [core.engine_components]   Loaded BaseFilter: VolumeSurgeFilter
+[2026-05-09 21:29:03,263] [INFO] [core.engine_components] Loaded: 17 strategies, 7 indicators, 21 filters
+[2026-05-09 21:29:03,265] [INFO] [core.adaptive_threshold] AdaptiveThresholdManager started
+[2026-05-09 21:29:03,265] [INFO] [root] AdaptiveThresholdManager started
+[2026-05-09 21:29:03,265] [INFO] [root] MicroLotFilter added
+[2026-05-09 21:29:03,267] [INFO] [core.human_emulator] HumanEmulator config loaded from config.ini
+[2026-05-09 21:29:03,267] [INFO] [core.human_emulator] HumanEmulator activated
+[2026-05-09 21:29:03,267] [INFO] [root] HumanEmulator started
+[2026-05-09 21:29:03,269] [INFO] [core.order_guard] OrderGuard started (check every 120s)
+[2026-05-09 21:29:03,270] [INFO] [root] OrderGuard started
+[2026-05-09 21:29:04,594] [INFO] [web.tradingview_webhook] TradingView webhook listening on port 8080
+[2026-05-09 21:29:04,708] [INFO] [web.server] Starting web server on 0.0.0.0:5000
+[2026-05-09 21:29:04,709] [INFO] [root] Web dashboard started on http://0.0.0.0:5000
+[2026-05-09 21:29:04,713] [INFO] [ml.sliding_backtest] Sliding backtest started
+ * Serving Flask app 'web.server'
+ * Debug mode: off
+[2026-05-09 21:29:05,592] [INFO] [werkzeug] ←[31m←[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.←[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.1.129:5000
+[2026-05-09 21:29:05,594] [INFO] [werkzeug] ←[33mPress CTRL+C to quit←[0m
+[2026-05-09 21:29:10,943] [INFO] [ml.bayesian_optimizer] BayesianOptimizer started (interval 6 hours)
+[2026-05-09 21:29:10,950] [INFO] [root] Bayesian optimizer started
+[2026-05-09 21:29:10,978] [INFO] [ml.walk_forward_optimizer] WalkForwardOptimizer started (every 12h)
+[2026-05-09 21:29:10,985] [INFO] [root] WalkForwardOptimizer started (interval 12h)
+[2026-05-09 21:29:11,010] [INFO] [ml.auto_strategy_selector] Market regime changed to unknown, adapting strategies and filters
+[2026-05-09 21:29:11,014] [INFO] [ml.auto_strategy_selector] Auto: disabled strategy AdaptiveCombiner (unsuitable for unknown)
+[2026-05-09 21:29:11,018] [INFO] [ml.auto_strategy_selector] AutoStrategySelector started (interval 300s)
+[2026-05-09 21:29:11,018] [INFO] [ml.auto_strategy_selector] Auto: disabled strategy Breakout (unsuitable for unknown)
+[2026-05-09 21:29:11,020] [INFO] [root] AutoStrategySelector started
+[2026-05-09 21:29:11,023] [INFO] [ml.auto_strategy_selector] Auto: disabled strategy BreakoutSwing (unsuitable for unknown)
+[2026-05-09 21:29:11,033] [INFO] [ml.auto_strategy_selector] Auto: disabled strategy DualThrust (unsuitable for unknown)
+[2026-05-09 21:29:11,042] [INFO] [ml.capital_allocator] CapitalAllocator started (interval 60 min)
+[2026-05-09 21:29:11,043] [INFO] [ml.auto_strategy_selector] Auto: disabled strategy DynamicRebalance (unsuitable for unknown)
+[2026-05-09 21:29:11,053] [INFO] [root] CapitalAllocator started
+[2026-05-09 21:29:11,066] [INFO] [ml.auto_strategy_selector] Auto: disabled strategy EMACrossoverSwing (unsuitable for unknown)
+[2026-05-09 21:29:11,090] [INFO] [ml.auto_strategy_selector] Auto: disabled strategy GridStrategy (unsuitable for unknown)
+[2026-05-09 21:29:11,093] [INFO] [ml.auto_strategy_selector] Auto: disabled strategy Range (unsuitable for unknown)
+[2026-05-09 21:29:11,098] [INFO] [core.tf_selector] TimeframeSelector started (update every 12 hours)
+[2026-05-09 21:29:11,101] [INFO] [ml.auto_strategy_selector] Auto: disabled strategy RSIDivergence (unsuitable for unknown)
+[2026-05-09 21:29:11,107] [INFO] [root] TimeframeSelector started
+[2026-05-09 21:29:11,110] [INFO] [ml.auto_strategy_selector] Auto: disabled strategy SmartPyramiding (unsuitable for unknown)
+[2026-05-09 21:29:11,121] [INFO] [ml.auto_strategy_selector] Auto: disabled strategy Squeeze (unsuitable for unknown)
+[2026-05-09 21:29:11,128] [INFO] [ml.auto_strategy_selector] Auto: disabled strategy SuperTrendSwing (unsuitable for unknown)
+[2026-05-09 21:29:11,135] [INFO] [ml.auto_strategy_selector] Auto: disabled strategy TurtleTrading (unsuitable for unknown)
+[2026-05-09 21:29:11,135] [WARNING] [core.alert_manager] ALERT: ⚠️ Баланс опустился ниже 100 USDT!
+[2026-05-09 21:29:11,136] [INFO] [core.alert_manager] AlertManager started
+[2026-05-09 21:29:11,141] [INFO] [ml.auto_strategy_selector] Auto: disabled filter AdaptiveLeverage (unsuitable for unknown)
+[2026-05-09 21:29:11,151] [INFO] [root] AlertManager started
+[2026-05-09 21:29:11,156] [INFO] [ml.auto_strategy_selector] Auto: disabled filter AdvancedCandlestick (unsuitable for unknown)
+[2026-05-09 21:29:11,166] [INFO] [ml.capital_allocator] Capital allocation updated for 13 strategies
+[2026-05-09 21:29:11,167] [INFO] [ml.auto_strategy_selector] Auto: disabled filter CandlestickPattern (unsuitable for unknown)
+[2026-05-09 21:29:11,187] [INFO] [ml.auto_strategy_selector] Auto: disabled filter CorrelationFilter (unsuitable for unknown)
+[2026-05-09 21:29:11,202] [INFO] [ml.auto_strategy_selector] Auto: disabled filter DrawdownLimiter (unsuitable for unknown)
+[2026-05-09 21:29:11,210] [INFO] [ml.auto_strategy_selector] Auto: disabled filter MarketProfile (unsuitable for unknown)
+[2026-05-09 21:29:11,225] [INFO] [core.github_backup] GitHubBackup started (interval 24 hours, push to origin/main)
+[2026-05-09 21:29:11,226] [INFO] [ml.auto_strategy_selector] Auto: disabled filter MicroLotFilter (unsuitable for unknown)
+[2026-05-09 21:29:11,232] [INFO] [root] GitHubBackup started
+[2026-05-09 21:29:11,233] [INFO] [ml.auto_strategy_selector] Auto: disabled filter OrderFlowImbalance (unsuitable for unknown)
+[2026-05-09 21:29:11,240] [INFO] [ml.auto_strategy_selector] Auto: disabled filter PortfolioCorrelation (unsuitable for unknown)
+[2026-05-09 21:29:11,242] [INFO] [ml.auto_strategy_selector] Auto: disabled filter SessionFilter (unsuitable for unknown)
+[2026-05-09 21:29:11,245] [INFO] [ml.auto_strategy_selector] Auto: disabled filter SmartMoneyFilter (unsuitable for unknown)
+[2026-05-09 21:29:11,247] [INFO] [core.moonshot] MoonshotTrader started (capital 0.0%, scan every 300s)
+[2026-05-09 21:29:11,251] [INFO] [ml.auto_strategy_selector] Auto: disabled filter VolumeDelta (unsuitable for unknown)
+[2026-05-09 21:29:11,254] [INFO] [root] MoonshotTrader started (capital 0.0%, max_risk 0.0%, scan 300s)
+[2026-05-09 21:29:11,259] [INFO] [ml.auto_strategy_selector] Auto: disabled filter VolumeFilter (unsuitable for unknown)
+[2026-05-09 21:29:11,263] [INFO] [ml.auto_strategy_selector] Auto: disabled filter VolumeProfile (unsuitable for unknown)
+[2026-05-09 21:29:11,274] [INFO] [ml.portfolio_stress_test] StressTestRunner started (interval 24 hours)
+[2026-05-09 21:29:11,278] [INFO] [root] StressTestRunner started
+[2026-05-09 21:29:11,325] [INFO] [core.voice_alerts] Voice alert: Внимание! Баланс ниже 50 долларов!
+[2026-05-09 21:29:11,327] [INFO] [core.voice_alerts] VoiceAlerter started
+[2026-05-09 21:29:11,334] [INFO] [root] VoiceAlerter started
+[2026-05-09 21:29:11,348] [INFO] [core.whale_shield] WhaleShield config loaded from config.ini
+[2026-05-09 21:29:11,352] [INFO] [core.whale_shield] WhaleShield started (check every 10s)
+[2026-05-09 21:29:11,359] [INFO] [root] WhaleShield started
+[2026-05-09 21:29:11,472] [INFO] [ml.sliding_backtest] Sliding backtest completed: total score=-0.6665
+C:\Users\AlexENDo\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\gaussian_process\kernels.py:450: ConvergenceWarning: The optimal value found for dimension 0 of parameter k1__k2__length_scale is close to the specified upper bound 100.0. Increasing the bound and calling fit again may find a better value.
+  warnings.warn(
+C:\Users\AlexENDo\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\gaussian_process\kernels.py:450: ConvergenceWarning: The optimal value found for dimension 1 of parameter k1__k2__length_scale is close to the specified upper bound 100.0. Increasing the bound and calling fit again may find a better value.
+  warnings.warn(
+C:\Users\AlexENDo\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\gaussian_process\kernels.py:440: ConvergenceWarning: The optimal value found for dimension 2 of parameter k1__k2__length_scale is close to the specified lower bound 0.01. Decreasing the bound and calling fit again may find a better value.
+  warnings.warn(
+C:\Users\AlexENDo\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\gaussian_process\kernels.py:450: ConvergenceWarning: The optimal value found for dimension 3 of parameter k1__k2__length_scale is close to the specified upper bound 100.0. Increasing the bound and calling fit again may find a better value.
+  warnings.warn(
+C:\Users\AlexENDo\AppData\Local\Programs\Python\Python312\Lib\site-packages\sklearn\gaussian_process\kernels.py:440: ConvergenceWarning: The optimal value found for dimension 0 of parameter k2__noise_level is close to the specified lower bound 1e-05. Decreasing the bound and calling fit again may find a better value.
+  warnings.warn(
+[2026-05-09 21:29:16,023] [INFO] [ml.walk_forward_optimizer] WalkForward updated MeanReversion: {'bb_std_dev': 2.16}
+[2026-05-09 21:29:16,181] [INFO] [core.risk_manager] Risk profile switched to: User (risk=5.0%, lev=5, pos=5)
+[2026-05-09 21:29:16,185] [INFO] [ui.settings] Settings loaded from engine into UI
+[2026-05-09 21:29:16,190] [INFO] [ui.settings] === CURRENT BOT SETTINGS ===
+[2026-05-09 21:29:16,192] [INFO] [ui.settings] Engine: max_positions=5, scan_interval=60s, signal_threshold=0.35, timeframes=['15m', '1h', '4h', '1d'], top_symbols=50
+[2026-05-09 21:29:16,194] [INFO] [ui.settings] Risk: profile=User, risk_per_trade=5.0%, max_leverage=5x, max_positions=5, use_day_profile=False, kelly_enabled=True, kelly_winrate=0.5, kelly_avg_win_loss=2.0
+[2026-05-09 21:29:16,195] [INFO] [ui.settings] Trading: trailing_sl=True (0.5%), partial_close=True (30.0%), breakeven=True (ATR mult=1.0), slippage_timeout=10.0s, reinvest=True
+[2026-05-09 21:29:16,201] [INFO] [ui.settings] Filters active (6): ATRFilter, LiquidityFilter, MultiTFConfluenceFilter, SentimentFilter, TrendFilter, VolumeSurgeFilter
+[2026-05-09 21:29:16,204] [INFO] [ui.settings] Filters disabled (15): AdaptiveLeverage, AdvancedCandlestick, CandlestickPattern, CorrelationFilter, DrawdownLimiter, MarketProfile, MicroLotFilter, OnChainFilter, OrderFlowImbalance, PortfolioCorrelation, SessionFilter, SmartMoneyFilter, VolumeDelta, VolumeFilter, VolumeProfile
+[2026-05-09 21:29:16,208] [INFO] [ui.settings] Strategies active (4): Ichimoku, MeanReversion, Momentum, TrendFollowing
+[2026-05-09 21:29:16,211] [INFO] [ui.settings] Strategies disabled (13): AdaptiveCombiner, Breakout, BreakoutSwing, DualThrust, DynamicRebalance, EMACrossoverSwing, GridStrategy, Range, RSIDivergence, SmartPyramiding, Squeeze, SuperTrendSwing, TurtleTrading
+[2026-05-09 21:29:16,218] [INFO] [ui.settings] Indicators loaded: ADX, Ichimoku, KeltnerChannels, MFI, OBV, SuperTrend, VolumeProfile
+[2026-05-09 21:29:16,220] [INFO] [ui.settings] === END BOT SETTINGS ===
+[2026-05-09 21:29:20,047] [INFO] [core.engine] Session changed: Unknown -> American
+[2026-05-09 21:29:20,052] [INFO] [core.scheduler] Scheduler started
+[2026-05-09 21:29:20,057] [INFO] [core.watchdog] Watchdog started (timeout: 120.0s)
+[2026-05-09 21:29:20,582] [INFO] [core.engine_data] Discovered 50 symbols
+[2026-05-09 21:29:20,794] [INFO] [core.engine_data] Discovered 50 symbols
+[2026-05-09 21:29:20,928] [INFO] [core.engine_data] Loaded contract info for 647 symbols
+[2026-05-09 21:29:21,330] [INFO] [core.engine_data] Loaded contract info for 647 symbols
+[2026-05-09 21:29:21,355] [INFO] [core.engine] NativeBingXTrailingStop initialized
+[2026-05-09 21:29:21,361] [INFO] [core.engine] Trading engine started
+Enumerating objects: 58, done.
+Counting objects: 100% (58/58), done.
+Delta compression using up to 8 threads
+Compressing objects: 100% (35/35), done.
+Writing objects: 100% (35/35), 65.07 KiB | 2.71 MiB/s, done.
+Total 35 (delta 19), reused 0 (delta 0), pack-reused 0 (from 0)
+remote: Resolving deltas: 100% (19/19), completed with 19 local objects.
+To https://github.com/AlexENDo-13/crypto_bot_futures01.git
+   0a69af0..07a7a2a  main -> main
+[2026-05-09 21:29:24,109] [INFO] [core.github_backup] GitHubBackup: committed and pushed
+[2026-05-09 21:29:26,072] [INFO] [core.executor] Executing BUY SNX-USDT @ 0.3594, qty=12.9844, lev=3
+[2026-05-09 21:29:32,212] [INFO] [ui.main_window] Bot started from GUI
+[2026-05-09 21:29:43,477] [WARNING] [core.executor] Limit order not filled, switching to market for SNX-USDT
+[2026-05-09 21:29:44,402] [INFO] [core.executor] Actual entry price for SNX-USDT: 0.3595 (requested: 0.3594)
+[2026-05-09 21:29:45,626] [INFO] [core.executor] Trade executed: SNX-USDT BUY @ 0.3595, TP=0.376025, SL=0.35005714285714284
+[2026-05-09 21:29:51,513] [INFO] [core.executor] Executing BUY FIL-USDT @ 1.22, qty=3.128, lev=3
+[2026-05-09 21:29:58,476] [INFO] [ml.bayesian_optimizer] BayesianOptimizer updated MeanReversion: {'bb_period': 26, 'bb_std_dev': 1.3668695797323276, 'rsi_period': 18, 'rsi_overbought': 77, 'rsi_oversold': 28}
+[2026-05-09 21:30:08,892] [WARNING] [core.executor] Limit order not filled, switching to market for FIL-USDT
+[2026-05-09 21:30:09,702] [INFO] [core.executor] Actual entry price for FIL-USDT: 1.222 (requested: 1.22)
+[2026-05-09 21:30:10,814] [INFO] [core.executor] Trade executed: FIL-USDT BUY @ 1.222, TP=1.29075, SL=1.1827142857142856
+[2026-05-09 21:30:17,993] [INFO] [ml.bayesian_optimizer] BayesianOptimizer updated Momentum: {'rsi_period': 6, 'rsi_entry_long': 30, 'rsi_entry_short': 85, 'volume_ma_period': 26, 'min_volume_ratio': 1.3241658539950276}
+[2026-05-09 21:30:18,161] [INFO] [filters.volume_surge] VolumeSurge blocked TRX-USDT: vol ratio 0.18 < 0.3
+[2026-05-09 21:30:18,167] [INFO] [core.signal_processor] Filter VolumeSurgeFilter blocked TRX-USDT
+[2026-05-09 21:30:23,457] [INFO] [filters.volume_surge] VolumeSurge blocked UNI-USDT: vol ratio 0.22 < 0.3
+[2026-05-09 21:30:23,459] [INFO] [core.signal_processor] Filter VolumeSurgeFilter blocked UNI-USDT
+[2026-05-09 21:30:30,557] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL XRP-USDT: delta 0.50
+[2026-05-09 21:30:30,564] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked XRP-USDT
+[2026-05-09 21:30:34,754] [INFO] [filters.volume_surge] VolumeSurge blocked LTC-USDT: vol ratio 0.26 < 0.3
+[2026-05-09 21:30:34,757] [INFO] [core.signal_processor] Filter VolumeSurgeFilter blocked LTC-USDT
+[2026-05-09 21:30:40,022] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL BSV-USDT: delta 0.50
+[2026-05-09 21:30:40,027] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked BSV-USDT
+[2026-05-09 21:30:53,537] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL BTC-USDT: bullish pattern
+[2026-05-09 21:30:53,539] [INFO] [core.signal_processor] Filter CandlestickPattern blocked BTC-USDT
+[2026-05-09 21:31:03,881] [INFO] [filters.market_profile_filter] MarketProfile blocked BUY ICP-USDT: price above VAH
+[2026-05-09 21:31:03,886] [INFO] [core.signal_processor] Filter MarketProfile blocked ICP-USDT
+[2026-05-09 21:31:04,101] [WARNING] [core.order_guard] OrderGuard: TP missing for SNX-USDT LONG, recreating TP=0.376025
+[2026-05-09 21:31:04,476] [WARNING] [core.order_guard] OrderGuard: SL missing for SNX-USDT LONG, recreating SL=0.35005714285714284
+[2026-05-09 21:31:05,401] [WARNING] [core.order_guard] OrderGuard: TP missing for FIL-USDT LONG, recreating TP=1.29075
+[2026-05-09 21:31:05,853] [WARNING] [core.order_guard] OrderGuard: SL missing for FIL-USDT LONG, recreating SL=1.1827142857142856
+[2026-05-09 21:31:12,272] [INFO] [ml.bayesian_optimizer] BayesianOptimizer updated TrendFollowing: {'fast_ema': 6, 'slow_ema': 39, 'rsi_period': 9, 'rsi_overbought': 32, 'rsi_oversold': 18, 'min_trend_bars': 1}
+[2026-05-09 21:31:18,038] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked BUY SAND-USDT: delta 0.40
+[2026-05-09 21:31:18,041] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked SAND-USDT
+[2026-05-09 21:31:23,831] [INFO] [filters.volume_surge] VolumeSurge blocked ATOM-USDT: vol ratio 0.18 < 0.3
+[2026-05-09 21:31:23,838] [INFO] [core.signal_processor] Filter VolumeSurgeFilter blocked ATOM-USDT
+[2026-05-09 21:31:34,082] [INFO] [core.risk_manager] Risk profile switched to: User (risk=5.0%, lev=5, pos=5)
+[2026-05-09 21:31:34,086] [INFO] [core.risk_manager] User caps set: risk≤6.000000000000001%, leverage≤13, positions≤6
+[2026-05-09 21:31:34,092] [INFO] [core.moonshot] MoonshotTrader started (capital 0.0%, scan every 300s)
+[2026-05-09 21:31:34,095] [INFO] [ui.settings] Moonshot parameters updated
+[2026-05-09 21:31:34,107] [INFO] [ui.settings] Filter parameters saved to config.ini
+[2026-05-09 21:31:36,626] [INFO] [ui.settings] === CURRENT BOT SETTINGS ===
+[2026-05-09 21:31:36,628] [INFO] [ui.settings] Engine: max_positions=6, scan_interval=60s, signal_threshold=0.35, timeframes=['15m', '1h', '4h', '1d'], top_symbols=50
+[2026-05-09 21:31:36,631] [INFO] [ui.settings] Risk: profile=User, risk_per_trade=6.000000000000001%, max_leverage=13x, max_positions=6, use_day_profile=False, kelly_enabled=True, kelly_winrate=0.5, kelly_avg_win_loss=2.0
+[2026-05-09 21:31:36,635] [INFO] [ui.settings] Trading: trailing_sl=True (0.5%), partial_close=True (30.0%), breakeven=True (ATR mult=1.0), slippage_timeout=10.0s, reinvest=True
+[2026-05-09 21:31:36,637] [INFO] [ui.settings] Filters active (21): AdaptiveLeverage, AdvancedCandlestick, ATRFilter, CandlestickPattern, CorrelationFilter, DrawdownLimiter, LiquidityFilter, MarketProfile, MicroLotFilter, MultiTFConfluenceFilter, OnChainFilter, OrderFlowImbalance, PortfolioCorrelation, SentimentFilter, SessionFilter, SmartMoneyFilter, TrendFilter, VolumeDelta, VolumeFilter, VolumeProfile, VolumeSurgeFilter
+[2026-05-09 21:31:36,639] [INFO] [ui.settings] Strategies active (17): AdaptiveCombiner, Breakout, BreakoutSwing, DualThrust, DynamicRebalance, EMACrossoverSwing, GridStrategy, Ichimoku, MeanReversion, Momentum, Range, RSIDivergence, SmartPyramiding, Squeeze, SuperTrendSwing, TrendFollowing, TurtleTrading
+[2026-05-09 21:31:36,644] [INFO] [ui.settings] Indicators loaded: ADX, Ichimoku, KeltnerChannels, MFI, OBV, SuperTrend, VolumeProfile
+[2026-05-09 21:31:36,647] [INFO] [ui.settings] === END BOT SETTINGS ===
+[2026-05-09 21:31:41,151] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL SUSHI-USDT: bullish pattern
+[2026-05-09 21:31:41,156] [INFO] [core.signal_processor] Filter CandlestickPattern blocked SUSHI-USDT
+[2026-05-09 21:31:42,640] [INFO] [core.engine] Manual scan started (async)
+[2026-05-09 21:31:51,814] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL WAVES-USDT: bullish pattern
+[2026-05-09 21:31:51,820] [INFO] [core.signal_processor] Filter CandlestickPattern blocked WAVES-USDT
+[2026-05-09 21:31:52,282] [INFO] [ml.bayesian_optimizer] BayesianOptimizer updated TurtleTrading: {'channel_period': 22, 'ema_period': 56, 'atr_period': 7, 'atr_mult_sl': 1.0461248500828315, 'atr_mult_tp': 4.099098641033557}
+[2026-05-09 21:31:58,148] [INFO] [filters.volume_surge] VolumeSurge blocked COMP-USDT: vol ratio 0.08 < 0.3
+[2026-05-09 21:31:58,151] [INFO] [core.signal_processor] Filter VolumeSurgeFilter blocked COMP-USDT
+[2026-05-09 21:31:58,422] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (29.4 BTC eq.)
+[2026-05-09 21:32:01,230] [INFO] [core.whale_shield] WhaleShield: moved SL to breakeven on FIL-USDT
+[2026-05-09 21:32:05,682] [INFO] [filters.volume_surge] VolumeSurge blocked 1INCH-USDT: vol ratio 0.10 < 0.3
+[2026-05-09 21:32:05,690] [INFO] [core.signal_processor] Filter VolumeSurgeFilter blocked 1INCH-USDT
+[2026-05-09 21:32:06,662] [INFO] [filters.volume_surge] VolumeSurge blocked TRX-USDT: vol ratio 0.19 < 0.3
+[2026-05-09 21:32:06,669] [INFO] [core.signal_processor] Filter VolumeSurgeFilter blocked TRX-USDT
+[2026-05-09 21:32:11,065] [INFO] [filters.market_profile_filter] MarketProfile blocked BUY ENS-USDT: price above VAH
+[2026-05-09 21:32:11,071] [INFO] [core.signal_processor] Filter MarketProfile blocked ENS-USDT
+[2026-05-09 21:32:12,675] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL LINK-USDT: delta 0.50
+[2026-05-09 21:32:12,688] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked LINK-USDT
+[2026-05-09 21:32:13,781] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (29.4 BTC eq.)
+[2026-05-09 21:32:17,446] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL BCH-USDT: bullish pattern
+[2026-05-09 21:32:17,447] [INFO] [core.signal_processor] Filter CandlestickPattern blocked BCH-USDT
+[2026-05-09 21:32:22,211] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL ETH-USDT: bullish pattern
+[2026-05-09 21:32:22,215] [INFO] [core.signal_processor] Filter CandlestickPattern blocked ETH-USDT
+[2026-05-09 21:32:26,158] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (29.5 BTC eq.)
+[2026-05-09 21:32:27,791] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL XLM-USDT: bullish pattern
+[2026-05-09 21:32:27,795] [INFO] [core.signal_processor] Filter CandlestickPattern blocked XLM-USDT
+[2026-05-09 21:32:28,000] [INFO] [filters.volume_surge] VolumeSurge blocked LTC-USDT: vol ratio 0.28 < 0.3
+[2026-05-09 21:32:28,008] [INFO] [core.signal_processor] Filter VolumeSurgeFilter blocked LTC-USDT
+[2026-05-09 21:32:38,533] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL ETH-USDT: bullish pattern
+[2026-05-09 21:32:38,539] [INFO] [core.signal_processor] Filter CandlestickPattern blocked ETH-USDT
+[2026-05-09 21:32:38,696] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (29.3 BTC eq.)
+[2026-05-09 21:32:42,487] [INFO] [filters.market_profile_filter] MarketProfile blocked BUY ENS-USDT: price above VAH
+[2026-05-09 21:32:42,495] [INFO] [core.signal_processor] Filter MarketProfile blocked ENS-USDT
+[2026-05-09 21:32:51,150] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (29.3 BTC eq.)
+[2026-05-09 21:32:53,215] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL WAVES-USDT: bullish pattern
+[2026-05-09 21:32:53,217] [INFO] [core.signal_processor] Filter CandlestickPattern blocked WAVES-USDT
+[2026-05-09 21:33:03,593] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (29.3 BTC eq.)
+[2026-05-09 21:33:03,858] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL BCH-USDT: bullish pattern
+[2026-05-09 21:33:03,861] [INFO] [core.signal_processor] Filter CandlestickPattern blocked BCH-USDT
+[2026-05-09 21:33:05,418] [INFO] [core.executor] Executing SELL AAVE-USDT @ 95.92, qty=0.17, lev=13
+[2026-05-09 21:33:15,908] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (29.3 BTC eq.)
+[2026-05-09 21:33:18,600] [INFO] [core.executor] Actual entry price for AAVE-USDT: 95.92 (requested: 95.92)
+[2026-05-09 21:33:19,893] [INFO] [core.executor] Trade executed: AAVE-USDT SELL @ 95.92, TP=92.91, SL=97.64
+[2026-05-09 21:33:25,122] [INFO] [filters.volume_surge] VolumeSurge blocked CRV-USDT: vol ratio 0.17 < 0.3
+[2026-05-09 21:33:25,126] [INFO] [core.signal_processor] Filter VolumeSurgeFilter blocked CRV-USDT
+[2026-05-09 21:33:27,986] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (32.3 BTC eq.)
+[2026-05-09 21:33:31,470] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL VET-USDT: delta 0.50
+[2026-05-09 21:33:31,474] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked VET-USDT
+[2026-05-09 21:33:36,898] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL AVAX-USDT: bullish pattern
+[2026-05-09 21:33:36,903] [INFO] [core.signal_processor] Filter CandlestickPattern blocked AVAX-USDT
+[2026-05-09 21:33:37,834] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL AVAX-USDT: bullish pattern
+[2026-05-09 21:33:37,838] [INFO] [core.signal_processor] Filter CandlestickPattern blocked AVAX-USDT
+[2026-05-09 21:33:40,573] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (32.5 BTC eq.)
+[2026-05-09 21:33:42,827] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL LINK-USDT: delta 0.50
+[2026-05-09 21:33:42,833] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked LINK-USDT
+[2026-05-09 21:33:43,411] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL AR-USDT: bullish pattern
+[2026-05-09 21:33:43,420] [INFO] [core.signal_processor] Filter CandlestickPattern blocked AR-USDT
+[2026-05-09 21:33:49,091] [INFO] [filters.volume_surge] VolumeSurge blocked ATOM-USDT: vol ratio 0.18 < 0.3
+[2026-05-09 21:33:49,097] [INFO] [core.signal_processor] Filter VolumeSurgeFilter blocked ATOM-USDT
+[2026-05-09 21:33:51,859] [INFO] [ml.walk_forward_optimizer] WalkForward updated Momentum: {'rsi_period': 5, 'rsi_entry_long': 27, 'rsi_entry_short': 22, 'volume_ma_period': 10, 'min_volume_ratio': 0.6}
+[2026-05-09 21:33:53,821] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (32.5 BTC eq.)
+[2026-05-09 21:33:57,013] [INFO] [filters.volume_surge] VolumeSurge blocked CRV-USDT: vol ratio 0.17 < 0.3
+[2026-05-09 21:33:57,027] [INFO] [core.signal_processor] Filter VolumeSurgeFilter blocked CRV-USDT
+[2026-05-09 21:33:59,285] [INFO] [filters.market_profile_filter] MarketProfile blocked BUY ICP-USDT: price above VAH
+[2026-05-09 21:33:59,288] [INFO] [core.signal_processor] Filter MarketProfile blocked ICP-USDT
+[2026-05-09 21:34:06,895] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (31.9 BTC eq.)
+[2026-05-09 21:34:07,056] [INFO] [core.executor] Executing SELL AXS-USDT @ 1.448, qty=9.296, lev=13
+[2026-05-09 21:34:09,137] [INFO] [core.executor] Actual entry price for AXS-USDT: 1.448 (requested: 1.448)
+[2026-05-09 21:34:10,350] [INFO] [core.executor] Trade executed: AXS-USDT SELL @ 1.448, TP=1.38225, SL=1.4855714285714285
+[2026-05-09 21:34:11,285] [INFO] [ml.auto_strategy_selector] Market regime changed to low_volatility, adapting strategies and filters
+[2026-05-09 21:34:11,290] [INFO] [ml.auto_strategy_selector] Auto: disabled strategy AdaptiveCombiner (unsuitable for low_volatility)
+[2026-05-09 21:34:11,291] [INFO] [ml.auto_strategy_selector] Auto: disabled strategy Breakout (unsuitable for low_volatility)
+[2026-05-09 21:34:11,297] [INFO] [ml.auto_strategy_selector] Auto: disabled strategy BreakoutSwing (unsuitable for low_volatility)
+[2026-05-09 21:34:11,302] [INFO] [ml.auto_strategy_selector] Auto: disabled strategy DualThrust (unsuitable for low_volatility)
+[2026-05-09 21:34:11,308] [INFO] [ml.auto_strategy_selector] Auto: disabled strategy EMACrossoverSwing (unsuitable for low_volatility)
+[2026-05-09 21:34:11,312] [INFO] [ml.auto_strategy_selector] Auto: disabled strategy GridStrategy (unsuitable for low_volatility)
+[2026-05-09 21:34:11,314] [INFO] [ml.auto_strategy_selector] Auto: disabled strategy Momentum (unsuitable for low_volatility)
+[2026-05-09 21:34:11,319] [INFO] [ml.auto_strategy_selector] Auto: disabled strategy SmartPyramiding (unsuitable for low_volatility)
+[2026-05-09 21:34:11,326] [INFO] [ml.auto_strategy_selector] Auto: disabled strategy SuperTrendSwing (unsuitable for low_volatility)
+[2026-05-09 21:34:11,330] [INFO] [ml.auto_strategy_selector] Auto: disabled strategy TrendFollowing (unsuitable for low_volatility)
+[2026-05-09 21:34:11,337] [INFO] [ml.auto_strategy_selector] Auto: disabled strategy TurtleTrading (unsuitable for low_volatility)
+[2026-05-09 21:34:11,342] [INFO] [ml.auto_strategy_selector] Auto: disabled filter AdaptiveLeverage (unsuitable for low_volatility)
+[2026-05-09 21:34:11,346] [INFO] [ml.auto_strategy_selector] Auto: disabled filter AdvancedCandlestick (unsuitable for low_volatility)
+[2026-05-09 21:34:11,350] [INFO] [ml.auto_strategy_selector] Auto: disabled filter CorrelationFilter (unsuitable for low_volatility)
+[2026-05-09 21:34:11,354] [INFO] [ml.auto_strategy_selector] Auto: disabled filter DrawdownLimiter (unsuitable for low_volatility)
+[2026-05-09 21:34:11,361] [INFO] [ml.auto_strategy_selector] Auto: disabled filter MarketProfile (unsuitable for low_volatility)
+[2026-05-09 21:34:11,373] [INFO] [ml.auto_strategy_selector] Auto: disabled filter MicroLotFilter (unsuitable for low_volatility)
+[2026-05-09 21:34:11,385] [INFO] [ml.auto_strategy_selector] Auto: disabled filter MultiTFConfluenceFilter (unsuitable for low_volatility)
+[2026-05-09 21:34:11,393] [INFO] [ml.auto_strategy_selector] Auto: disabled filter OnChainFilter (unsuitable for low_volatility)
+[2026-05-09 21:34:11,402] [INFO] [ml.auto_strategy_selector] Auto: disabled filter PortfolioCorrelation (unsuitable for low_volatility)
+[2026-05-09 21:34:11,414] [INFO] [ml.auto_strategy_selector] Auto: disabled filter SentimentFilter (unsuitable for low_volatility)
+[2026-05-09 21:34:11,421] [INFO] [ml.auto_strategy_selector] Auto: disabled filter SessionFilter (unsuitable for low_volatility)
+[2026-05-09 21:34:11,424] [INFO] [ml.auto_strategy_selector] Auto: disabled filter SmartMoneyFilter (unsuitable for low_volatility)
+[2026-05-09 21:34:11,432] [INFO] [ml.auto_strategy_selector] Auto: disabled filter TrendFilter (unsuitable for low_volatility)
+[2026-05-09 21:34:11,439] [INFO] [ml.auto_strategy_selector] Auto: disabled filter VolumeDelta (unsuitable for low_volatility)
+[2026-05-09 21:34:11,443] [INFO] [ml.auto_strategy_selector] Auto: disabled filter VolumeSurgeFilter (unsuitable for low_volatility)
+[2026-05-09 21:34:12,271] [INFO] [core.voice_alerts] Voice alert: Внимание! Баланс ниже 50 долларов!
+[2026-05-09 21:34:15,926] [INFO] [ml.sliding_backtest] Sliding backtest completed: total score=-0.2145
+[2026-05-09 21:34:19,895] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (35.2 BTC eq.)
+[2026-05-09 21:34:28,221] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL DOGE-USDT: bullish pattern
+[2026-05-09 21:34:28,227] [INFO] [core.signal_processor] Filter CandlestickPattern blocked DOGE-USDT
+[2026-05-09 21:34:33,230] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (35.2 BTC eq.)
+[2026-05-09 21:34:36,620] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL UNI-USDT: bullish pattern
+[2026-05-09 21:34:36,625] [INFO] [core.signal_processor] Filter CandlestickPattern blocked UNI-USDT
+[2026-05-09 21:34:44,146] [INFO] [core.signal_processor] Position already exists for AAVE-USDT (SHORT), skipping new signal
+[2026-05-09 21:34:46,636] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (35.2 BTC eq.)
+[2026-05-09 21:34:51,568] [INFO] [core.signal_processor] Position already exists for SNX-USDT (LONG), skipping new signal
+[2026-05-09 21:35:00,257] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (35.3 BTC eq.)
+[2026-05-09 21:35:08,805] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL DOGE-USDT: bullish pattern
+[2026-05-09 21:35:08,815] [INFO] [core.signal_processor] Filter CandlestickPattern blocked DOGE-USDT
+[2026-05-09 21:35:09,023] [WARNING] [core.order_guard] OrderGuard: TP missing for AAVE-USDT SHORT, recreating TP=92.91
+[2026-05-09 21:35:09,493] [WARNING] [core.order_guard] OrderGuard: SL missing for AAVE-USDT SHORT, recreating SL=97.64
+[2026-05-09 21:35:10,104] [WARNING] [core.order_guard] OrderGuard: TP missing for AXS-USDT SHORT, recreating TP=1.38225
+[2026-05-09 21:35:10,514] [WARNING] [core.order_guard] OrderGuard: SL missing for AXS-USDT SHORT, recreating SL=1.4855714285714285
+[2026-05-09 21:35:11,156] [WARNING] [core.alert_manager] ALERT: ℹ️ Занято 5+ слотов позиций
+[2026-05-09 21:35:13,976] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (35.2 BTC eq.)
+[2026-05-09 21:35:18,403] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL COMP-USDT: bullish pattern
+[2026-05-09 21:35:18,412] [INFO] [core.signal_processor] Filter CandlestickPattern blocked COMP-USDT
+[2026-05-09 21:35:27,631] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL BTC-USDT: bullish pattern
+[2026-05-09 21:35:27,635] [INFO] [core.signal_processor] Filter CandlestickPattern blocked BTC-USDT
+[2026-05-09 21:35:27,861] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (35.3 BTC eq.)
+[2026-05-09 21:35:32,964] [INFO] [core.signal_processor] Position already exists for SNX-USDT (LONG), skipping new signal
+[2026-05-09 21:35:35,005] [INFO] [core.signal_processor] Position already exists for AXS-USDT (SHORT), skipping new signal
+[2026-05-09 21:35:37,779] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL COMP-USDT: bullish pattern
+[2026-05-09 21:35:37,784] [INFO] [core.signal_processor] Filter CandlestickPattern blocked COMP-USDT
+[2026-05-09 21:35:42,077] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (35.4 BTC eq.)
+[2026-05-09 21:35:45,976] [INFO] [core.signal_processor] Position already exists for AAVE-USDT (SHORT), skipping new signal
+[2026-05-09 21:35:53,205] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL TRX-USDT: delta 0.50
+[2026-05-09 21:35:53,207] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked TRX-USDT
+[2026-05-09 21:35:56,484] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (31.2 BTC eq.)
+[2026-05-09 21:36:10,414] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (31.2 BTC eq.)
+[2026-05-09 21:36:14,563] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL DOGE-USDT: bullish pattern
+[2026-05-09 21:36:14,574] [INFO] [core.signal_processor] Filter CandlestickPattern blocked DOGE-USDT
+[2026-05-09 21:36:24,116] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (31.2 BTC eq.)
+[2026-05-09 21:36:31,384] [INFO] [filters.volume_profile_filter] VolumeProfile blocked BUY ICP-USDT: price above VAH
+[2026-05-09 21:36:31,387] [INFO] [core.signal_processor] Filter VolumeProfile blocked ICP-USDT
+[2026-05-09 21:36:38,270] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (31.2 BTC eq.)
+[2026-05-09 21:36:42,103] [INFO] [core.signal_processor] Position already exists for AXS-USDT (SHORT), skipping new signal
+[2026-05-09 21:36:52,566] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL UNI-USDT: bullish pattern
+[2026-05-09 21:36:52,575] [INFO] [core.signal_processor] Filter CandlestickPattern blocked UNI-USDT
+[2026-05-09 21:36:52,780] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (31.2 BTC eq.)
+[2026-05-09 21:37:07,318] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (38.0 BTC eq.)
+[2026-05-09 21:37:09,024] [INFO] [core.whale_shield] WhaleShield: moved SL to breakeven on FIL-USDT
+[2026-05-09 21:37:11,663] [WARNING] [core.order_guard] OrderGuard: TP missing for SNX-USDT LONG, recreating TP=0.376025
+[2026-05-09 21:37:12,041] [WARNING] [core.order_guard] OrderGuard: SL missing for SNX-USDT LONG, recreating SL=0.35005714285714284
+[2026-05-09 21:37:12,760] [WARNING] [core.order_guard] OrderGuard: TP missing for FIL-USDT LONG, recreating TP=1.29075
+[2026-05-09 21:37:13,131] [WARNING] [core.order_guard] OrderGuard: SL missing for FIL-USDT LONG, recreating SL=1.2232219999999998
+[2026-05-09 21:37:17,180] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL WAVES-USDT: bullish pattern
+[2026-05-09 21:37:17,185] [INFO] [core.signal_processor] Filter CandlestickPattern blocked WAVES-USDT
+[2026-05-09 21:37:23,179] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (38.0 BTC eq.)
+[2026-05-09 21:37:35,973] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL AVAX-USDT: bullish pattern
+[2026-05-09 21:37:35,976] [INFO] [core.signal_processor] Filter CandlestickPattern blocked AVAX-USDT
+[2026-05-09 21:37:37,729] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (38.0 BTC eq.)
+[2026-05-09 21:37:52,034] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.5 BTC eq.)
+[2026-05-09 21:37:56,076] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL BTC-USDT: bullish pattern
+[2026-05-09 21:37:56,080] [INFO] [core.signal_processor] Filter CandlestickPattern blocked BTC-USDT
+[2026-05-09 21:38:07,038] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (30.9 BTC eq.)
+[2026-05-09 21:38:21,077] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (31.0 BTC eq.)
+[2026-05-09 21:38:35,172] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (30.9 BTC eq.)
+[2026-05-09 21:38:48,764] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (31.0 BTC eq.)
+[2026-05-09 21:39:03,049] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (31.0 BTC eq.)
+[2026-05-09 21:39:12,479] [INFO] [core.voice_alerts] Voice alert: Внимание! Баланс ниже 50 долларов!
+[2026-05-09 21:39:17,155] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (30.9 BTC eq.)
+[2026-05-09 21:39:20,307] [INFO] [ml.sliding_backtest] Sliding backtest completed: total score=-0.1401
+[2026-05-09 21:39:31,442] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (30.9 BTC eq.)
+[2026-05-09 21:39:45,455] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (30.9 BTC eq.)
+[2026-05-09 21:39:52,123] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL LTC-USDT: bullish pattern
+[2026-05-09 21:39:52,137] [INFO] [core.signal_processor] Filter CandlestickPattern blocked LTC-USDT
+[2026-05-09 21:39:59,627] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (30.9 BTC eq.)
+[2026-05-09 21:39:59,850] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL DOGE-USDT: bullish pattern
+[2026-05-09 21:39:59,860] [INFO] [core.signal_processor] Filter CandlestickPattern blocked DOGE-USDT
+[2026-05-09 21:40:13,851] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (30.9 BTC eq.)
+[2026-05-09 21:40:26,099] [INFO] [filters.volume_profile_filter] VolumeProfile blocked BUY ICP-USDT: price above VAH
+[2026-05-09 21:40:26,102] [INFO] [core.signal_processor] Filter VolumeProfile blocked ICP-USDT
+[2026-05-09 21:40:28,339] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (30.9 BTC eq.)
+[2026-05-09 21:40:42,737] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL TRX-USDT: delta 0.50
+[2026-05-09 21:40:42,745] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked TRX-USDT
+[2026-05-09 21:40:42,909] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (30.9 BTC eq.)
+[2026-05-09 21:40:46,779] [INFO] [core.signal_processor] Position already exists for AXS-USDT (SHORT), skipping new signal
+[2026-05-09 21:40:56,926] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (30.9 BTC eq.)
+[2026-05-09 21:41:11,594] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.7 BTC eq.)
+[2026-05-09 21:41:17,183] [WARNING] [core.order_guard] OrderGuard: TP missing for AAVE-USDT SHORT, recreating TP=92.91
+[2026-05-09 21:41:17,521] [WARNING] [core.order_guard] OrderGuard: SL missing for AAVE-USDT SHORT, recreating SL=97.64
+[2026-05-09 21:41:18,200] [WARNING] [core.order_guard] OrderGuard: TP missing for AXS-USDT SHORT, recreating TP=1.38225
+[2026-05-09 21:41:18,674] [WARNING] [core.order_guard] OrderGuard: SL missing for AXS-USDT SHORT, recreating SL=1.4855714285714285
+[2026-05-09 21:41:22,701] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL WAVES-USDT: bullish pattern
+[2026-05-09 21:41:22,709] [INFO] [core.signal_processor] Filter CandlestickPattern blocked WAVES-USDT
+[2026-05-09 21:41:26,029] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.7 BTC eq.)
+[2026-05-09 21:41:40,231] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.7 BTC eq.)
+[2026-05-09 21:41:54,381] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.7 BTC eq.)
+[2026-05-09 21:41:56,434] [INFO] [core.signal_processor] Position already exists for SNX-USDT (LONG), skipping new signal
+[2026-05-09 21:42:08,579] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.6 BTC eq.)
+[2026-05-09 21:42:10,788] [INFO] [core.whale_shield] WhaleShield: moved SL to breakeven on FIL-USDT
+[2026-05-09 21:42:13,797] [INFO] [core.signal_processor] Position already exists for AAVE-USDT (SHORT), skipping new signal
+[2026-05-09 21:42:25,439] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (29.8 BTC eq.)
+[2026-05-09 21:42:32,476] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL COMP-USDT: bullish pattern
+[2026-05-09 21:42:32,481] [INFO] [core.signal_processor] Filter CandlestickPattern blocked COMP-USDT
+[2026-05-09 21:42:39,761] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (29.8 BTC eq.)
+[2026-05-09 21:42:41,189] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL UNI-USDT: bullish pattern
+[2026-05-09 21:42:41,195] [INFO] [core.signal_processor] Filter CandlestickPattern blocked UNI-USDT
+[2026-05-09 21:42:53,994] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.2 BTC eq.)
+[2026-05-09 21:43:07,976] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.2 BTC eq.)
+[2026-05-09 21:43:19,871] [WARNING] [core.order_guard] OrderGuard: TP missing for SNX-USDT LONG, recreating TP=0.376025
+[2026-05-09 21:43:20,362] [WARNING] [core.order_guard] OrderGuard: SL missing for SNX-USDT LONG, recreating SL=0.35005714285714284
+[2026-05-09 21:43:21,072] [WARNING] [core.order_guard] OrderGuard: TP missing for FIL-USDT LONG, recreating TP=1.29075
+[2026-05-09 21:43:21,559] [WARNING] [core.order_guard] OrderGuard: SL missing for FIL-USDT LONG, recreating SL=1.2232219999999998
+[2026-05-09 21:43:22,063] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.2 BTC eq.)
+[2026-05-09 21:43:35,969] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.1 BTC eq.)
+[2026-05-09 21:43:49,307] [INFO] [ml.walk_forward_optimizer] WalkForward updated Range: {'rsi_period': 7, 'rsi_overbought': 36, 'rsi_oversold': 41, 'atr_period': 7, 'lookback': 42, 'min_bars': 10}
+[2026-05-09 21:43:50,065] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.1 BTC eq.)
+[2026-05-09 21:43:52,882] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL BTC-USDT: bullish pattern
+[2026-05-09 21:43:52,884] [INFO] [core.signal_processor] Filter CandlestickPattern blocked BTC-USDT
+[2026-05-09 21:44:00,645] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL WAVES-USDT: bullish pattern
+[2026-05-09 21:44:00,647] [INFO] [core.signal_processor] Filter CandlestickPattern blocked WAVES-USDT
+[2026-05-09 21:44:04,750] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.1 BTC eq.)
+[2026-05-09 21:44:13,430] [INFO] [core.voice_alerts] Voice alert: Внимание! Баланс ниже 50 долларов!
+[2026-05-09 21:44:15,723] [INFO] [core.signal_processor] Position already exists for AAVE-USDT (SHORT), skipping new signal
+[2026-05-09 21:44:19,081] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.1 BTC eq.)
+[2026-05-09 21:44:22,319] [INFO] [ml.sliding_backtest] Sliding backtest completed: total score=-0.2213
+[2026-05-09 21:44:33,442] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.1 BTC eq.)
+[2026-05-09 21:44:33,721] [INFO] [core.signal_processor] Position already exists for SNX-USDT (LONG), skipping new signal
+[2026-05-09 21:44:38,868] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL XMR-USDT: bullish pattern
+[2026-05-09 21:44:38,871] [INFO] [core.signal_processor] Filter CandlestickPattern blocked XMR-USDT
+[2026-05-09 21:44:47,395] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (23.7 BTC eq.)
+[2026-05-09 21:44:56,632] [INFO] [filters.volume_profile_filter] VolumeProfile blocked BUY ICP-USDT: price above VAH
+[2026-05-09 21:44:56,634] [INFO] [core.signal_processor] Filter VolumeProfile blocked ICP-USDT
+[2026-05-09 21:45:01,144] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (23.9 BTC eq.)
+[2026-05-09 21:45:04,893] [INFO] [core.signal_processor] Position already exists for AXS-USDT (SHORT), skipping new signal
+[2026-05-09 21:45:15,012] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (23.8 BTC eq.)
+[2026-05-09 21:45:27,591] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL ETH-USDT: bullish pattern
+[2026-05-09 21:45:27,592] [INFO] [core.signal_processor] Filter CandlestickPattern blocked ETH-USDT
+[2026-05-09 21:45:28,982] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (23.9 BTC eq.)
+[2026-05-09 21:45:43,037] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (23.8 BTC eq.)
+[2026-05-09 21:45:49,716] [INFO] [filters.volume_profile_filter] VolumeProfile blocked BUY DYDX-USDT: price above VAH
+[2026-05-09 21:45:49,716] [INFO] [core.signal_processor] Filter VolumeProfile blocked DYDX-USDT
+[2026-05-09 21:45:57,157] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (23.8 BTC eq.)
+[2026-05-09 21:46:11,590] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (33.8 BTC eq.)
+[2026-05-09 21:46:25,864] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (33.8 BTC eq.)
+[2026-05-09 21:46:26,532] [INFO] [core.executor] Breakeven applied for AAVE-USDT SHORT
+[2026-05-09 21:46:28,758] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL TRX-USDT: delta 0.50
+[2026-05-09 21:46:28,759] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked TRX-USDT
+[2026-05-09 21:46:40,301] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (33.9 BTC eq.)
+[2026-05-09 21:46:44,014] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL 1INCH-USDT: delta 0.50
+[2026-05-09 21:46:44,015] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked 1INCH-USDT
+[2026-05-09 21:46:54,261] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.3 BTC eq.)
+[2026-05-09 21:47:07,871] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.3 BTC eq.)
+[2026-05-09 21:47:21,179] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.3 BTC eq.)
+[2026-05-09 21:47:22,838] [INFO] [core.whale_shield] WhaleShield: moved SL to breakeven on FIL-USDT
+[2026-05-09 21:47:25,524] [WARNING] [core.order_guard] OrderGuard: TP missing for AAVE-USDT SHORT, recreating TP=92.91
+[2026-05-09 21:47:25,985] [WARNING] [core.order_guard] OrderGuard: SL missing for AAVE-USDT SHORT, recreating SL=95.82408
+[2026-05-09 21:47:26,561] [WARNING] [core.order_guard] OrderGuard: TP missing for AXS-USDT SHORT, recreating TP=1.38225
+[2026-05-09 21:47:26,858] [WARNING] [core.order_guard] OrderGuard: SL missing for AXS-USDT SHORT, recreating SL=1.4855714285714285
+[2026-05-09 21:47:36,873] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.3 BTC eq.)
+[2026-05-09 21:47:50,663] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.2 BTC eq.)
+[2026-05-09 21:47:58,870] [INFO] [filters.volume_profile_filter] VolumeProfile blocked BUY ICP-USDT: price above VAH
+[2026-05-09 21:47:58,870] [INFO] [core.signal_processor] Filter VolumeProfile blocked ICP-USDT
+[2026-05-09 21:48:04,463] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.2 BTC eq.)
+[2026-05-09 21:48:07,744] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL 1INCH-USDT: delta 0.50
+[2026-05-09 21:48:07,746] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked 1INCH-USDT
+[2026-05-09 21:48:18,531] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.3 BTC eq.)
+[2026-05-09 21:48:28,345] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL TRX-USDT: delta 0.50
+[2026-05-09 21:48:28,347] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked TRX-USDT
+[2026-05-09 21:48:32,862] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.2 BTC eq.)
+[2026-05-09 21:48:39,758] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL SOL-USDT: delta 0.60
+[2026-05-09 21:48:39,759] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked SOL-USDT
+[2026-05-09 21:48:47,149] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (31.6 BTC eq.)
+[2026-05-09 21:49:01,457] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (31.7 BTC eq.)
+[2026-05-09 21:49:14,332] [INFO] [core.voice_alerts] Voice alert: Внимание! Баланс ниже 50 долларов!
+[2026-05-09 21:49:15,650] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (31.6 BTC eq.)
+[2026-05-09 21:49:15,920] [INFO] [core.signal_processor] Position already exists for AXS-USDT (SHORT), skipping new signal
+[2026-05-09 21:49:20,923] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL ETH-USDT: bullish pattern
+[2026-05-09 21:49:20,925] [INFO] [core.signal_processor] Filter CandlestickPattern blocked ETH-USDT
+[2026-05-09 21:49:24,408] [INFO] [ml.sliding_backtest] Sliding backtest completed: total score=-0.2204
+[2026-05-09 21:49:27,895] [WARNING] [core.order_guard] OrderGuard: TP missing for SNX-USDT LONG, recreating TP=0.376025
+[2026-05-09 21:49:28,365] [WARNING] [core.order_guard] OrderGuard: SL missing for SNX-USDT LONG, recreating SL=0.35005714285714284
+[2026-05-09 21:49:29,177] [WARNING] [core.order_guard] OrderGuard: TP missing for FIL-USDT LONG, recreating TP=1.29075
+[2026-05-09 21:49:29,633] [WARNING] [core.order_guard] OrderGuard: SL missing for FIL-USDT LONG, recreating SL=1.2232219999999998
+[2026-05-09 21:49:29,795] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (31.6 BTC eq.)
+[2026-05-09 21:49:31,464] [INFO] [core.signal_processor] Position already exists for SNX-USDT (LONG), skipping new signal
+[2026-05-09 21:49:44,142] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.5 BTC eq.)
+[2026-05-09 21:49:58,330] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.5 BTC eq.)
+[2026-05-09 21:49:59,706] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL WAVES-USDT: bullish pattern
+[2026-05-09 21:49:59,706] [INFO] [core.signal_processor] Filter CandlestickPattern blocked WAVES-USDT
+[2026-05-09 21:50:12,585] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (33.2 BTC eq.)
+[2026-05-09 21:50:17,188] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL BTC-USDT: bullish pattern
+[2026-05-09 21:50:17,188] [INFO] [core.signal_processor] Filter CandlestickPattern blocked BTC-USDT
+[2026-05-09 21:50:26,687] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.5 BTC eq.)
+[2026-05-09 21:50:40,802] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.4 BTC eq.)
+[2026-05-09 21:50:55,240] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.5 BTC eq.)
+[2026-05-09 21:51:08,847] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.5 BTC eq.)
+[2026-05-09 21:51:22,865] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (37.4 BTC eq.)
+[2026-05-09 21:51:36,670] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (37.4 BTC eq.)
+[2026-05-09 21:51:50,290] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (37.5 BTC eq.)
+[2026-05-09 21:52:04,115] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (33.1 BTC eq.)
+[2026-05-09 21:52:05,787] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL ETH-USDT: bullish pattern
+[2026-05-09 21:52:05,787] [INFO] [core.signal_processor] Filter CandlestickPattern blocked ETH-USDT
+[2026-05-09 21:52:18,234] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (33.0 BTC eq.)
+[2026-05-09 21:52:32,362] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (33.1 BTC eq.)
+[2026-05-09 21:52:34,494] [INFO] [core.whale_shield] WhaleShield: moved SL to breakeven on FIL-USDT
+[2026-05-09 21:52:37,494] [INFO] [filters.volume_profile_filter] VolumeProfile blocked BUY ICP-USDT: price above VAH
+[2026-05-09 21:52:37,495] [INFO] [core.signal_processor] Filter VolumeProfile blocked ICP-USDT
+[2026-05-09 21:52:48,435] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (33.1 BTC eq.)
+[2026-05-09 21:53:02,742] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (33.1 BTC eq.)
+[2026-05-09 21:53:17,920] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (26.6 BTC eq.)
+[2026-05-09 21:53:21,023] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL SOL-USDT: delta 0.60
+[2026-05-09 21:53:21,024] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked SOL-USDT
+[2026-05-09 21:53:25,977] [INFO] [core.signal_processor] Position already exists for SNX-USDT (LONG), skipping new signal
+[2026-05-09 21:53:30,223] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL 1INCH-USDT: delta 0.50
+[2026-05-09 21:53:30,224] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked 1INCH-USDT
+[2026-05-09 21:53:32,402] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (26.6 BTC eq.)
+[2026-05-09 21:53:34,200] [WARNING] [core.order_guard] OrderGuard: TP missing for AAVE-USDT SHORT, recreating TP=92.91
+[2026-05-09 21:53:34,610] [WARNING] [core.order_guard] OrderGuard: SL missing for AAVE-USDT SHORT, recreating SL=95.82408
+[2026-05-09 21:53:35,223] [WARNING] [core.order_guard] OrderGuard: TP missing for AXS-USDT SHORT, recreating TP=1.38225
+[2026-05-09 21:53:35,687] [WARNING] [core.order_guard] OrderGuard: SL missing for AXS-USDT SHORT, recreating SL=1.4855714285714285
+[2026-05-09 21:53:41,441] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL TRX-USDT: delta 0.50
+[2026-05-09 21:53:41,442] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked TRX-USDT
+[2026-05-09 21:53:46,799] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (31.9 BTC eq.)
+[2026-05-09 21:54:01,111] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (31.9 BTC eq.)
+[2026-05-09 21:54:03,026] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL BTC-USDT: bullish pattern
+[2026-05-09 21:54:03,027] [INFO] [core.signal_processor] Filter CandlestickPattern blocked BTC-USDT
+[2026-05-09 21:54:12,655] [INFO] [core.signal_processor] Position already exists for AXS-USDT (SHORT), skipping new signal
+[2026-05-09 21:54:15,173] [INFO] [core.voice_alerts] Voice alert: Внимание! Баланс ниже 50 долларов!
+[2026-05-09 21:54:15,687] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (31.8 BTC eq.)
+[2026-05-09 21:54:26,233] [INFO] [ml.sliding_backtest] Sliding backtest completed: total score=-0.2213
+[2026-05-09 21:54:30,018] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (32.0 BTC eq.)
+[2026-05-09 21:54:38,328] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL WAVES-USDT: bullish pattern
+[2026-05-09 21:54:38,329] [INFO] [core.signal_processor] Filter CandlestickPattern blocked WAVES-USDT
+[2026-05-09 21:54:44,906] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (31.9 BTC eq.)
+[2026-05-09 21:54:46,515] [INFO] [core.signal_processor] Position already exists for AAVE-USDT (SHORT), skipping new signal
+[2026-05-09 21:54:58,930] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (31.9 BTC eq.)
+[2026-05-09 21:55:13,665] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (31.9 BTC eq.)
+[2026-05-09 21:55:27,421] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (31.9 BTC eq.)
+[2026-05-09 21:55:36,731] [WARNING] [core.order_guard] OrderGuard: TP missing for SNX-USDT LONG, recreating TP=0.376025
+[2026-05-09 21:55:37,100] [WARNING] [core.order_guard] OrderGuard: SL missing for SNX-USDT LONG, recreating SL=0.35005714285714284
+[2026-05-09 21:55:38,004] [WARNING] [core.order_guard] OrderGuard: TP missing for FIL-USDT LONG, recreating TP=1.29075
+[2026-05-09 21:55:38,358] [WARNING] [core.order_guard] OrderGuard: SL missing for FIL-USDT LONG, recreating SL=1.2232219999999998
+[2026-05-09 21:55:42,109] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (36.5 BTC eq.)
+[2026-05-09 21:55:56,083] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (26.2 BTC eq.)
+[2026-05-09 21:56:10,416] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (24.7 BTC eq.)
+[2026-05-09 21:56:24,521] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (24.6 BTC eq.)
+[2026-05-09 21:56:27,337] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL SOL-USDT: delta 0.60
+[2026-05-09 21:56:27,338] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked SOL-USDT
+[2026-05-09 21:56:39,094] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.5 BTC eq.)
+[2026-05-09 21:56:53,125] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.5 BTC eq.)
+[2026-05-09 21:56:59,540] [INFO] [core.signal_processor] Position already exists for SNX-USDT (LONG), skipping new signal
+[2026-05-09 21:57:07,518] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.5 BTC eq.)
+[2026-05-09 21:57:18,512] [INFO] [filters.volume_profile_filter] VolumeProfile blocked BUY ICP-USDT: price above VAH
+[2026-05-09 21:57:18,513] [INFO] [core.signal_processor] Filter VolumeProfile blocked ICP-USDT
+[2026-05-09 21:57:21,724] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (36.7 BTC eq.)
+[2026-05-09 21:57:35,989] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (36.7 BTC eq.)
+[2026-05-09 21:57:38,072] [INFO] [core.whale_shield] WhaleShield: moved SL to breakeven on FIL-USDT
+[2026-05-09 21:57:49,232] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL BTC-USDT: bullish pattern
+[2026-05-09 21:57:49,234] [INFO] [core.signal_processor] Filter CandlestickPattern blocked BTC-USDT
+[2026-05-09 21:57:52,647] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (36.7 BTC eq.)
+[2026-05-09 21:57:53,227] [INFO] [core.signal_processor] Position already exists for AXS-USDT (SHORT), skipping new signal
+[2026-05-09 21:58:06,955] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (36.6 BTC eq.)
+[2026-05-09 21:58:10,506] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL TRX-USDT: delta 0.50
+[2026-05-09 21:58:10,508] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked TRX-USDT
+[2026-05-09 21:58:21,009] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (36.6 BTC eq.)
+[2026-05-09 21:58:22,802] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL WAVES-USDT: bullish pattern
+[2026-05-09 21:58:22,803] [INFO] [core.signal_processor] Filter CandlestickPattern blocked WAVES-USDT
+[2026-05-09 21:58:35,988] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (36.6 BTC eq.)
+[2026-05-09 21:58:50,021] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL 1INCH-USDT: delta 0.50
+[2026-05-09 21:58:50,022] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked 1INCH-USDT
+[2026-05-09 21:58:50,507] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (36.6 BTC eq.)
+[2026-05-09 21:58:58,093] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL ETH-USDT: bullish pattern
+[2026-05-09 21:58:58,094] [INFO] [core.signal_processor] Filter CandlestickPattern blocked ETH-USDT
+[2026-05-09 21:59:05,556] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (34.9 BTC eq.)
+[2026-05-09 21:59:16,080] [INFO] [core.voice_alerts] Voice alert: Внимание! Баланс ниже 50 долларов!
+[2026-05-09 21:59:20,407] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (34.9 BTC eq.)
+[2026-05-09 21:59:27,857] [INFO] [ml.sliding_backtest] Sliding backtest completed: total score=-0.2211
+[2026-05-09 21:59:34,604] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (34.8 BTC eq.)
+[2026-05-09 21:59:42,579] [WARNING] [core.order_guard] OrderGuard: TP missing for AAVE-USDT SHORT, recreating TP=92.91
+[2026-05-09 21:59:43,009] [WARNING] [core.order_guard] OrderGuard: SL missing for AAVE-USDT SHORT, recreating SL=95.82408
+[2026-05-09 21:59:43,792] [WARNING] [core.order_guard] OrderGuard: TP missing for AXS-USDT SHORT, recreating TP=1.38225
+[2026-05-09 21:59:44,241] [WARNING] [core.order_guard] OrderGuard: SL missing for AXS-USDT SHORT, recreating SL=1.4855714285714285
+[2026-05-09 21:59:48,874] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (34.8 BTC eq.)
+[2026-05-09 22:00:04,122] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (34.8 BTC eq.)
+[2026-05-09 22:00:19,062] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (34.8 BTC eq.)
+[2026-05-09 22:00:22,259] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL BTC-USDT: bullish pattern
+[2026-05-09 22:00:22,261] [INFO] [core.signal_processor] Filter CandlestickPattern blocked BTC-USDT
+[2026-05-09 22:00:33,359] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (34.8 BTC eq.)
+[2026-05-09 22:00:43,010] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL WAVES-USDT: delta 0.70
+[2026-05-09 22:00:43,011] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked WAVES-USDT
+[2026-05-09 22:00:47,147] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (34.8 BTC eq.)
+[2026-05-09 22:01:02,113] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (34.8 BTC eq.)
+[2026-05-09 22:01:03,485] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL SOL-USDT: delta 0.70
+[2026-05-09 22:01:03,485] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked SOL-USDT
+[2026-05-09 22:01:17,457] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (34.8 BTC eq.)
+[2026-05-09 22:01:25,898] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL 1INCH-USDT: delta 0.50
+[2026-05-09 22:01:25,899] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked 1INCH-USDT
+[2026-05-09 22:01:31,468] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (34.7 BTC eq.)
+[2026-05-09 22:01:33,965] [INFO] [core.signal_processor] Position already exists for AXS-USDT (SHORT), skipping new signal
+[2026-05-09 22:01:45,453] [WARNING] [core.order_guard] OrderGuard: TP missing for SNX-USDT LONG, recreating TP=0.376025
+[2026-05-09 22:01:45,689] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (34.7 BTC eq.)
+[2026-05-09 22:01:45,937] [WARNING] [core.order_guard] OrderGuard: SL missing for SNX-USDT LONG, recreating SL=0.35005714285714284
+[2026-05-09 22:01:46,712] [WARNING] [core.order_guard] OrderGuard: TP missing for FIL-USDT LONG, recreating TP=1.29075
+[2026-05-09 22:01:47,128] [WARNING] [core.order_guard] OrderGuard: SL missing for FIL-USDT LONG, recreating SL=1.2232219999999998
+[2026-05-09 22:02:01,391] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (34.7 BTC eq.)
+[2026-05-09 22:02:15,689] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (34.7 BTC eq.)
+[2026-05-09 22:02:26,583] [INFO] [core.signal_processor] Position already exists for SNX-USDT (LONG), skipping new signal
+[2026-05-09 22:02:29,913] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.9 BTC eq.)
+[2026-05-09 22:02:35,582] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL GRT-USDT: bullish pattern
+[2026-05-09 22:02:35,583] [INFO] [core.signal_processor] Filter CandlestickPattern blocked GRT-USDT
+[2026-05-09 22:02:40,827] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL ETH-USDT: bullish pattern
+[2026-05-09 22:02:40,828] [INFO] [core.signal_processor] Filter CandlestickPattern blocked ETH-USDT
+[2026-05-09 22:02:44,970] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.7 BTC eq.)
+[2026-05-09 22:02:47,137] [INFO] [core.whale_shield] WhaleShield: moved SL to breakeven on FIL-USDT
+[2026-05-09 22:02:59,049] [INFO] [filters.volume_profile_filter] VolumeProfile blocked BUY ICP-USDT: price above VAH
+[2026-05-09 22:02:59,051] [INFO] [core.signal_processor] Filter VolumeProfile blocked ICP-USDT
+[2026-05-09 22:03:01,348] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.6 BTC eq.)
+[2026-05-09 22:03:08,439] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL TRX-USDT: bullish pattern
+[2026-05-09 22:03:08,441] [INFO] [core.signal_processor] Filter CandlestickPattern blocked TRX-USDT
+[2026-05-09 22:03:15,220] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.6 BTC eq.)
+[2026-05-09 22:03:29,483] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (31.7 BTC eq.)
+[2026-05-09 22:03:43,207] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (31.9 BTC eq.)
+[2026-05-09 22:03:58,557] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (31.8 BTC eq.)
+[2026-05-09 22:04:13,656] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (31.8 BTC eq.)
+[2026-05-09 22:04:16,941] [INFO] [core.voice_alerts] Voice alert: Внимание! Баланс ниже 50 долларов!
+[2026-05-09 22:04:17,606] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL BTC-USDT: delta 0.70
+[2026-05-09 22:04:17,607] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked BTC-USDT
+[2026-05-09 22:04:29,075] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (26.5 BTC eq.)
+[2026-05-09 22:04:29,847] [INFO] [ml.sliding_backtest] Sliding backtest completed: total score=-0.2198
+[2026-05-09 22:04:33,488] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL ETH-USDT: delta 0.60
+[2026-05-09 22:04:33,491] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked ETH-USDT
+[2026-05-09 22:04:38,421] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL GRT-USDT: bullish pattern
+[2026-05-09 22:04:38,422] [INFO] [core.signal_processor] Filter CandlestickPattern blocked GRT-USDT
+[2026-05-09 22:04:42,987] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (26.5 BTC eq.)
+[2026-05-09 22:04:57,055] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (26.5 BTC eq.)
+[2026-05-09 22:04:59,781] [INFO] [core.signal_processor] Position already exists for SNX-USDT (LONG), skipping new signal
+[2026-05-09 22:05:11,168] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.4 BTC eq.)
+[2026-05-09 22:05:18,545] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL XMR-USDT: bullish pattern
+[2026-05-09 22:05:18,545] [INFO] [core.signal_processor] Filter CandlestickPattern blocked XMR-USDT
+[2026-05-09 22:05:25,309] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.9 BTC eq.)
+[2026-05-09 22:05:40,406] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.9 BTC eq.)
+[2026-05-09 22:05:43,865] [INFO] [core.signal_processor] Position already exists for AXS-USDT (SHORT), skipping new signal
+[2026-05-09 22:05:51,976] [WARNING] [core.order_guard] OrderGuard: TP missing for AAVE-USDT SHORT, recreating TP=92.91
+[2026-05-09 22:05:52,597] [WARNING] [core.order_guard] OrderGuard: SL missing for AAVE-USDT SHORT, recreating SL=95.82408
+[2026-05-09 22:05:53,360] [WARNING] [core.order_guard] OrderGuard: TP missing for AXS-USDT SHORT, recreating TP=1.38225
+[2026-05-09 22:05:53,836] [WARNING] [core.order_guard] OrderGuard: SL missing for AXS-USDT SHORT, recreating SL=1.4855714285714285
+[2026-05-09 22:05:54,602] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (29.0 BTC eq.)
+[2026-05-09 22:06:06,899] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL TRX-USDT: bullish pattern
+[2026-05-09 22:06:06,900] [INFO] [core.signal_processor] Filter CandlestickPattern blocked TRX-USDT
+[2026-05-09 22:06:09,143] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.9 BTC eq.)
+[2026-05-09 22:06:12,440] [INFO] [filters.volume_profile_filter] VolumeProfile blocked BUY ICP-USDT: price above VAH
+[2026-05-09 22:06:12,442] [INFO] [core.signal_processor] Filter VolumeProfile blocked ICP-USDT
+[2026-05-09 22:06:23,133] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.9 BTC eq.)
+[2026-05-09 22:06:37,244] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.9 BTC eq.)
+[2026-05-09 22:06:47,384] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL 1INCH-USDT: bullish pattern
+[2026-05-09 22:06:47,384] [INFO] [core.signal_processor] Filter CandlestickPattern blocked 1INCH-USDT
+[2026-05-09 22:06:51,316] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.9 BTC eq.)
+[2026-05-09 22:07:05,500] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.9 BTC eq.)
+[2026-05-09 22:07:16,271] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL SOL-USDT: bullish pattern
+[2026-05-09 22:07:16,271] [INFO] [core.signal_processor] Filter CandlestickPattern blocked SOL-USDT
+[2026-05-09 22:07:19,863] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.8 BTC eq.)
+[2026-05-09 22:07:25,068] [INFO] [core.scheduler] Night mode activated
+[2026-05-09 22:07:34,826] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.8 BTC eq.)
+[2026-05-09 22:07:49,828] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.7 BTC eq.)
+[2026-05-09 22:07:51,638] [INFO] [core.whale_shield] WhaleShield: moved SL to breakeven on FIL-USDT
+[2026-05-09 22:07:54,765] [WARNING] [core.order_guard] OrderGuard: TP missing for SNX-USDT LONG, recreating TP=0.376025
+[2026-05-09 22:07:55,150] [WARNING] [core.order_guard] OrderGuard: SL missing for SNX-USDT LONG, recreating SL=0.35005714285714284
+[2026-05-09 22:07:55,737] [WARNING] [core.order_guard] OrderGuard: TP missing for FIL-USDT LONG, recreating TP=1.29075
+[2026-05-09 22:07:56,078] [WARNING] [core.order_guard] OrderGuard: SL missing for FIL-USDT LONG, recreating SL=1.2232219999999998
+[2026-05-09 22:08:05,819] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.8 BTC eq.)
+[2026-05-09 22:08:20,688] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (32.8 BTC eq.)
+[2026-05-09 22:08:35,814] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (32.8 BTC eq.)
+[2026-05-09 22:08:50,670] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (32.8 BTC eq.)
+[2026-05-09 22:09:05,507] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (32.9 BTC eq.)
+[2026-05-09 22:09:17,826] [INFO] [core.voice_alerts] Voice alert: Внимание! Баланс ниже 50 долларов!
+[2026-05-09 22:09:20,574] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (32.8 BTC eq.)
+[2026-05-09 22:09:31,791] [INFO] [ml.sliding_backtest] Sliding backtest completed: total score=-0.2201
+[2026-05-09 22:09:32,981] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL 1INCH-USDT: bullish pattern
+[2026-05-09 22:09:32,982] [INFO] [core.signal_processor] Filter CandlestickPattern blocked 1INCH-USDT
+[2026-05-09 22:09:34,447] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (32.8 BTC eq.)
+[2026-05-09 22:09:45,113] [INFO] [core.signal_processor] Position already exists for AXS-USDT (SHORT), skipping new signal
+[2026-05-09 22:09:48,461] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.9 BTC eq.)
+[2026-05-09 22:10:02,391] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.0 BTC eq.)
+[2026-05-09 22:10:16,881] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.0 BTC eq.)
+[2026-05-09 22:10:32,240] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.0 BTC eq.)
+[2026-05-09 22:10:46,674] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.0 BTC eq.)
+[2026-05-09 22:11:00,458] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.0 BTC eq.)
+[2026-05-09 22:11:10,774] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL ETH-USDT: bullish pattern
+[2026-05-09 22:11:10,775] [INFO] [core.signal_processor] Filter CandlestickPattern blocked ETH-USDT
+[2026-05-09 22:11:15,194] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.0 BTC eq.)
+[2026-05-09 22:11:17,715] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL GRT-USDT: bullish pattern
+[2026-05-09 22:11:17,717] [INFO] [core.signal_processor] Filter CandlestickPattern blocked GRT-USDT
+[2026-05-09 22:11:30,499] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.1 BTC eq.)
+[2026-05-09 22:11:44,498] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.1 BTC eq.)
+[2026-05-09 22:11:57,811] [INFO] [core.signal_processor] Position already exists for SNX-USDT (LONG), skipping new signal
+[2026-05-09 22:11:58,668] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.0 BTC eq.)
+[2026-05-09 22:12:00,956] [WARNING] [core.order_guard] OrderGuard: TP missing for AAVE-USDT SHORT, recreating TP=92.91
+[2026-05-09 22:12:01,500] [WARNING] [core.order_guard] OrderGuard: SL missing for AAVE-USDT SHORT, recreating SL=95.82408
+[2026-05-09 22:12:02,072] [WARNING] [core.order_guard] OrderGuard: TP missing for AXS-USDT SHORT, recreating TP=1.38225
+[2026-05-09 22:12:02,753] [WARNING] [core.order_guard] OrderGuard: SL missing for AXS-USDT SHORT, recreating SL=1.4855714285714285
+[2026-05-09 22:12:13,246] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.0 BTC eq.)
+[2026-05-09 22:12:27,194] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.0 BTC eq.)
+[2026-05-09 22:12:41,286] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.0 BTC eq.)
+[2026-05-09 22:12:55,393] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL BTC-USDT: delta 0.70
+[2026-05-09 22:12:55,395] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked BTC-USDT
+[2026-05-09 22:12:55,539] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.0 BTC eq.)
+[2026-05-09 22:12:57,276] [INFO] [core.whale_shield] WhaleShield: moved SL to breakeven on FIL-USDT
+[2026-05-09 22:13:11,173] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.0 BTC eq.)
+[2026-05-09 22:13:15,499] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL TRX-USDT: bullish pattern
+[2026-05-09 22:13:15,501] [INFO] [core.signal_processor] Filter CandlestickPattern blocked TRX-USDT
+[2026-05-09 22:13:25,061] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.1 BTC eq.)
+[2026-05-09 22:13:36,066] [INFO] [filters.volume_profile_filter] VolumeProfile blocked BUY ICP-USDT: price above VAH
+[2026-05-09 22:13:36,066] [INFO] [core.signal_processor] Filter VolumeProfile blocked ICP-USDT
+[2026-05-09 22:13:38,884] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.0 BTC eq.)
+[2026-05-09 22:13:52,853] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.0 BTC eq.)
+[2026-05-09 22:14:03,995] [WARNING] [core.order_guard] OrderGuard: TP missing for SNX-USDT LONG, recreating TP=0.376025
+[2026-05-09 22:14:04,499] [WARNING] [core.order_guard] OrderGuard: SL missing for SNX-USDT LONG, recreating SL=0.35005714285714284
+[2026-05-09 22:14:05,104] [WARNING] [core.order_guard] OrderGuard: TP missing for FIL-USDT LONG, recreating TP=1.29075
+[2026-05-09 22:14:05,591] [WARNING] [core.order_guard] OrderGuard: SL missing for FIL-USDT LONG, recreating SL=1.2232219999999998
+[2026-05-09 22:14:07,332] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.0 BTC eq.)
+[2026-05-09 22:14:12,088] [INFO] [core.executor] Breakeven applied for AXS-USDT SHORT
+[2026-05-09 22:14:18,551] [INFO] [core.voice_alerts] Voice alert: Внимание! Баланс ниже 50 долларов!
+[2026-05-09 22:14:19,677] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL SOL-USDT: delta 0.60
+[2026-05-09 22:14:19,678] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked SOL-USDT
+[2026-05-09 22:14:22,077] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.0 BTC eq.)
+[2026-05-09 22:14:33,703] [INFO] [ml.sliding_backtest] Sliding backtest completed: total score=-0.2202
+[2026-05-09 22:14:35,931] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.0 BTC eq.)
+[2026-05-09 22:14:49,450] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.9 BTC eq.)
+[2026-05-09 22:15:03,186] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.9 BTC eq.)
+[2026-05-09 22:15:16,699] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (30.1 BTC eq.)
+[2026-05-09 22:15:30,795] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (30.1 BTC eq.)
+[2026-05-09 22:15:32,802] [WARNING] [core.whale_shield] WhaleShield: single giant order on AXS-USDT (5.2 BTC eq.)
+[2026-05-09 22:15:34,855] [INFO] [core.whale_shield] WhaleShield: moved SL to breakeven on AXS-USDT
+[2026-05-09 22:15:46,768] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (30.1 BTC eq.)
+[2026-05-09 22:15:48,640] [WARNING] [core.whale_shield] WhaleShield: single giant order on AXS-USDT (5.2 BTC eq.)
+[2026-05-09 22:16:00,295] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (30.0 BTC eq.)
+[2026-05-09 22:16:02,112] [WARNING] [core.whale_shield] WhaleShield: single giant order on AXS-USDT (5.1 BTC eq.)
+[2026-05-09 22:16:13,892] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (30.1 BTC eq.)
+[2026-05-09 22:16:15,719] [WARNING] [core.whale_shield] WhaleShield: single giant order on AXS-USDT (5.1 BTC eq.)
+[2026-05-09 22:16:27,863] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (30.1 BTC eq.)
+[2026-05-09 22:16:31,061] [WARNING] [core.whale_shield] WhaleShield: single giant order on AXS-USDT (5.2 BTC eq.)
+[2026-05-09 22:16:42,922] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (30.1 BTC eq.)
+[2026-05-09 22:16:57,219] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.5 BTC eq.)
+[2026-05-09 22:17:11,071] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.5 BTC eq.)
+[2026-05-09 22:17:25,710] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (33.6 BTC eq.)
+[2026-05-09 22:17:39,759] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (26.0 BTC eq.)
+[2026-05-09 22:17:54,218] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (26.0 BTC eq.)
+[2026-05-09 22:18:08,857] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.9 BTC eq.)
+[2026-05-09 22:18:09,976] [WARNING] [core.order_guard] OrderGuard: TP missing for AAVE-USDT SHORT, recreating TP=92.91
+[2026-05-09 22:18:10,464] [WARNING] [core.order_guard] OrderGuard: SL missing for AAVE-USDT SHORT, recreating SL=95.82408
+[2026-05-09 22:18:10,931] [INFO] [core.whale_shield] WhaleShield: moved SL to breakeven on FIL-USDT
+[2026-05-09 22:18:11,693] [WARNING] [core.order_guard] OrderGuard: TP missing for AXS-USDT SHORT, recreating TP=1.38225
+[2026-05-09 22:18:12,618] [WARNING] [core.order_guard] OrderGuard: SL missing for AXS-USDT SHORT, recreating SL=1.446552
+[2026-05-09 22:18:25,622] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.9 BTC eq.)
+[2026-05-09 22:18:32,791] [INFO] [filters.volume_profile_filter] VolumeProfile blocked BUY ICP-USDT: price above VAH
+[2026-05-09 22:18:32,794] [INFO] [core.signal_processor] Filter VolumeProfile blocked ICP-USDT
+[2026-05-09 22:18:39,579] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (30.3 BTC eq.)
+[2026-05-09 22:18:49,471] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL 1INCH-USDT: delta 0.50
+[2026-05-09 22:18:49,471] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked 1INCH-USDT
+[2026-05-09 22:18:53,950] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (30.3 BTC eq.)
+[2026-05-09 22:19:08,148] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (30.2 BTC eq.)
+[2026-05-09 22:19:19,414] [INFO] [core.voice_alerts] Voice alert: Внимание! Баланс ниже 50 долларов!
+[2026-05-09 22:19:22,243] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (30.2 BTC eq.)
+[2026-05-09 22:19:35,585] [INFO] [ml.sliding_backtest] Sliding backtest completed: total score=-0.2196
+[2026-05-09 22:19:37,211] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (30.2 BTC eq.)
+[2026-05-09 22:19:39,641] [WARNING] [core.whale_shield] WhaleShield: single giant order on AXS-USDT (5.3 BTC eq.)
+[2026-05-09 22:19:51,599] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (30.2 BTC eq.)
+[2026-05-09 22:19:53,794] [WARNING] [core.whale_shield] WhaleShield: single giant order on AXS-USDT (5.3 BTC eq.)
+[2026-05-09 22:19:55,687] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL TRX-USDT: bullish pattern
+[2026-05-09 22:19:55,687] [INFO] [core.signal_processor] Filter CandlestickPattern blocked TRX-USDT
+[2026-05-09 22:20:03,824] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL ETH-USDT: delta 0.60
+[2026-05-09 22:20:03,825] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked ETH-USDT
+[2026-05-09 22:20:06,712] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (30.3 BTC eq.)
+[2026-05-09 22:20:09,084] [WARNING] [core.whale_shield] WhaleShield: single giant order on AXS-USDT (5.3 BTC eq.)
+[2026-05-09 22:20:09,599] [INFO] [core.signal_processor] Position already exists for AXS-USDT (SHORT), skipping new signal
+[2026-05-09 22:20:13,817] [WARNING] [core.order_guard] OrderGuard: TP missing for SNX-USDT LONG, recreating TP=0.376025
+[2026-05-09 22:20:14,188] [WARNING] [core.order_guard] OrderGuard: SL missing for SNX-USDT LONG, recreating SL=0.35005714285714284
+[2026-05-09 22:20:15,166] [WARNING] [core.order_guard] OrderGuard: TP missing for FIL-USDT LONG, recreating TP=1.29075
+[2026-05-09 22:20:15,742] [WARNING] [core.order_guard] OrderGuard: SL missing for FIL-USDT LONG, recreating SL=1.2232219999999998
+[2026-05-09 22:20:17,009] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL SOL-USDT: delta 0.60
+[2026-05-09 22:20:17,010] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked SOL-USDT
+[2026-05-09 22:20:21,950] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (30.2 BTC eq.)
+[2026-05-09 22:20:24,173] [INFO] [core.signal_processor] Position already exists for SNX-USDT (LONG), skipping new signal
+[2026-05-09 22:20:24,399] [WARNING] [core.whale_shield] WhaleShield: single giant order on AXS-USDT (5.3 BTC eq.)
+[2026-05-09 22:20:35,106] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL BTC-USDT: delta 0.70
+[2026-05-09 22:20:35,108] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked BTC-USDT
+[2026-05-09 22:20:36,491] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (30.2 BTC eq.)
+[2026-05-09 22:20:38,324] [WARNING] [core.whale_shield] WhaleShield: single giant order on AXS-USDT (5.3 BTC eq.)
+[2026-05-09 22:20:41,324] [INFO] [core.whale_shield] WhaleShield: moved SL to breakeven on AXS-USDT
+[2026-05-09 22:20:53,251] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (30.2 BTC eq.)
+[2026-05-09 22:20:55,200] [WARNING] [core.whale_shield] WhaleShield: single giant order on AXS-USDT (5.3 BTC eq.)
+[2026-05-09 22:21:07,119] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (30.1 BTC eq.)
+[2026-05-09 22:21:09,039] [WARNING] [core.whale_shield] WhaleShield: single giant order on AXS-USDT (5.3 BTC eq.)
+[2026-05-09 22:21:20,969] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (30.1 BTC eq.)
+[2026-05-09 22:21:22,635] [WARNING] [core.whale_shield] WhaleShield: single giant order on AXS-USDT (5.3 BTC eq.)
+[2026-05-09 22:21:34,204] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (30.1 BTC eq.)
+[2026-05-09 22:21:36,062] [WARNING] [core.whale_shield] WhaleShield: single giant order on AXS-USDT (5.3 BTC eq.)
+[2026-05-09 22:21:47,846] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (30.1 BTC eq.)
+[2026-05-09 22:22:01,621] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (30.1 BTC eq.)
+[2026-05-09 22:22:15,432] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (30.1 BTC eq.)
+[2026-05-09 22:22:28,991] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (30.0 BTC eq.)
+[2026-05-09 22:22:42,397] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (30.0 BTC eq.)
+[2026-05-09 22:22:56,293] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (30.0 BTC eq.)
+[2026-05-09 22:23:10,061] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (30.3 BTC eq.)
+[2026-05-09 22:23:11,803] [INFO] [core.whale_shield] WhaleShield: moved SL to breakeven on FIL-USDT
+[2026-05-09 22:23:24,927] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL TRX-USDT: bullish pattern
+[2026-05-09 22:23:24,927] [INFO] [core.signal_processor] Filter CandlestickPattern blocked TRX-USDT
+[2026-05-09 22:23:26,247] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (30.4 BTC eq.)
+[2026-05-09 22:23:41,184] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (30.3 BTC eq.)
+[2026-05-09 22:23:55,201] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (30.3 BTC eq.)
+[2026-05-09 22:24:09,500] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (30.2 BTC eq.)
+[2026-05-09 22:24:20,034] [WARNING] [core.order_guard] OrderGuard: TP missing for AAVE-USDT SHORT, recreating TP=92.91
+[2026-05-09 22:24:20,275] [INFO] [core.voice_alerts] Voice alert: Внимание! Баланс ниже 50 долларов!
+[2026-05-09 22:24:20,384] [WARNING] [core.order_guard] OrderGuard: SL missing for AAVE-USDT SHORT, recreating SL=95.82408
+[2026-05-09 22:24:21,123] [WARNING] [core.order_guard] OrderGuard: TP missing for AXS-USDT SHORT, recreating TP=1.38225
+[2026-05-09 22:24:21,566] [WARNING] [core.order_guard] OrderGuard: SL missing for AXS-USDT SHORT, recreating SL=1.446552
+[2026-05-09 22:24:23,746] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (30.3 BTC eq.)
+[2026-05-09 22:24:28,691] [INFO] [filters.volume_profile_filter] VolumeProfile blocked BUY ICP-USDT: price above VAH
+[2026-05-09 22:24:28,691] [INFO] [core.signal_processor] Filter VolumeProfile blocked ICP-USDT
+[2026-05-09 22:24:37,594] [INFO] [ml.sliding_backtest] Sliding backtest completed: total score=-0.2199
+[2026-05-09 22:24:37,682] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (30.2 BTC eq.)
+[2026-05-09 22:24:51,628] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (30.3 BTC eq.)
+[2026-05-09 22:25:05,598] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (30.2 BTC eq.)
+[2026-05-09 22:25:19,472] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (26.9 BTC eq.)
+[2026-05-09 22:25:29,529] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL BTC-USDT: delta 0.70
+[2026-05-09 22:25:29,529] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked BTC-USDT
+[2026-05-09 22:25:34,529] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (26.9 BTC eq.)
+[2026-05-09 22:25:47,121] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL SOL-USDT: delta 0.60
+[2026-05-09 22:25:47,122] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked SOL-USDT
+[2026-05-09 22:25:49,632] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (31.9 BTC eq.)
+[2026-05-09 22:25:52,568] [INFO] [core.signal_processor] Position already exists for SNX-USDT (LONG), skipping new signal
+[2026-05-09 22:26:03,720] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (31.9 BTC eq.)
+[2026-05-09 22:26:17,592] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (31.9 BTC eq.)
+[2026-05-09 22:26:22,640] [WARNING] [core.order_guard] OrderGuard: TP missing for SNX-USDT LONG, recreating TP=0.376025
+[2026-05-09 22:26:23,274] [WARNING] [core.order_guard] OrderGuard: SL missing for SNX-USDT LONG, recreating SL=0.35005714285714284
+[2026-05-09 22:26:23,839] [WARNING] [core.order_guard] OrderGuard: TP missing for FIL-USDT LONG, recreating TP=1.29075
+[2026-05-09 22:26:24,171] [WARNING] [core.order_guard] OrderGuard: SL missing for FIL-USDT LONG, recreating SL=1.2232219999999998
+[2026-05-09 22:26:31,438] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (31.8 BTC eq.)
+[2026-05-09 22:26:42,203] [INFO] [core.signal_processor] Position already exists for AXS-USDT (SHORT), skipping new signal
+[2026-05-09 22:26:45,179] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (31.9 BTC eq.)
+[2026-05-09 22:26:59,831] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (31.9 BTC eq.)
+[2026-05-09 22:27:11,874] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL 1INCH-USDT: delta 0.60
+[2026-05-09 22:27:11,877] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked 1INCH-USDT
+[2026-05-09 22:27:14,229] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (31.9 BTC eq.)
+[2026-05-09 22:27:28,203] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (31.8 BTC eq.)
+[2026-05-09 22:27:42,013] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (31.8 BTC eq.)
+[2026-05-09 22:27:55,461] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (32.3 BTC eq.)
+[2026-05-09 22:28:09,236] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (32.3 BTC eq.)
+[2026-05-09 22:28:22,510] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (32.3 BTC eq.)
+[2026-05-09 22:28:24,216] [INFO] [core.whale_shield] WhaleShield: moved SL to breakeven on FIL-USDT
+[2026-05-09 22:28:39,724] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (32.3 BTC eq.)
+[2026-05-09 22:28:54,286] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (32.3 BTC eq.)
+[2026-05-09 22:29:09,335] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (32.2 BTC eq.)
+[2026-05-09 22:29:11,138] [WARNING] [core.alert_manager] ALERT: ⚠️ Баланс опустился ниже 100 USDT!
+[2026-05-09 22:29:11,156] [INFO] [ml.capital_allocator] Capital allocation updated for 6 strategies
+[2026-05-09 22:29:21,187] [INFO] [core.voice_alerts] Voice alert: Внимание! Баланс ниже 50 долларов!
+[2026-05-09 22:29:24,198] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (32.2 BTC eq.)
+[2026-05-09 22:29:37,807] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (32.1 BTC eq.)
+[2026-05-09 22:29:39,539] [INFO] [ml.sliding_backtest] Sliding backtest completed: total score=-0.2186
+[2026-05-09 22:29:52,010] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (32.1 BTC eq.)
+[2026-05-09 22:30:06,431] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (32.2 BTC eq.)
+[2026-05-09 22:30:10,545] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL SOL-USDT: delta 0.60
+[2026-05-09 22:30:10,546] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked SOL-USDT
+[2026-05-09 22:30:20,166] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (29.6 BTC eq.)
+[2026-05-09 22:30:29,202] [WARNING] [core.order_guard] OrderGuard: TP missing for AAVE-USDT SHORT, recreating TP=92.91
+[2026-05-09 22:30:29,777] [WARNING] [core.order_guard] OrderGuard: SL missing for AAVE-USDT SHORT, recreating SL=95.82408
+[2026-05-09 22:30:30,073] [INFO] [core.order_guard] OrderGuard: Position AXS-USDT SHORT no longer exists on exchange, removing
+[2026-05-09 22:30:30,257] [INFO] [filters.volume_profile_filter] VolumeProfile blocked BUY ICP-USDT: price above VAH
+[2026-05-09 22:30:30,258] [INFO] [core.signal_processor] Filter VolumeProfile blocked ICP-USDT
+[2026-05-09 22:30:34,201] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (29.6 BTC eq.)
+[2026-05-09 22:30:36,680] [INFO] [core.executor] Executing SELL AXS-USDT @ 1.448, qty=3.128, lev=3
+[2026-05-09 22:30:47,366] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (29.5 BTC eq.)
+[2026-05-09 22:30:55,142] [WARNING] [core.executor] Limit order not filled, switching to market for AXS-USDT
+[2026-05-09 22:30:55,941] [INFO] [core.executor] Actual entry price for AXS-USDT: 1.446 (requested: 1.448)
+[2026-05-09 22:30:56,989] [INFO] [core.executor] Trade executed: AXS-USDT SELL @ 1.446, TP=1.381, SL=1.483142857142857
+[2026-05-09 22:31:00,148] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (24.8 BTC eq.)
+[2026-05-09 22:31:06,509] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL BTC-USDT: delta 0.70
+[2026-05-09 22:31:06,510] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked BTC-USDT
+[2026-05-09 22:31:14,377] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (24.8 BTC eq.)
+[2026-05-09 22:31:28,041] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (26.5 BTC eq.)
+[2026-05-09 22:31:41,006] [WARNING] [core.api] Connection error, attempt 1/3
+[2026-05-09 22:31:42,086] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (26.6 BTC eq.)
+[2026-05-09 22:31:55,924] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (26.5 BTC eq.)
+[2026-05-09 22:32:09,224] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL 1INCH-USDT: delta 0.60
+[2026-05-09 22:32:09,236] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked 1INCH-USDT
+[2026-05-09 22:32:10,654] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (26.5 BTC eq.)
+[2026-05-09 22:32:24,156] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (26.5 BTC eq.)
+[2026-05-09 22:32:30,758] [WARNING] [core.order_guard] OrderGuard: TP missing for SNX-USDT LONG, recreating TP=0.376025
+[2026-05-09 22:32:31,325] [WARNING] [core.order_guard] OrderGuard: SL missing for SNX-USDT LONG, recreating SL=0.35005714285714284
+[2026-05-09 22:32:31,949] [WARNING] [core.order_guard] OrderGuard: TP missing for FIL-USDT LONG, recreating TP=1.29075
+[2026-05-09 22:32:32,316] [WARNING] [core.order_guard] OrderGuard: SL missing for FIL-USDT LONG, recreating SL=1.2232219999999998
+[2026-05-09 22:32:33,665] [WARNING] [core.order_guard] OrderGuard: SL missing for AXS-USDT SHORT, recreating SL=1.483142857142857
+[2026-05-09 22:32:38,141] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (26.5 BTC eq.)
+[2026-05-09 22:32:52,216] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (26.5 BTC eq.)
+[2026-05-09 22:33:06,068] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.6 BTC eq.)
+[2026-05-09 22:33:20,464] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.7 BTC eq.)
+[2026-05-09 22:33:25,431] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL ETH-USDT: delta 0.60
+[2026-05-09 22:33:25,433] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked ETH-USDT
+[2026-05-09 22:33:34,504] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.7 BTC eq.)
+[2026-05-09 22:33:36,635] [INFO] [core.whale_shield] WhaleShield: moved SL to breakeven on FIL-USDT
+[2026-05-09 22:33:37,942] [INFO] [core.signal_processor] Position already exists for SNX-USDT (LONG), skipping new signal
+[2026-05-09 22:33:50,659] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.7 BTC eq.)
+[2026-05-09 22:34:04,470] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.6 BTC eq.)
+[2026-05-09 22:34:10,152] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL TRX-USDT: bullish pattern
+[2026-05-09 22:34:10,153] [INFO] [core.signal_processor] Filter CandlestickPattern blocked TRX-USDT
+[2026-05-09 22:34:18,704] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.6 BTC eq.)
+[2026-05-09 22:34:22,039] [INFO] [core.voice_alerts] Voice alert: Внимание! Баланс ниже 50 долларов!
+[2026-05-09 22:34:33,065] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.6 BTC eq.)
+[2026-05-09 22:34:41,332] [INFO] [ml.sliding_backtest] Sliding backtest completed: total score=-0.2182
+[2026-05-09 22:34:47,007] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.6 BTC eq.)
+[2026-05-09 22:35:00,997] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.6 BTC eq.)
+[2026-05-09 22:35:15,234] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.5 BTC eq.)
+[2026-05-09 22:35:28,653] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.6 BTC eq.)
+[2026-05-09 22:35:42,560] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.6 BTC eq.)
+[2026-05-09 22:35:56,494] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.6 BTC eq.)
+[2026-05-09 22:36:10,055] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.7 BTC eq.)
+[2026-05-09 22:36:23,618] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.7 BTC eq.)
+[2026-05-09 22:36:37,539] [WARNING] [core.order_guard] OrderGuard: TP missing for AAVE-USDT SHORT, recreating TP=92.91
+[2026-05-09 22:36:37,746] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.7 BTC eq.)
+[2026-05-09 22:36:38,034] [WARNING] [core.order_guard] OrderGuard: SL missing for AAVE-USDT SHORT, recreating SL=95.82408
+[2026-05-09 22:36:52,044] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.7 BTC eq.)
+[2026-05-09 22:37:05,934] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.7 BTC eq.)
+[2026-05-09 22:37:11,144] [WARNING] [core.alert_manager] ALERT: ℹ️ Занято 5+ слотов позиций
+[2026-05-09 22:37:19,779] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.7 BTC eq.)
+[2026-05-09 22:37:33,869] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.8 BTC eq.)
+[2026-05-09 22:37:47,970] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.9 BTC eq.)
+[2026-05-09 22:38:02,002] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.9 BTC eq.)
+[2026-05-09 22:38:12,639] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL BTC-USDT: delta 0.70
+[2026-05-09 22:38:12,640] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked BTC-USDT
+[2026-05-09 22:38:15,710] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (37.1 BTC eq.)
+[2026-05-09 22:38:30,042] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (37.0 BTC eq.)
+[2026-05-09 22:38:31,092] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL SOL-USDT: bullish pattern
+[2026-05-09 22:38:31,094] [INFO] [core.signal_processor] Filter CandlestickPattern blocked SOL-USDT
+[2026-05-09 22:38:39,642] [WARNING] [core.order_guard] OrderGuard: TP missing for SNX-USDT LONG, recreating TP=0.376025
+[2026-05-09 22:38:40,121] [WARNING] [core.order_guard] OrderGuard: SL missing for SNX-USDT LONG, recreating SL=0.35005714285714284
+[2026-05-09 22:38:40,799] [WARNING] [core.order_guard] OrderGuard: TP missing for FIL-USDT LONG, recreating TP=1.29075
+[2026-05-09 22:38:41,165] [WARNING] [core.order_guard] OrderGuard: SL missing for FIL-USDT LONG, recreating SL=1.2232219999999998
+[2026-05-09 22:38:42,315] [WARNING] [core.order_guard] OrderGuard: SL missing for AXS-USDT SHORT, recreating SL=1.483142857142857
+[2026-05-09 22:38:44,289] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (37.2 BTC eq.)
+[2026-05-09 22:38:46,113] [INFO] [core.whale_shield] WhaleShield: moved SL to breakeven on FIL-USDT
+[2026-05-09 22:38:54,576] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL TRX-USDT: bullish pattern
+[2026-05-09 22:38:54,577] [INFO] [core.signal_processor] Filter CandlestickPattern blocked TRX-USDT
+[2026-05-09 22:39:00,114] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (37.2 BTC eq.)
+[2026-05-09 22:39:14,032] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (37.2 BTC eq.)
+[2026-05-09 22:39:22,709] [INFO] [core.voice_alerts] Voice alert: Внимание! Баланс ниже 50 долларов!
+[2026-05-09 22:39:28,088] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (37.2 BTC eq.)
+[2026-05-09 22:39:28,326] [INFO] [core.signal_processor] Position already exists for SNX-USDT (LONG), skipping new signal
+[2026-05-09 22:39:42,413] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (37.3 BTC eq.)
+[2026-05-09 22:39:43,237] [INFO] [ml.sliding_backtest] Sliding backtest completed: total score=-0.2183
+[2026-05-09 22:39:56,751] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (37.3 BTC eq.)
+[2026-05-09 22:40:10,644] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (37.3 BTC eq.)
+[2026-05-09 22:40:24,950] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (37.2 BTC eq.)
+[2026-05-09 22:40:25,533] [INFO] [filters.volume_profile_filter] VolumeProfile blocked BUY ICP-USDT: price above VAH
+[2026-05-09 22:40:25,534] [INFO] [core.signal_processor] Filter VolumeProfile blocked ICP-USDT
+[2026-05-09 22:40:38,772] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (26.8 BTC eq.)
+[2026-05-09 22:40:52,413] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (26.8 BTC eq.)
+[2026-05-09 22:41:04,925] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL 1INCH-USDT: delta 0.60
+[2026-05-09 22:41:04,926] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked 1INCH-USDT
+[2026-05-09 22:41:07,029] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (26.8 BTC eq.)
+[2026-05-09 22:41:21,067] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (29.8 BTC eq.)
+[2026-05-09 22:41:33,065] [INFO] [core.signal_processor] Position already exists for AXS-USDT (SHORT), skipping new signal
+[2026-05-09 22:41:35,343] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (29.8 BTC eq.)
+[2026-05-09 22:41:48,835] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (29.7 BTC eq.)
+[2026-05-09 22:42:02,985] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (29.8 BTC eq.)
+[2026-05-09 22:42:16,545] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (35.4 BTC eq.)
+[2026-05-09 22:42:30,298] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (35.4 BTC eq.)
+[2026-05-09 22:42:44,359] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (35.4 BTC eq.)
+[2026-05-09 22:42:46,222] [WARNING] [core.order_guard] OrderGuard: TP missing for AAVE-USDT SHORT, recreating TP=92.91
+[2026-05-09 22:42:46,706] [WARNING] [core.order_guard] OrderGuard: SL missing for AAVE-USDT SHORT, recreating SL=95.82408
+[2026-05-09 22:42:58,785] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (35.4 BTC eq.)
+[2026-05-09 22:43:12,403] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (35.2 BTC eq.)
+[2026-05-09 22:43:26,269] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (35.3 BTC eq.)
+[2026-05-09 22:43:39,980] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (35.3 BTC eq.)
+[2026-05-09 22:43:53,937] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.5 BTC eq.)
+[2026-05-09 22:43:55,437] [INFO] [core.whale_shield] WhaleShield: moved SL to breakeven on FIL-USDT
+[2026-05-09 22:44:09,123] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.5 BTC eq.)
+[2026-05-09 22:44:23,413] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.5 BTC eq.)
+[2026-05-09 22:44:23,565] [INFO] [core.voice_alerts] Voice alert: Внимание! Баланс ниже 50 долларов!
+[2026-05-09 22:44:37,932] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.5 BTC eq.)
+[2026-05-09 22:44:44,889] [INFO] [ml.sliding_backtest] Sliding backtest completed: total score=-0.2192
+[2026-05-09 22:44:48,013] [WARNING] [core.order_guard] OrderGuard: TP missing for SNX-USDT LONG, recreating TP=0.376025
+[2026-05-09 22:44:48,361] [WARNING] [core.order_guard] OrderGuard: SL missing for SNX-USDT LONG, recreating SL=0.35005714285714284
+[2026-05-09 22:44:48,977] [WARNING] [core.order_guard] OrderGuard: TP missing for FIL-USDT LONG, recreating TP=1.29075
+[2026-05-09 22:44:49,499] [WARNING] [core.order_guard] OrderGuard: SL missing for FIL-USDT LONG, recreating SL=1.2232219999999998
+[2026-05-09 22:44:50,549] [WARNING] [core.order_guard] OrderGuard: SL missing for AXS-USDT SHORT, recreating SL=1.483142857142857
+[2026-05-09 22:44:52,045] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (36.9 BTC eq.)
+[2026-05-09 22:44:54,521] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL BTC-USDT: delta 0.70
+[2026-05-09 22:44:54,523] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked BTC-USDT
+[2026-05-09 22:45:06,067] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (36.9 BTC eq.)
+[2026-05-09 22:45:20,054] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (36.9 BTC eq.)
+[2026-05-09 22:45:34,261] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (36.9 BTC eq.)
+[2026-05-09 22:45:48,324] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (37.0 BTC eq.)
+[2026-05-09 22:46:02,270] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (37.0 BTC eq.)
+[2026-05-09 22:46:16,292] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (36.9 BTC eq.)
+[2026-05-09 22:46:26,064] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL ETH-USDT: delta 0.60
+[2026-05-09 22:46:26,064] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked ETH-USDT
+[2026-05-09 22:46:30,436] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (36.9 BTC eq.)
+[2026-05-09 22:46:36,854] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL SOL-USDT: bullish pattern
+[2026-05-09 22:46:36,856] [INFO] [core.signal_processor] Filter CandlestickPattern blocked SOL-USDT
+[2026-05-09 22:46:44,208] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (37.0 BTC eq.)
+[2026-05-09 22:46:58,461] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.6 BTC eq.)
+[2026-05-09 22:47:03,986] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL 1INCH-USDT: delta 0.60
+[2026-05-09 22:47:03,987] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked 1INCH-USDT
+[2026-05-09 22:47:09,223] [INFO] [core.signal_processor] Position already exists for AXS-USDT (SHORT), skipping new signal
+[2026-05-09 22:47:13,124] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.7 BTC eq.)
+[2026-05-09 22:47:27,630] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.8 BTC eq.)
+[2026-05-09 22:47:38,936] [INFO] [core.signal_processor] Position already exists for SNX-USDT (LONG), skipping new signal
+[2026-05-09 22:47:41,140] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.7 BTC eq.)
+[2026-05-09 22:47:55,654] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.7 BTC eq.)
+[2026-05-09 22:48:09,571] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.8 BTC eq.)
+[2026-05-09 22:48:18,516] [INFO] [filters.volume_profile_filter] VolumeProfile blocked BUY ICP-USDT: price above VAH
+[2026-05-09 22:48:18,518] [INFO] [core.signal_processor] Filter VolumeProfile blocked ICP-USDT
+[2026-05-09 22:48:23,559] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.7 BTC eq.)
+[2026-05-09 22:48:30,531] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL TRX-USDT: bullish pattern
+[2026-05-09 22:48:30,533] [INFO] [core.signal_processor] Filter CandlestickPattern blocked TRX-USDT
+[2026-05-09 22:48:37,239] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.7 BTC eq.)
+[2026-05-09 22:48:51,137] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (22.4 BTC eq.)
+[2026-05-09 22:48:54,120] [WARNING] [core.order_guard] OrderGuard: TP missing for AAVE-USDT SHORT, recreating TP=92.91
+[2026-05-09 22:48:54,437] [WARNING] [core.order_guard] OrderGuard: SL missing for AAVE-USDT SHORT, recreating SL=95.82408
+[2026-05-09 22:49:05,097] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (29.3 BTC eq.)
+[2026-05-09 22:49:07,054] [INFO] [core.whale_shield] WhaleShield: moved SL to breakeven on FIL-USDT
+[2026-05-09 22:49:21,024] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (29.2 BTC eq.)
+[2026-05-09 22:49:24,259] [INFO] [core.voice_alerts] Voice alert: Внимание! Баланс ниже 50 долларов!
+[2026-05-09 22:49:34,946] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (29.3 BTC eq.)
+[2026-05-09 22:49:46,886] [INFO] [ml.sliding_backtest] Sliding backtest completed: total score=-0.2194
+[2026-05-09 22:49:48,486] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (29.3 BTC eq.)
+[2026-05-09 22:50:02,160] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (29.3 BTC eq.)
+[2026-05-09 22:50:15,675] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (29.3 BTC eq.)
+[2026-05-09 22:50:29,322] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (29.3 BTC eq.)
+[2026-05-09 22:50:43,232] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (29.3 BTC eq.)
+[2026-05-09 22:50:55,656] [WARNING] [core.order_guard] OrderGuard: TP missing for SNX-USDT LONG, recreating TP=0.376025
+[2026-05-09 22:50:56,144] [WARNING] [core.order_guard] OrderGuard: SL missing for SNX-USDT LONG, recreating SL=0.35005714285714284
+[2026-05-09 22:50:56,885] [WARNING] [core.order_guard] OrderGuard: TP missing for FIL-USDT LONG, recreating TP=1.29075
+[2026-05-09 22:50:57,351] [WARNING] [core.order_guard] OrderGuard: SL missing for FIL-USDT LONG, recreating SL=1.2232219999999998
+[2026-05-09 22:50:57,492] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL BTC-USDT: delta 0.70
+[2026-05-09 22:50:57,493] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked BTC-USDT
+[2026-05-09 22:50:57,722] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (26.2 BTC eq.)
+[2026-05-09 22:50:58,708] [WARNING] [core.order_guard] OrderGuard: SL missing for AXS-USDT SHORT, recreating SL=1.483142857142857
+[2026-05-09 22:51:03,663] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL 1INCH-USDT: delta 0.60
+[2026-05-09 22:51:03,664] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked 1INCH-USDT
+[2026-05-09 22:51:12,046] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (26.2 BTC eq.)
+[2026-05-09 22:51:25,828] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (26.4 BTC eq.)
+[2026-05-09 22:51:39,846] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (26.3 BTC eq.)
+[2026-05-09 22:51:47,210] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL SOL-USDT: bullish pattern
+[2026-05-09 22:51:47,210] [INFO] [core.signal_processor] Filter CandlestickPattern blocked SOL-USDT
+[2026-05-09 22:51:52,483] [INFO] [core.signal_processor] Position already exists for AXS-USDT (SHORT), skipping new signal
+[2026-05-09 22:51:54,060] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (26.4 BTC eq.)
+[2026-05-09 22:52:08,026] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (32.1 BTC eq.)
+[2026-05-09 22:52:15,926] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL TRX-USDT: bullish pattern
+[2026-05-09 22:52:15,927] [INFO] [core.signal_processor] Filter CandlestickPattern blocked TRX-USDT
+[2026-05-09 22:52:21,963] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (32.1 BTC eq.)
+[2026-05-09 22:52:36,121] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (32.1 BTC eq.)
+[2026-05-09 22:52:49,878] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (32.1 BTC eq.)
+[2026-05-09 22:53:03,840] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (32.0 BTC eq.)
+[2026-05-09 22:53:17,805] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (31.9 BTC eq.)
+[2026-05-09 22:53:31,837] [INFO] [filters.volume_profile_filter] VolumeProfile blocked BUY ICP-USDT: price above VAH
+[2026-05-09 22:53:31,840] [INFO] [core.signal_processor] Filter VolumeProfile blocked ICP-USDT
+[2026-05-09 22:53:32,339] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (32.0 BTC eq.)
+[2026-05-09 22:53:46,382] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (32.0 BTC eq.)
+[2026-05-09 22:54:00,379] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (32.1 BTC eq.)
+[2026-05-09 22:54:04,686] [INFO] [core.signal_processor] Position already exists for SNX-USDT (LONG), skipping new signal
+[2026-05-09 22:54:14,364] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (32.1 BTC eq.)
+[2026-05-09 22:54:16,675] [INFO] [core.whale_shield] WhaleShield: moved SL to breakeven on FIL-USDT
+[2026-05-09 22:54:24,972] [INFO] [core.voice_alerts] Voice alert: Внимание! Баланс ниже 50 долларов!
+[2026-05-09 22:54:30,708] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.1 BTC eq.)
+[2026-05-09 22:54:33,497] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL ETH-USDT: bullish pattern
+[2026-05-09 22:54:33,498] [INFO] [core.signal_processor] Filter CandlestickPattern blocked ETH-USDT
+[2026-05-09 22:54:45,542] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (31.6 BTC eq.)
+[2026-05-09 22:54:48,881] [INFO] [ml.sliding_backtest] Sliding backtest completed: total score=-0.2207
+[2026-05-09 22:55:00,056] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (26.4 BTC eq.)
+[2026-05-09 22:55:02,336] [WARNING] [core.order_guard] OrderGuard: TP missing for AAVE-USDT SHORT, recreating TP=92.91
+[2026-05-09 22:55:02,802] [WARNING] [core.order_guard] OrderGuard: SL missing for AAVE-USDT SHORT, recreating SL=95.82408
+[2026-05-09 22:55:15,313] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.2 BTC eq.)
+[2026-05-09 22:55:29,003] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.2 BTC eq.)
+[2026-05-09 22:55:42,798] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.2 BTC eq.)
+[2026-05-09 22:55:56,812] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.1 BTC eq.)
+[2026-05-09 22:56:11,066] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.1 BTC eq.)
+[2026-05-09 22:56:24,961] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.2 BTC eq.)
+[2026-05-09 22:56:39,135] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.1 BTC eq.)
+[2026-05-09 22:56:53,063] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.5 BTC eq.)
+[2026-05-09 22:57:04,140] [WARNING] [core.order_guard] OrderGuard: TP missing for SNX-USDT LONG, recreating TP=0.376025
+[2026-05-09 22:57:04,500] [WARNING] [core.order_guard] OrderGuard: SL missing for SNX-USDT LONG, recreating SL=0.35005714285714284
+[2026-05-09 22:57:05,111] [WARNING] [core.order_guard] OrderGuard: TP missing for FIL-USDT LONG, recreating TP=1.29075
+[2026-05-09 22:57:05,595] [WARNING] [core.order_guard] OrderGuard: SL missing for FIL-USDT LONG, recreating SL=1.2232219999999998
+[2026-05-09 22:57:06,761] [WARNING] [core.order_guard] OrderGuard: SL missing for AXS-USDT SHORT, recreating SL=1.483142857142857
+[2026-05-09 22:57:07,376] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.5 BTC eq.)
+[2026-05-09 22:57:21,009] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.5 BTC eq.)
+[2026-05-09 22:57:23,552] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL TRX-USDT: bullish pattern
+[2026-05-09 22:57:23,552] [INFO] [core.signal_processor] Filter CandlestickPattern blocked TRX-USDT
+[2026-05-09 22:57:35,345] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL BTC-USDT: bullish pattern
+[2026-05-09 22:57:35,347] [INFO] [core.signal_processor] Filter CandlestickPattern blocked BTC-USDT
+[2026-05-09 22:57:35,964] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.5 BTC eq.)
+[2026-05-09 22:57:50,545] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.3 BTC eq.)
+[2026-05-09 22:57:51,944] [INFO] [filters.volume_profile_filter] VolumeProfile blocked BUY ICP-USDT: price above VAH
+[2026-05-09 22:57:51,946] [INFO] [core.signal_processor] Filter VolumeProfile blocked ICP-USDT
+[2026-05-09 22:58:04,769] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.4 BTC eq.)
+[2026-05-09 22:58:11,040] [INFO] [core.signal_processor] Position already exists for SNX-USDT (LONG), skipping new signal
+[2026-05-09 22:58:18,790] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.3 BTC eq.)
+[2026-05-09 22:58:32,769] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.4 BTC eq.)
+[2026-05-09 22:58:47,278] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.3 BTC eq.)
+[2026-05-09 22:59:01,227] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.3 BTC eq.)
+[2026-05-09 22:59:15,597] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.4 BTC eq.)
+[2026-05-09 22:59:17,453] [INFO] [core.whale_shield] WhaleShield: moved SL to breakeven on FIL-USDT
+[2026-05-09 22:59:25,650] [INFO] [core.voice_alerts] Voice alert: Внимание! Баланс ниже 50 долларов!
+[2026-05-09 22:59:31,710] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.4 BTC eq.)
+[2026-05-09 22:59:45,708] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.4 BTC eq.)
+[2026-05-09 22:59:51,078] [INFO] [ml.sliding_backtest] Sliding backtest completed: total score=-0.2204
+[2026-05-09 22:59:56,266] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL ETH-USDT: bullish pattern
+[2026-05-09 22:59:56,267] [INFO] [core.signal_processor] Filter CandlestickPattern blocked ETH-USDT
+[2026-05-09 23:00:00,514] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.4 BTC eq.)
+[2026-05-09 23:00:14,735] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.0 BTC eq.)
+[2026-05-09 23:00:28,894] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (26.9 BTC eq.)
+[2026-05-09 23:00:43,094] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.0 BTC eq.)
+[2026-05-09 23:00:48,246] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL SOL-USDT: delta 0.60
+[2026-05-09 23:00:48,249] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked SOL-USDT
+[2026-05-09 23:00:57,695] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (26.9 BTC eq.)
+[2026-05-09 23:01:10,422] [WARNING] [core.order_guard] OrderGuard: TP missing for AAVE-USDT SHORT, recreating TP=92.91
+[2026-05-09 23:01:10,945] [WARNING] [core.order_guard] OrderGuard: SL missing for AAVE-USDT SHORT, recreating SL=95.82408
+[2026-05-09 23:01:12,124] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (26.9 BTC eq.)
+[2026-05-09 23:01:26,309] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (26.9 BTC eq.)
+[2026-05-09 23:01:39,699] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (26.9 BTC eq.)
+[2026-05-09 23:01:49,455] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL 1INCH-USDT: delta 0.60
+[2026-05-09 23:01:49,456] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked 1INCH-USDT
+[2026-05-09 23:01:54,384] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (26.9 BTC eq.)
+[2026-05-09 23:02:08,367] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (26.9 BTC eq.)
+[2026-05-09 23:02:22,142] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (26.9 BTC eq.)
+[2026-05-09 23:02:35,446] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (26.8 BTC eq.)
+[2026-05-09 23:02:49,023] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (26.8 BTC eq.)
+[2026-05-09 23:03:02,889] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (32.7 BTC eq.)
+[2026-05-09 23:03:12,335] [WARNING] [core.order_guard] OrderGuard: TP missing for SNX-USDT LONG, recreating TP=0.376025
+[2026-05-09 23:03:12,658] [WARNING] [core.order_guard] OrderGuard: SL missing for SNX-USDT LONG, recreating SL=0.35005714285714284
+[2026-05-09 23:03:13,288] [WARNING] [core.order_guard] OrderGuard: TP missing for FIL-USDT LONG, recreating TP=1.29075
+[2026-05-09 23:03:13,599] [WARNING] [core.order_guard] OrderGuard: SL missing for FIL-USDT LONG, recreating SL=1.2232219999999998
+[2026-05-09 23:03:15,248] [WARNING] [core.order_guard] OrderGuard: SL missing for AXS-USDT SHORT, recreating SL=1.483142857142857
+[2026-05-09 23:03:16,987] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (32.8 BTC eq.)
+[2026-05-09 23:03:30,616] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (32.8 BTC eq.)
+[2026-05-09 23:03:44,338] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (32.8 BTC eq.)
+[2026-05-09 23:03:58,546] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (32.8 BTC eq.)
+[2026-05-09 23:04:12,788] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (32.8 BTC eq.)
+[2026-05-09 23:04:13,390] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL TRX-USDT: delta 0.50
+[2026-05-09 23:04:13,391] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked TRX-USDT
+[2026-05-09 23:04:26,459] [INFO] [core.voice_alerts] Voice alert: Внимание! Баланс ниже 50 долларов!
+[2026-05-09 23:04:26,988] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (32.8 BTC eq.)
+[2026-05-09 23:04:28,635] [INFO] [core.whale_shield] WhaleShield: moved SL to breakeven on FIL-USDT
+[2026-05-09 23:04:32,197] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL 1INCH-USDT: delta 0.50
+[2026-05-09 23:04:32,208] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked 1INCH-USDT
+[2026-05-09 23:04:38,127] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL ETH-USDT: delta 0.70
+[2026-05-09 23:04:38,128] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked ETH-USDT
+[2026-05-09 23:04:42,593] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (32.8 BTC eq.)
+[2026-05-09 23:04:52,891] [INFO] [ml.sliding_backtest] Sliding backtest completed: total score=-0.2194
+[2026-05-09 23:04:56,765] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (32.8 BTC eq.)
+[2026-05-09 23:05:11,110] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.5 BTC eq.)
+[2026-05-09 23:05:24,701] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.4 BTC eq.)
+[2026-05-09 23:05:38,693] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.5 BTC eq.)
+[2026-05-09 23:05:52,457] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.4 BTC eq.)
+[2026-05-09 23:06:07,006] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.4 BTC eq.)
+[2026-05-09 23:06:08,839] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked BUY YFI-USDT: delta 0.40
+[2026-05-09 23:06:08,840] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked YFI-USDT
+[2026-05-09 23:06:21,199] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.4 BTC eq.)
+[2026-05-09 23:06:35,185] [INFO] [filters.volume_profile_filter] VolumeProfile blocked BUY AVAX-USDT: price above VAH
+[2026-05-09 23:06:35,186] [INFO] [core.signal_processor] Filter VolumeProfile blocked AVAX-USDT
+[2026-05-09 23:06:35,382] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.5 BTC eq.)
+[2026-05-09 23:06:48,792] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.5 BTC eq.)
+[2026-05-09 23:06:57,757] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL BTC-USDT: delta 0.70
+[2026-05-09 23:06:57,757] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked BTC-USDT
+[2026-05-09 23:07:02,282] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.5 BTC eq.)
+[2026-05-09 23:07:15,931] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.5 BTC eq.)
+[2026-05-09 23:07:19,443] [WARNING] [core.order_guard] OrderGuard: TP missing for AAVE-USDT SHORT, recreating TP=92.91
+[2026-05-09 23:07:19,862] [WARNING] [core.order_guard] OrderGuard: SL missing for AAVE-USDT SHORT, recreating SL=95.82408
+[2026-05-09 23:07:29,735] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.6 BTC eq.)
+[2026-05-09 23:07:43,605] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.6 BTC eq.)
+[2026-05-09 23:07:57,580] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.5 BTC eq.)
+[2026-05-09 23:08:04,286] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL SOL-USDT: delta 0.60
+[2026-05-09 23:08:04,287] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked SOL-USDT
+[2026-05-09 23:08:11,693] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (29.4 BTC eq.)
+[2026-05-09 23:08:26,323] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (29.4 BTC eq.)
+[2026-05-09 23:08:39,816] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (29.3 BTC eq.)
+[2026-05-09 23:08:53,459] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (29.3 BTC eq.)
+[2026-05-09 23:09:07,472] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (29.4 BTC eq.)
+[2026-05-09 23:09:21,158] [WARNING] [core.order_guard] OrderGuard: TP missing for SNX-USDT LONG, recreating TP=0.376025
+[2026-05-09 23:09:21,393] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (29.4 BTC eq.)
+[2026-05-09 23:09:21,667] [WARNING] [core.order_guard] OrderGuard: SL missing for SNX-USDT LONG, recreating SL=0.35005714285714284
+[2026-05-09 23:09:22,385] [WARNING] [core.order_guard] OrderGuard: TP missing for FIL-USDT LONG, recreating TP=1.29075
+[2026-05-09 23:09:22,838] [WARNING] [core.order_guard] OrderGuard: SL missing for FIL-USDT LONG, recreating SL=1.2232219999999998
+[2026-05-09 23:09:23,984] [WARNING] [core.order_guard] OrderGuard: SL missing for AXS-USDT SHORT, recreating SL=1.483142857142857
+[2026-05-09 23:09:27,137] [INFO] [core.voice_alerts] Voice alert: Внимание! Баланс ниже 50 долларов!
+[2026-05-09 23:09:35,458] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (29.4 BTC eq.)
+[2026-05-09 23:09:37,022] [INFO] [core.whale_shield] WhaleShield: moved SL to breakeven on FIL-USDT
+[2026-05-09 23:09:50,534] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (29.4 BTC eq.)
+[2026-05-09 23:09:54,639] [INFO] [ml.sliding_backtest] Sliding backtest completed: total score=-0.2192
+[2026-05-09 23:10:04,275] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (30.2 BTC eq.)
+[2026-05-09 23:10:17,912] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (30.1 BTC eq.)
+[2026-05-09 23:10:31,655] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (30.1 BTC eq.)
+[2026-05-09 23:10:45,379] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (30.2 BTC eq.)
+[2026-05-09 23:10:59,101] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.0 BTC eq.)
+[2026-05-09 23:11:12,542] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.0 BTC eq.)
+[2026-05-09 23:11:15,471] [INFO] [filters.volume_profile_filter] VolumeProfile blocked BUY AVAX-USDT: price above VAH
+[2026-05-09 23:11:15,472] [INFO] [core.signal_processor] Filter VolumeProfile blocked AVAX-USDT
+[2026-05-09 23:11:27,097] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.9 BTC eq.)
+[2026-05-09 23:11:40,760] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.9 BTC eq.)
+[2026-05-09 23:11:49,903] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL 1INCH-USDT: delta 0.50
+[2026-05-09 23:11:49,904] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked 1INCH-USDT
+[2026-05-09 23:11:54,823] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.0 BTC eq.)
+[2026-05-09 23:12:08,693] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.0 BTC eq.)
+[2026-05-09 23:12:16,377] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL ETH-USDT: delta 0.70
+[2026-05-09 23:12:16,378] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked ETH-USDT
+[2026-05-09 23:12:22,684] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.0 BTC eq.)
+[2026-05-09 23:12:36,748] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.0 BTC eq.)
+[2026-05-09 23:12:50,953] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.0 BTC eq.)
+[2026-05-09 23:13:05,194] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.0 BTC eq.)
+[2026-05-09 23:13:06,216] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL SOL-USDT: delta 0.60
+[2026-05-09 23:13:06,216] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked SOL-USDT
+[2026-05-09 23:13:11,497] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL TRX-USDT: bullish pattern
+[2026-05-09 23:13:11,498] [INFO] [core.signal_processor] Filter CandlestickPattern blocked TRX-USDT
+[2026-05-09 23:13:19,278] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.0 BTC eq.)
+[2026-05-09 23:13:27,615] [WARNING] [core.order_guard] OrderGuard: TP missing for AAVE-USDT SHORT, recreating TP=92.91
+[2026-05-09 23:13:27,939] [WARNING] [core.order_guard] OrderGuard: SL missing for AAVE-USDT SHORT, recreating SL=95.82408
+[2026-05-09 23:13:32,915] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.0 BTC eq.)
+[2026-05-09 23:13:43,316] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL BTC-USDT: delta 0.70
+[2026-05-09 23:13:43,318] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked BTC-USDT
+[2026-05-09 23:13:46,546] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.9 BTC eq.)
+[2026-05-09 23:14:00,661] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.9 BTC eq.)
+[2026-05-09 23:14:14,558] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.9 BTC eq.)
+[2026-05-09 23:14:22,489] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked BUY YFI-USDT: delta 0.40
+[2026-05-09 23:14:22,489] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked YFI-USDT
+[2026-05-09 23:14:27,829] [INFO] [core.voice_alerts] Voice alert: Внимание! Баланс ниже 50 долларов!
+[2026-05-09 23:14:28,347] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.9 BTC eq.)
+[2026-05-09 23:14:41,885] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.9 BTC eq.)
+[2026-05-09 23:14:43,431] [INFO] [core.whale_shield] WhaleShield: moved SL to breakeven on FIL-USDT
+[2026-05-09 23:14:56,497] [INFO] [ml.sliding_backtest] Sliding backtest completed: total score=-0.2182
+[2026-05-09 23:14:57,174] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.9 BTC eq.)
+[2026-05-09 23:15:10,617] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (37.2 BTC eq.)
+[2026-05-09 23:15:24,406] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.8 BTC eq.)
+[2026-05-09 23:15:29,369] [WARNING] [core.order_guard] OrderGuard: TP missing for SNX-USDT LONG, recreating TP=0.376025
+[2026-05-09 23:15:29,772] [WARNING] [core.order_guard] OrderGuard: SL missing for SNX-USDT LONG, recreating SL=0.35005714285714284
+[2026-05-09 23:15:30,439] [WARNING] [core.order_guard] OrderGuard: TP missing for FIL-USDT LONG, recreating TP=1.29075
+[2026-05-09 23:15:30,742] [WARNING] [core.order_guard] OrderGuard: SL missing for FIL-USDT LONG, recreating SL=1.2232219999999998
+[2026-05-09 23:15:31,706] [WARNING] [core.order_guard] OrderGuard: SL missing for AXS-USDT SHORT, recreating SL=1.483142857142857
+[2026-05-09 23:15:37,687] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.8 BTC eq.)
+[2026-05-09 23:15:51,212] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.8 BTC eq.)
+[2026-05-09 23:16:04,807] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.8 BTC eq.)
+[2026-05-09 23:16:18,200] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (27.8 BTC eq.)
+[2026-05-09 23:16:31,866] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (30.0 BTC eq.)
+[2026-05-09 23:16:45,272] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.6 BTC eq.)
+[2026-05-09 23:16:59,015] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (35.7 BTC eq.)
+[2026-05-09 23:17:12,744] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (31.5 BTC eq.)
+[2026-05-09 23:17:17,091] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL TRX-USDT: bullish pattern
+[2026-05-09 23:17:17,092] [INFO] [core.signal_processor] Filter CandlestickPattern blocked TRX-USDT
+[2026-05-09 23:17:26,638] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (31.5 BTC eq.)
+[2026-05-09 23:17:40,251] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (31.6 BTC eq.)
+[2026-05-09 23:17:53,953] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (31.6 BTC eq.)
+[2026-05-09 23:18:03,652] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL 1INCH-USDT: delta 0.60
+[2026-05-09 23:18:03,653] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked 1INCH-USDT
+[2026-05-09 23:18:07,936] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (31.0 BTC eq.)
+[2026-05-09 23:18:22,010] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (31.1 BTC eq.)
+[2026-05-09 23:18:35,820] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (31.2 BTC eq.)
+[2026-05-09 23:18:44,079] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL SOL-USDT: delta 0.60
+[2026-05-09 23:18:44,080] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked SOL-USDT
+[2026-05-09 23:18:49,861] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (31.1 BTC eq.)
+[2026-05-09 23:18:57,269] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL ETH-USDT: delta 0.70
+[2026-05-09 23:18:57,269] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked ETH-USDT
+[2026-05-09 23:19:03,752] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (31.2 BTC eq.)
+[2026-05-09 23:19:08,917] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked SELL BTC-USDT: delta 0.70
+[2026-05-09 23:19:08,917] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked BTC-USDT
+[2026-05-09 23:19:16,062] [INFO] [filters.volume_profile_filter] VolumeProfile blocked BUY AVAX-USDT: price above VAH
+[2026-05-09 23:19:16,062] [INFO] [core.signal_processor] Filter VolumeProfile blocked AVAX-USDT
+[2026-05-09 23:19:17,828] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (35.4 BTC eq.)
+[2026-05-09 23:19:28,714] [INFO] [core.voice_alerts] Voice alert: Внимание! Баланс ниже 50 долларов!
+[2026-05-09 23:19:31,818] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (35.4 BTC eq.)
+[2026-05-09 23:19:35,105] [WARNING] [core.order_guard] OrderGuard: TP missing for AAVE-USDT SHORT, recreating TP=92.91
+[2026-05-09 23:19:35,444] [WARNING] [core.order_guard] OrderGuard: SL missing for AAVE-USDT SHORT, recreating SL=95.82408
+[2026-05-09 23:19:45,778] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.9 BTC eq.)
+[2026-05-09 23:19:47,530] [INFO] [core.whale_shield] WhaleShield: moved SL to breakeven on FIL-USDT
+[2026-05-09 23:19:58,269] [INFO] [ml.sliding_backtest] Sliding backtest completed: total score=-0.2179
+[2026-05-09 23:20:01,568] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.9 BTC eq.)
+[2026-05-09 23:20:08,734] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked BUY YFI-USDT: delta 0.40
+[2026-05-09 23:20:08,736] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked YFI-USDT
+[2026-05-09 23:20:15,368] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.9 BTC eq.)
+[2026-05-09 23:20:28,857] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (26.0 BTC eq.)
+[2026-05-09 23:20:42,945] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.9 BTC eq.)
+[2026-05-09 23:20:57,134] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.9 BTC eq.)
+[2026-05-09 23:21:11,013] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.5 BTC eq.)
+[2026-05-09 23:21:24,598] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.5 BTC eq.)
+[2026-05-09 23:21:36,729] [WARNING] [core.order_guard] OrderGuard: TP missing for SNX-USDT LONG, recreating TP=0.376025
+[2026-05-09 23:21:37,199] [WARNING] [core.order_guard] OrderGuard: SL missing for SNX-USDT LONG, recreating SL=0.35005714285714284
+[2026-05-09 23:21:37,924] [WARNING] [core.order_guard] OrderGuard: TP missing for FIL-USDT LONG, recreating TP=1.29075
+[2026-05-09 23:21:38,370] [WARNING] [core.order_guard] OrderGuard: SL missing for FIL-USDT LONG, recreating SL=1.2232219999999998
+[2026-05-09 23:21:38,929] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.5 BTC eq.)
+[2026-05-09 23:21:39,534] [WARNING] [core.order_guard] OrderGuard: SL missing for AXS-USDT SHORT, recreating SL=1.483142857142857
+[2026-05-09 23:21:52,919] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (23.6 BTC eq.)
+[2026-05-09 23:22:06,856] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (23.6 BTC eq.)
+[2026-05-09 23:22:20,693] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (23.6 BTC eq.)
+[2026-05-09 23:22:34,025] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (23.6 BTC eq.)
+[2026-05-09 23:22:47,843] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (23.6 BTC eq.)
+[2026-05-09 23:23:01,445] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (30.1 BTC eq.)
+[2026-05-09 23:23:15,037] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (30.1 BTC eq.)
+[2026-05-09 23:23:28,721] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (30.2 BTC eq.)
+[2026-05-09 23:23:42,868] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.2 BTC eq.)
+[2026-05-09 23:23:56,659] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (28.1 BTC eq.)
+[2026-05-09 23:23:58,640] [WARNING] [core.whale_shield] WhaleShield: single giant order on AXS-USDT (5.1 BTC eq.)
+[2026-05-09 23:24:03,472] [INFO] [core.whale_shield] WhaleShield: moved SL to breakeven on AXS-USDT
+[2026-05-09 23:24:15,261] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.6 BTC eq.)
+[2026-05-09 23:24:28,801] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.5 BTC eq.)
+[2026-05-09 23:24:29,567] [INFO] [core.voice_alerts] Voice alert: Внимание! Баланс ниже 50 долларов!
+[2026-05-09 23:24:42,686] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.5 BTC eq.)
+[2026-05-09 23:24:57,105] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (25.5 BTC eq.)
+[2026-05-09 23:24:58,519] [INFO] [filters.volume_profile_filter] VolumeProfile blocked BUY AVAX-USDT: price above VAH
+[2026-05-09 23:24:58,519] [INFO] [core.signal_processor] Filter VolumeProfile blocked AVAX-USDT
+[2026-05-09 23:24:59,067] [INFO] [core.whale_shield] WhaleShield: moved SL to breakeven on FIL-USDT
+[2026-05-09 23:25:00,238] [INFO] [ml.sliding_backtest] Sliding backtest completed: total score=-0.2169
+[2026-05-09 23:25:13,281] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (26.6 BTC eq.)
+[2026-05-09 23:25:21,038] [INFO] [filters.candlestick_pattern_filter] CandlestickPattern blocked SELL TRX-USDT: bullish pattern
+[2026-05-09 23:25:21,038] [INFO] [core.signal_processor] Filter CandlestickPattern blocked TRX-USDT
+[2026-05-09 23:25:27,049] [WARNING] [core.whale_shield] WhaleShield: single giant order on FIL-USDT (26.7 BTC eq.)
+[2026-05-09 23:25:38,434] [INFO] [filters.order_flow_imbalance] OrderFlowImbalance blocked BUY YFI-USDT: delta 0.40
+[2026-05-09 23:25:42,606] [INFO] [core.signal_processor] Filter OrderFlowImbalance blocked YFI-USDT
+[2026-05-09 23:25:43,451] [WARNING] [core.order_guard] OrderGuard: TP missing for AAVE-USDT SHORT, recreating TP=92.91

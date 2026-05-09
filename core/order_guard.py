@@ -11,7 +11,7 @@ from typing import Dict, Optional
 
 logger = logging.getLogger(__name__)
 
-CHECK_INTERVAL_SECONDS = 120  # уменьшено с 600 до 120 секунд для быстрой реакции
+CHECK_INTERVAL_SECONDS = 300  # уменьшено с 600 до 120 секунд для быстрой реакции
 
 
 class OrderGuard:

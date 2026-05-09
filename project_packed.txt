@@ -1,23 +1,23 @@
 === SYSTEM INFO ===
 {
-  "timestamp": "2026-05-09T17:58:54.052218+00:00",
+  "timestamp": "2026-05-09T20:28:24.671273+00:00",
   "os": "Windows-11-10.0.26100-SP0",
   "python_version": "3.12.13",
   "cpu": {
     "model": "AMD64 Family 23 Model 104 Stepping 1, AuthenticAMD",
     "cores_physical": 4,
     "cores_logical": 8,
-    "usage_percent": 9.9
+    "usage_percent": 12.2
   },
   "memory": {
     "total_gb": 11.35,
-    "available_gb": 3.98,
-    "percent_used": 64.9
+    "available_gb": 3.59,
+    "percent_used": 68.4
   },
   "disk": {
     "total_gb": 238.36,
-    "free_gb": 42.08,
-    "percent_used": 82.3
+    "free_gb": 41.7,
+    "percent_used": 82.5
   }
 }
 
@@ -127,7 +127,7 @@ top_symbols = 50
 
 [RISK]
 profile = User
-risk_per_trade = 5.9999999999999964
+risk_per_trade = 6.000000000000001
 max_leverage = 13
 use_day_profile = False
 kelly_enabled = True
@@ -1285,6 +1285,16 @@ class TradingEngine:
             logger.error(f"Initial symbol discovery failed: {e}")
         if not self.auth.demo_mode:
             self.risk_controller.peak_equity = self.portfolio._equity
+
+        # --- Native BingX Trailing Stop ---
+        if not self.auth.demo_mode:
+            try:
+                from core.trailing_stop_order import NativeBingXTrailingStop
+                self.native_trailing_stop = NativeBingXTrailingStop(self)
+                logger.info("NativeBingXTrailingStop initialized")
+            except Exception as e:
+                logger.warning(f"NativeBingXTrailingStop not initialized: {e}")
+
         logger.info("Trading engine started")
         if not self.auth.demo_mode:
             threading.Thread(target=self.risk_controller.connection_monitor, daemon=True).start()
@@ -1301,7 +1311,8 @@ class TradingEngine:
                      'backup_mgr', 'github_backup', 'voice', 'stress_test',
                      'capital_alloc', 'tf_selector', 'alert_mgr',
                      'telegram', 'discord', 'web_server', 'webhook',
-                     'bayes_opt', 'backtest', 'human_emulator', 'onchain']:
+                     'bayes_opt', 'backtest', 'human_emulator', 'onchain',
+                     'native_trailing_stop']:
             obj = getattr(self, attr, None)
             if obj is not None and hasattr(obj, 'stop'):
                 try:
@@ -1332,11 +1343,10 @@ class TradingEngine:
                 self.portfolio.available_margin = 1000.0
             else:
                 response = self.api.get_balance()
-                # v3 ответ: data – массив
                 data = response.get('data', [])
                 if not data:
                     return
-                bal = data[0]  # берём первый элемент
+                bal = data[0]
                 balance = _safe_float(bal.get('balance', 0))
                 available = _safe_float(bal.get('availableMargin', balance))
                 unrealized = _safe_float(bal.get('unrealizedProfit', 0))
@@ -1362,6 +1372,14 @@ class TradingEngine:
             self.voting.update_weights()
         except Exception as e:
             logger.error(f"Weight update error: {e}")
+
+    # ---------- Grid Strategy support ----------
+    def _grid_renew_task(self):
+        """Периодически обновляет сетки GridStrategy."""
+        if hasattr(self, 'strategies'):
+            grid_strat = self.strategies.get('GridStrategy')
+            if grid_strat and hasattr(grid_strat, 'check_grids'):
+                grid_strat.check_grids()
 
     # ---------- колбэки ----------
     def _on_watchdog_restart(self):
@@ -1567,6 +1585,9 @@ def init_components(engine):
     engine.scheduler.register_task('equity_update', 60, engine._equity_update_task, enabled=True)
     engine.scheduler.register_task('position_sync', 30, engine._sync_positions_task, enabled=True)
     engine.scheduler.register_task('watchdog_heartbeat', 10, engine._heartbeat_task, enabled=True)
+
+    # Периодическое обновление сеток GridStrategy
+    engine.scheduler.register_task('grid_renew', 3600, engine._grid_renew_task, enabled=True)
 
 
 def load_all_modules(engine):
@@ -4628,9 +4649,21 @@ class PositionSyncManager:
                     if existing.margin > 0:
                         existing.pnl_pct = (unrealized / existing.margin) * 100
 
+                    # ---------- Адаптивный трейлинг стоп ----------
                     if current_price > 0 and existing.sl_price is not None:
                         if self.engine.trailing_sl_enabled:
-                            self.engine.executor.apply_trailing_stop(existing, current_price)
+                            # Используем новый адаптивный трейлинг вместо старого процентного
+                            if not hasattr(self.engine, 'adaptive_trailing_stop'):
+                                from core.adaptive_trailing_stop import AdaptiveTrailingStop
+                                self.engine.adaptive_trailing_stop = AdaptiveTrailingStop(self.engine)
+                            updated = self.engine.adaptive_trailing_stop.update(existing, current_price)
+                            if updated:
+                                # Если стоп изменился, синхронизируем ордер с биржей
+                                self._sync_tpsl_orders(
+                                    symbol, pos_side, existing.quantity,
+                                    existing.tp_price, existing.sl_price
+                                )
+
                         if self.engine.breakeven_enabled:
                             atr = self.engine._get_current_atr(symbol)
                             self.engine.executor.apply_breakeven(existing, current_price, atr)
@@ -5546,7 +5579,7 @@ class WhaleShield:
 {
   "daily_pnl": 0.0,
   "last_day": 6,
-  "updated": "2026-05-09T16:49:45.976268+00:00"
+  "updated": "2026-05-09T20:28:21.819906+00:00"
 }
 === END FILE: data\engine_state.json ===
 
@@ -5591,18 +5624,7 @@ class WhaleShield:
     "disabled_reason": null
   },
   "Ichimoku": {
-    "weight": 0.1883940410656164,
-    "trades": 1,
-    "wins": 0,
-    "total_pnl": 0.0,
-    "avg_pnl": 0.0,
-    "winrate": 0.0,
-    "consecutive_losses": 1,
-    "disabled": false,
-    "disabled_reason": null
-  },
-  "MeanReversion": {
-    "weight": 1.5151167044458875,
+    "weight": 0.3716599027604772,
     "trades": 2,
     "wins": 0,
     "total_pnl": 0.0,
@@ -5612,26 +5634,37 @@ class WhaleShield:
     "disabled": false,
     "disabled_reason": null
   },
-  "Momentum": {
-    "weight": 1.2,
-    "trades": 29,
+  "MeanReversion": {
+    "weight": 1.3826525479135223,
+    "trades": 3,
     "wins": 0,
     "total_pnl": 0.0,
     "avg_pnl": 0.0,
     "winrate": 0.0,
-    "consecutive_losses": 11,
+    "consecutive_losses": 3,
+    "disabled": false,
+    "disabled_reason": null
+  },
+  "Momentum": {
+    "weight": 1.2,
+    "trades": 30,
+    "wins": 0,
+    "total_pnl": 0.0,
+    "avg_pnl": 0.0,
+    "winrate": 0.0,
+    "consecutive_losses": 12,
     "disabled": true,
     "disabled_reason": "winrate 0.0% < 40%",
     "disabled_at": 1778282113.5879831
   },
   "RSIDivergence": {
-    "weight": 0.6446243663799104,
-    "trades": 1,
+    "weight": 0.7022898320360597,
+    "trades": 3,
     "wins": 0,
     "total_pnl": 0.0,
     "avg_pnl": 0.0,
     "winrate": 0.0,
-    "consecutive_losses": 1,
+    "consecutive_losses": 3,
     "disabled": false,
     "disabled_reason": null
   },
@@ -5647,7 +5680,7 @@ class WhaleShield:
     "disabled_reason": null
   },
   "TrendFollowing": {
-    "weight": 1.6650534731558484,
+    "weight": 1.635273453514035,
     "trades": 0,
     "wins": 0,
     "total_pnl": 0.0,
@@ -5658,7 +5691,7 @@ class WhaleShield:
     "disabled_reason": null
   },
   "SmartPyramiding": {
-    "weight": 0.9583063355268733,
+    "weight": 0.9403751121856688,
     "trades": 6,
     "wins": 0,
     "total_pnl": 0.0,
@@ -5681,7 +5714,7 @@ class WhaleShield:
     "disabled_reason": null
   },
   "Range": {
-    "weight": 1.086098978594126,
+    "weight": 0.9319186383089304,
     "trades": 0,
     "wins": 0,
     "total_pnl": 0.0,
@@ -5726,13 +5759,35 @@ class WhaleShield:
     "disabled_at": 1778337047.2596035
   },
   "SuperTrendSwing": {
-    "weight": 0.5560550018908939,
+    "weight": 0.9120586862276552,
     "trades": 1,
     "wins": 0,
     "total_pnl": 0.0,
     "avg_pnl": 0.0,
     "winrate": 0.0,
     "consecutive_losses": 1,
+    "disabled": false,
+    "disabled_reason": null
+  },
+  "GridStrategy": {
+    "weight": 0.8,
+    "trades": 0,
+    "wins": 0,
+    "total_pnl": 0.0,
+    "avg_pnl": 0.0,
+    "winrate": 0.0,
+    "consecutive_losses": 0,
+    "disabled": false,
+    "disabled_reason": null
+  },
+  "TurtleTrading": {
+    "weight": 1.3265306122448979,
+    "trades": 0,
+    "wins": 0,
+    "total_pnl": 0.0,
+    "avg_pnl": 0.0,
+    "winrate": 0.0,
+    "consecutive_losses": 0,
     "disabled": false,
     "disabled_reason": null
   }
@@ -6309,130 +6364,6 @@ class CooldownFilter(BaseFilter):
         return signal.confidence
 
 === END FILE: filters\base.py ===
-
-=== BEGIN FILE: filters\candlestick_filter.py ===
-"""
-Candlestick pattern filter – анализирует свечные модели и подтверждает/отклоняет сигналы.
-Поддерживаемые паттерны: Поглощение, Молот / Падающая звезда, Доджи.
-"""
-import logging
-from filters.base import BaseFilter
-from strategies.base import Signal
-
-logger = logging.getLogger(__name__)
-
-class CandlestickPatternFilter(BaseFilter):
-    NAME = "CandlestickPattern"
-    DESCRIPTION = "Фильтр по свечным паттернам (Поглощение, Молот, Доджи и др.)"
-    PRIORITY = 13
-    PARAMS = {
-        'enabled': True,
-        'timeframe': '1h',
-        'use_engulfing': True,      # Поглощение (бычье / медвежье)
-        'use_hammer': True,         # Молот (бычий разворот) / Падающая звезда
-        'use_doji': True,           # Доджи (неопределённость – может снижать уверенность)
-        'min_body_ratio': 0.3,      # Минимальное отношение тела свечи к диапазону для Поглощения
-        'hammer_wick_ratio': 2.0,   # Отношение нижней тени к телу для Молота
-    }
-
-    def assess(self, signal: Signal, data: dict) -> float:
-        if not self.enabled:
-            return signal.confidence
-
-        candle_data = data.get('candle_data')
-        if not candle_data:
-            return signal.confidence
-
-        tf = self.config['timeframe']
-        df = candle_data.get(tf)
-        if df is None or len(df) < 2:
-            return signal.confidence
-
-        # Последние две свечи
-        prev = df.iloc[-2]
-        curr = df.iloc[-1]
-
-        bullish = False
-        bearish = False
-        neutral = False   # Доджи – сигнал неопределённости
-
-        # --- Поглощение ---
-        if self.config['use_engulfing']:
-            body_prev = abs(prev['close'] - prev['open'])
-            body_curr = abs(curr['close'] - curr['open'])
-            range_prev = prev['high'] - prev['low']
-            range_curr = curr['high'] - curr['low']
-            if range_prev > 0 and range_curr > 0:
-                body_ratio_prev = body_prev / range_prev
-                body_ratio_curr = body_curr / range_curr
-                min_ratio = self.config['min_body_ratio']
-
-                # Бычье поглощение
-                if (prev['close'] < prev['open'] and curr['close'] > curr['open'] and
-                    body_ratio_prev >= min_ratio and body_ratio_curr >= min_ratio and
-                    curr['open'] <= prev['close'] and curr['close'] >= prev['open']):
-                    bullish = True
-                    logger.debug(f"Bullish Engulfing on {signal.symbol} {tf}")
-
-                # Медвежье поглощение
-                if (prev['close'] > prev['open'] and curr['close'] < curr['open'] and
-                    body_ratio_prev >= min_ratio and body_ratio_curr >= min_ratio and
-                    curr['open'] >= prev['close'] and curr['close'] <= prev['open']):
-                    bearish = True
-                    logger.debug(f"Bearish Engulfing on {signal.symbol} {tf}")
-
-        # --- Молот / Падающая звезда ---
-        if self.config['use_hammer']:
-            body = abs(curr['close'] - curr['open'])
-            lower_wick = min(curr['open'], curr['close']) - curr['low']
-            upper_wick = curr['high'] - max(curr['open'], curr['close'])
-            wick_ratio = self.config['hammer_wick_ratio']
-            total_range = curr['high'] - curr['low']
-
-            if total_range > 0 and body > 0:
-                # Молот (бычий разворот): длинная нижняя тень, маленькое тело внизу
-                if (lower_wick >= wick_ratio * body and upper_wick <= 0.5 * body and
-                    curr['close'] > curr['open']):
-                    bullish = True
-                    logger.debug(f"Hammer on {signal.symbol} {tf}")
-
-                # Падающая звезда (медвежий разворот): длинная верхняя тень, маленькое тело вверху
-                if (upper_wick >= wick_ratio * body and lower_wick <= 0.5 * body and
-                    curr['close'] < curr['open']):
-                    bearish = True
-                    logger.debug(f"Shooting Star on {signal.symbol} {tf}")
-
-        # --- Доджи ---
-        if self.config['use_doji']:
-            body = abs(curr['close'] - curr['open'])
-            total_range = curr['high'] - curr['low']
-            if total_range > 0 and body / total_range < 0.1:
-                neutral = True
-                logger.debug(f"Doji on {signal.symbol} {tf}")
-
-        # Принятие решения
-        if signal.action == 'BUY':
-            if bearish:
-                logger.info(f"CandlestickPattern blocked BUY {signal.symbol}: bearish pattern")
-                return 0.0
-            if neutral:
-                # Доджи снижает уверенность
-                return signal.confidence * 0.7
-            if bullish:
-                return min(1.0, signal.confidence * 1.15)
-        elif signal.action == 'SELL':
-            if bullish:
-                logger.info(f"CandlestickPattern blocked SELL {signal.symbol}: bullish pattern")
-                return 0.0
-            if neutral:
-                return signal.confidence * 0.7
-            if bearish:
-                return min(1.0, signal.confidence * 1.15)
-
-        # Нет явного паттерна – небольшой штраф
-        return signal.confidence * 0.9
-
-=== END FILE: filters\candlestick_filter.py ===
 
 === BEGIN FILE: filters\candlestick_pattern_filter.py ===
 """
@@ -8228,6 +8159,10 @@ class VolumeProfile(BaseIndicator):
         return {'poc': max_vol_bin, 'profile': vol_profile}
 
 === END FILE: indicators\volume_profile.py ===
+
+=== BEGIN FILE: logs.txt ===
+
+=== END FILE: logs.txt ===
 
 === BEGIN FILE: main.py ===
 """BingX Trading Bot v2.0 – Main Entry Point (ALL MODULES ACTIVE)."""
@@ -10414,13 +10349,14 @@ class WalkForwardOptimizer:
 === END FILE: reporters\__init__.py ===
 
 === BEGIN FILE: requirements.txt ===
+numpy==1.26.4
+pandas==2.2.3
+matplotlib==3.8.3
 requests>=2.31.0
-numpy>=1.24.0
-pandas>=2.0.0
 PyQt5>=5.15.0
 pyqtgraph>=0.13.0
 psutil>=5.9.0
-
+scikit-optimize>=0.9.0
 === END FILE: requirements.txt ===
 
 === BEGIN FILE: rollback_from_github.py ===
@@ -14579,14 +14515,14 @@ class QuickSetupDialog(QDialog):
 === END FILE: ui\quick_setup_wizard.py ===
 
 === BEGIN FILE: ui\settings.py ===
-"""Settings tab: API keys, risk, strategies/indicators/filters, Moonshot configuration."""
+"""Settings tab: API keys, risk, strategies/indicators/filters, Moonshot, PRESETS."""
 import logging
 from configparser import ConfigParser
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
     QComboBox, QCheckBox, QGroupBox, QFormLayout, QMessageBox,
     QSpinBox, QDoubleSpinBox, QFileDialog, QScrollArea, QFrame,
-    QDialog, QDialogButtonBox
+    QDialog, QDialogButtonBox, QInputDialog
 )
 from PyQt5.QtCore import Qt
 
@@ -14839,6 +14775,20 @@ class SettingsTab(QWidget):
         moonshot_layout.addRow("Scan Interval:", self.moonshot_scan)
         content_layout.addWidget(moonshot_group)
 
+        # === PRESETS ===
+        presets_group = QGroupBox("Configuration Presets")
+        presets_layout = QHBoxLayout(presets_group)
+        self.btn_save_preset = QPushButton("Save Preset As…")
+        self.btn_save_preset.clicked.connect(self._save_preset)
+        presets_layout.addWidget(self.btn_save_preset)
+        self.btn_load_preset = QPushButton("Load Preset")
+        self.btn_load_preset.clicked.connect(self._load_preset)
+        presets_layout.addWidget(self.btn_load_preset)
+        self.btn_delete_preset = QPushButton("Delete Preset")
+        self.btn_delete_preset.clicked.connect(self._delete_preset)
+        presets_layout.addWidget(self.btn_delete_preset)
+        content_layout.addWidget(presets_group)
+
         # === Strategies ===
         strat_group = QGroupBox("Strategies")
         strat_layout = QVBoxLayout(strat_group)
@@ -14986,6 +14936,62 @@ class SettingsTab(QWidget):
         logger.info("Settings loaded from engine into UI")
         self._log_current_state()
 
+    # ---------- PRESET METHODS ----------
+    def _save_preset(self):
+        name, ok = QInputDialog.getText(self, "Save Preset", "Preset name:")
+        if not ok or not name.strip():
+            return
+        name = name.strip()
+        try:
+            from core.preset_manager import PresetManager
+            pm = PresetManager(self.engine)
+            if pm.save_preset(name):
+                QMessageBox.information(self, "Saved", f"Preset '{name}' saved successfully.")
+            else:
+                QMessageBox.warning(self, "Error", "Could not save preset.")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to save preset: {e}")
+
+    def _load_preset(self):
+        try:
+            from core.preset_manager import PresetManager
+            pm = PresetManager(self.engine)
+            presets = pm.list_presets()
+            if not presets:
+                QMessageBox.information(self, "No Presets", "No saved presets found.")
+                return
+            name, ok = QInputDialog.getItem(self, "Load Preset", "Select preset:", presets, 0, False)
+            if ok and name:
+                if pm.load_preset(name):
+                    QMessageBox.information(self, "Loaded", f"Preset '{name}' loaded successfully.")
+                    # Обновить UI в соответствии с новыми настройками
+                    self._load_settings()
+                else:
+                    QMessageBox.warning(self, "Error", f"Failed to load preset '{name}'.")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to load preset: {e}")
+
+    def _delete_preset(self):
+        try:
+            from core.preset_manager import PresetManager
+            pm = PresetManager(self.engine)
+            presets = pm.list_presets()
+            if not presets:
+                QMessageBox.information(self, "No Presets", "No saved presets found.")
+                return
+            name, ok = QInputDialog.getItem(self, "Delete Preset", "Select preset to delete:", presets, 0, False)
+            if ok and name:
+                reply = QMessageBox.question(self, "Delete", f"Delete preset '{name}'?",
+                                             QMessageBox.Yes | QMessageBox.No)
+                if reply == QMessageBox.Yes:
+                    if pm.delete_preset(name):
+                        QMessageBox.information(self, "Deleted", f"Preset '{name}' deleted.")
+                    else:
+                        QMessageBox.warning(self, "Error", f"Could not delete preset '{name}'.")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to delete preset: {e}")
+
+    # ---------- ОСТАЛЬНЫЕ МЕТОДЫ (БЕЗ ИЗМЕНЕНИЙ) ----------
     def _save_keys(self):
         key = self.api_key_input.text().strip()
         secret = self.api_secret_input.text().strip()
@@ -15052,7 +15058,6 @@ class SettingsTab(QWidget):
                 QMessageBox.warning(self, "Error", "Failed to export trades")
 
     def _refresh_balance(self):
-        """Принудительно запрашивает баланс с биржи и обновляет информацию в движке."""
         if self.engine.auth.demo_mode:
             QMessageBox.information(self, "Refresh Balance", "Демо‑режим: баланс не обновляется с биржи.")
             return
@@ -15064,14 +15069,12 @@ class SettingsTab(QWidget):
 
     def _save_settings(self):
         try:
-            # Main params
             self.engine.max_positions = self.max_positions.value()
             self.engine.scan_interval = self.scan_interval.value()
             self.engine.signal_threshold = self.signal_threshold.value()
             self.engine.timeframes = self.timeframes.text().split(',')
             self.engine.top_n_symbols = self.top_symbols.value()
 
-            # Risk manager
             risk_pct = self.risk_per_trade.value()
             leverage = self.max_leverage.value()
             profile = self.risk_profile.currentText()
@@ -15091,7 +15094,6 @@ class SettingsTab(QWidget):
             self.engine.risk_manager._kelly_winrate = self.kelly_winrate.value()
             self.engine.risk_manager._kelly_avg_win_loss_ratio = self.kelly_avg_win_loss.value()
 
-            # Trading
             self.engine.trailing_sl_enabled = self.trailing_sl.isChecked()
             self.engine.trailing_distance_pct = self.trailing_distance.value()
             self.engine.partial_close_enabled = self.partial_close.isChecked()
@@ -15100,7 +15102,6 @@ class SettingsTab(QWidget):
             self.engine.breakeven_atr_mult = self.breakeven_atr_mult.value()
             self.engine.slippage_timeout_sec = self.slippage_timeout.value()
 
-            # Moonshot
             if hasattr(self.engine, 'moonshot') and self.engine.moonshot:
                 self.engine.moonshot.capital_pct = self.moonshot_capital_pct.value()
                 self.engine.moonshot.max_risk_pct = self.moonshot_max_risk_pct.value()
@@ -15110,24 +15111,19 @@ class SettingsTab(QWidget):
                     self.engine.moonshot.start()
                 logger.info("Moonshot parameters updated")
 
-            # Save filter params to config.ini
             try:
                 cfg = ConfigParser()
                 cfg.read('config.ini')
-
                 if not cfg.has_section('FILTERS'):
                     cfg.add_section('FILTERS')
-
                 volume_surge = self.engine.filters.get('VolumeSurgeFilter')
                 if volume_surge:
                     val = volume_surge.config.get('min_volume_mult', 1.5)
                     cfg.set('FILTERS', 'volume_surge_min_mult', str(val))
-
                 liquidity = self.engine.filters.get('LiquidityFilter')
                 if liquidity:
                     val = liquidity.config.get('min_volume_ratio', 0.3)
                     cfg.set('FILTERS', 'liquidity_min_ratio', str(val))
-
                 with open('config.ini', 'w') as f:
                     cfg.write(f)
                 logger.info("Filter parameters saved to config.ini")
@@ -15136,24 +15132,19 @@ class SettingsTab(QWidget):
 
             self.engine.risk_manager._save_state()
             self.engine._save_config()
-
             QMessageBox.information(self, "Success", "Settings saved to config.ini")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Save failed: {e}")
         finally:
-            # Детальное логирование всех сохранённых настроек
             self._log_current_state()
 
     def _log_current_state(self):
-        """Выводит в лог все текущие настройки бота."""
         logger.info("=== CURRENT BOT SETTINGS ===")
-        # Engine
         logger.info(f"Engine: max_positions={self.engine.max_positions}, "
                     f"scan_interval={self.engine.scan_interval}s, "
                     f"signal_threshold={self.engine.signal_threshold}, "
                     f"timeframes={self.engine.timeframes}, "
                     f"top_symbols={self.engine.top_n_symbols}")
-        # Risk Manager
         rm = self.engine.risk_manager
         logger.info(f"Risk: profile={self.risk_profile.currentText()}, "
                     f"risk_per_trade={rm.risk_per_trade_pct}%, "
@@ -15163,7 +15154,6 @@ class SettingsTab(QWidget):
                     f"kelly_enabled={rm._kelly_enabled}, "
                     f"kelly_winrate={rm._kelly_winrate}, "
                     f"kelly_avg_win_loss={rm._kelly_avg_win_loss_ratio}")
-        # Trading
         logger.info(f"Trading: trailing_sl={self.engine.trailing_sl_enabled} "
                     f"({self.engine.trailing_distance_pct}%), "
                     f"partial_close={self.engine.partial_close_enabled} "
@@ -15172,19 +15162,16 @@ class SettingsTab(QWidget):
                     f"(ATR mult={self.engine.breakeven_atr_mult}), "
                     f"slippage_timeout={self.engine.slippage_timeout_sec}s, "
                     f"reinvest={self.engine.reinvest_profits}")
-        # Filters
         active_filters = [name for name, f in self.engine.filters.items() if f.enabled]
         disabled_filters = [name for name, f in self.engine.filters.items() if not f.enabled]
         logger.info(f"Filters active ({len(active_filters)}): {', '.join(active_filters)}")
         if disabled_filters:
             logger.info(f"Filters disabled ({len(disabled_filters)}): {', '.join(disabled_filters)}")
-        # Strategies
         active_strats = [name for name, s in self.engine.strategies.items() if s.enabled]
         disabled_strats = [name for name, s in self.engine.strategies.items() if not s.enabled]
         logger.info(f"Strategies active ({len(active_strats)}): {', '.join(active_strats)}")
         if disabled_strats:
             logger.info(f"Strategies disabled ({len(disabled_strats)}): {', '.join(disabled_strats)}")
-        # Indicators
         logger.info(f"Indicators loaded: {', '.join(self.engine.indicators.keys())}")
         logger.info("=== END BOT SETTINGS ===")
 
