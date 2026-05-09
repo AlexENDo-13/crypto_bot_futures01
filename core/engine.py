@@ -31,7 +31,6 @@ from core.signal_processor import SignalProcessor
 from core.trailing_tp import TrailingTakeProfit
 from core.sound_manager import SoundManager
 
-# Новые модули рефакторинга
 from core.engine_config import load_config, save_config
 from core.engine_state import load_state, save_state, load_blacklist, save_blacklist
 from core.engine_data import (
@@ -42,6 +41,14 @@ from core.engine_scan import market_scan_task
 from core.engine_components import init_components as engine_init_components, load_all_modules as engine_load_all_modules
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_float(value, default=0.0):
+    """Преобразует значение в float, даже если пришла строка."""
+    try:
+        return float(value)
+    except (ValueError, TypeError):
+        return default
 
 
 class TradingEngine:
@@ -84,7 +91,6 @@ class TradingEngine:
         self._strategy_pnl: Dict[str, List[float]] = {}
         self._start_time: Optional[datetime] = None
 
-        # Параметры по умолчанию
         self.scan_interval = 60
         self.signal_threshold = 0.5
         self.max_positions = 8
@@ -100,17 +106,14 @@ class TradingEngine:
         self.slippage_timeout_sec = 10.0
         self.reinvest_profits = True
 
-        # Внешние модули
         self.adaptive_threshold = None
         self.micro_lot_filter = None
 
-        # Загружаем конфиг и состояние
         load_config(self)
         self._init_components()
         self._load_blacklist()
         self._load_state()
 
-    # ---------- инициализация и конфигурация ----------
     def _init_components(self):
         engine_init_components(self)
 
@@ -151,7 +154,6 @@ class TradingEngine:
         self.watchdog.start()
         self.risk_manager.apply_day_profile()
 
-        # Защита депозита
         balance = self.portfolio._balance or 0
         self.risk_manager.check_low_balance(balance)
 
@@ -174,7 +176,6 @@ class TradingEngine:
         self.watchdog.stop()
         self._save_state()
 
-        # Остановка всех дополнительных модулей
         for attr in ['adaptive_threshold', 'moonshot', 'order_guard', 'whale_shield',
                      'backup_mgr', 'github_backup', 'voice', 'stress_test',
                      'capital_alloc', 'tf_selector', 'alert_mgr',
@@ -209,17 +210,17 @@ class TradingEngine:
                 self.portfolio.update_equity(1000.0, 0.0)
                 self.portfolio.available_margin = 1000.0
             else:
-                bal = self.api.get_balance().get('data', {}).get('balance', {})
-                balance = float(bal.get('balance', 0))
-                available = float(bal.get('availableMargin', balance))
-                unrealized = float(bal.get('unrealizedProfit', 0))
+                response = self.api.get_balance()
+                bal = response.get('data', {}).get('balance', {})
+                # Безопасное преобразование – строки превращаются в float
+                balance = _safe_float(bal.get('balance', 0))
+                available = _safe_float(bal.get('availableMargin', balance))
+                unrealized = _safe_float(bal.get('unrealizedProfit', 0))
                 self.portfolio.update_equity(balance, unrealized)
                 self.portfolio.available_margin = available
                 self.risk_controller.update_drawdown(self.portfolio._equity)
                 self.risk_controller.check_daily_limits()
-                # === Адаптивная корректировка риска ===
                 self.risk_manager.adapt_to_market(self)
-                # Hard stop при критически низком балансе (< 15 USDT)
                 if balance < 15.0 and not self._paused:
                     logger.critical(f"Balance critically low ({balance:.2f} USDT) – pausing trading")
                     self._paused = True
@@ -314,7 +315,7 @@ class TradingEngine:
                 positions = self.api.get_positions(symbol)
                 pos = next((p for p in positions if p.get('positionSide') == side), None)
                 if pos:
-                    new_qty = abs(float(pos.get('positionAmt', 0)))
+                    new_qty = abs(_safe_float(pos.get('positionAmt', 0)))
                     local_pos = next((p for p in self.portfolio.get_positions()
                                       if p.symbol == symbol and p.side == side), None)
                     if local_pos:

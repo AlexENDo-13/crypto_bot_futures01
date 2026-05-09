@@ -45,12 +45,12 @@
   },
   "Momentum": {
     "weight": 1.2,
-    "trades": 20,
+    "trades": 21,
     "wins": 0,
     "total_pnl": 0.0,
     "avg_pnl": 0.0,
     "winrate": 0.0,
-    "consecutive_losses": 2,
+    "consecutive_losses": 3,
     "disabled": true,
     "disabled_reason": "winrate 0.0% < 40%",
     "disabled_at": 1778282113.5879831
@@ -78,7 +78,7 @@
     "disabled_reason": null
   },
   "TrendFollowing": {
-    "weight": 1.5050545977702894,
+    "weight": 1.5051131560993627,
     "trades": 0,
     "wins": 0,
     "total_pnl": 0.0,
