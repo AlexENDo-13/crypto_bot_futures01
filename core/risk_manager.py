@@ -1,6 +1,5 @@
 """
 Risk Management: dynamic position sizing, adaptive leverage, SmartTurbo.
-Now with real-time market adaptation, correlation awareness, and performance-based auto-tuning.
 """
 import logging, json, os, time
 from datetime import datetime, timezone
@@ -19,7 +18,6 @@ class RiskManager:
 
     def __init__(self, engine=None):
         self.engine = engine
-        # Базовые параметры
         self.risk_per_trade_pct = 2.0
         self.max_leverage = 3
         self.max_positions = 3
@@ -49,11 +47,10 @@ class RiskManager:
         self._last_adaptation_time = 0
         self._adaptation_interval = 300
 
-        # Пользовательские максимумы
+        # Пользовательские максимумы (потолки)
         self._user_max_positions: Optional[int] = None
         self._user_risk_pct: Optional[float] = None
         self._user_max_leverage: Optional[int] = None
-        self._user_profile_locked = False   # если True – ночной режим не трогает риск
 
         # Профили
         self._profiles = {
@@ -82,30 +79,114 @@ class RiskManager:
         logger.info(f"Risk profile switched to: {profile} (risk={self.risk_per_trade_pct}%, lev={self.max_leverage}, pos={self.max_positions})")
 
     def set_user_limits(self, risk_pct: float, max_lev: int, max_pos: int):
-        """Сохраняет пользовательские лимиты и фиксирует профиль."""
+        """Сохраняет пользовательские лимиты как максимальные границы для адаптации."""
         self._user_risk_pct = risk_pct
         self._user_max_leverage = max_lev
         self._user_max_positions = max_pos
-        self._user_profile_locked = True
         self._current_profile = 'User'
         self.risk_per_trade_pct = risk_pct
         self.max_leverage = max_lev
         if self.engine:
             self.engine.max_positions = max_pos
-        logger.info(f"User limits set: risk={risk_pct}%, leverage={max_lev}, positions={max_pos}")
+        logger.info(f"User caps set: risk≤{risk_pct}%, leverage≤{max_lev}, positions≤{max_pos}")
 
     # ---------- Адаптация ----------
     def adapt_to_market(self, engine):
-        pass
+        if not engine or not self.adaptive_risk_enabled:
+            return
+        now = time.time()
+        if now - self._last_adaptation_time < self._adaptation_interval:
+            return
+        self._last_adaptation_time = now
 
-    # ---------- Ночной режим (не трогает User) ----------
+        regime = engine.regime_detector.get_current_regime().value
+        winrate, pf = self._calculate_recent_stats()
+        dd_pct = engine.portfolio.get_stats().get('current_drawdown_pct', 0)
+
+        dyn_risk, dyn_lev, dyn_pos = self._calculate_dynamic_parameters(regime, winrate, pf, dd_pct)
+
+        # Применяем пользовательские потолки, если они заданы
+        if self._user_risk_pct is not None:
+            dyn_risk = min(dyn_risk, self._user_risk_pct)
+        if self._user_max_leverage is not None:
+            dyn_lev = min(dyn_lev, self._user_max_leverage)
+        if self._user_max_positions is not None:
+            dyn_pos = min(dyn_pos, self._user_max_positions)
+
+        self.risk_per_trade_pct = dyn_risk
+        self.max_leverage = dyn_lev
+        if engine.max_positions != dyn_pos:
+            engine.max_positions = dyn_pos
+        logger.debug(f"Dynamic (capped) risk={dyn_risk:.2f}%, lev={dyn_lev}, pos={dyn_pos}")
+
+        self._adapt_atr_multipliers(regime, winrate)
+
+    def _calculate_dynamic_parameters(self, regime, winrate, profit_factor, dd_pct):
+        base = self._profiles.get('Adaptive', self._profiles['SmartTurbo'])
+        vol_factor = 1.0
+        if self.engine and self.engine._candle_data:
+            vols = []
+            for sym in list(self.engine._candle_data.keys())[:5]:
+                atr = self.engine._get_current_atr(sym)
+                price = self.engine._get_current_price(sym)
+                if price > 0:
+                    vols.append(atr / price)
+            if vols:
+                avg_vol = np.mean(vols)
+                if avg_vol > 0.05: vol_factor = 0.5
+                elif avg_vol > 0.03: vol_factor = 0.7
+                elif avg_vol < 0.005: vol_factor = 1.2
+
+        wr_factor = 1.0
+        if len(self._trade_pnls) >= 5:
+            if winrate < 0.35: wr_factor = 0.5
+            elif winrate < 0.45: wr_factor = 0.8
+            elif winrate > 0.6: wr_factor = 1.2
+
+        dd_factor = 1.0
+        if dd_pct > 5: dd_factor = 0.5
+        elif dd_pct > 2: dd_factor = 0.8
+
+        risk = base['risk_pct'] * vol_factor * wr_factor * dd_factor
+        risk = max(0.5, min(5.0, risk))
+        lev = int(base['max_lev'] * vol_factor)
+        lev = max(1, min(5, lev))
+        pos = max(1, min(5, base['max_pos']))
+        return risk, lev, pos
+
+    def _calculate_recent_stats(self):
+        if len(self._trade_pnls) < 5:
+            return 0.5, 1.0
+        wins = sum(1 for p in self._trade_pnls if p > 0)
+        winrate = wins / len(self._trade_pnls)
+        avg_win = np.mean([p for p in self._trade_pnls if p > 0]) if wins else 1
+        losses = [abs(p) for p in self._trade_pnls if p <= 0]
+        avg_loss = np.mean(losses) if losses else 1
+        profit_factor = avg_win / avg_loss if avg_loss else 2.0
+        return winrate, profit_factor
+
+    def _adapt_atr_multipliers(self, regime, winrate):
+        base = self._atr_multipliers.get('__default__', (DEFAULT_ATR_MULT_SL, DEFAULT_ATR_MULT_TP))
+        if winrate > 0.6:
+            new_sl = max(1.0, base[0] * 0.9)
+            new_tp = base[1] * 1.1
+        elif winrate < 0.4:
+            new_sl = base[0] * 1.2
+            new_tp = max(1.5, base[1] * 0.9)
+        else:
+            new_sl, new_tp = base
+        self._atr_multipliers['__default__'] = {'sl': round(new_sl,2), 'tp': round(new_tp,2)}
+
+    # ---------- Ночной режим (не снижает риск для User) ----------
     def set_night_mode(self, enabled: bool):
         self._night_mode = enabled
-        if enabled and not self._user_profile_locked:
+        if self._current_profile == 'User':
+            return  # User сам управляет риском
+        if enabled:
             self.risk_per_trade_pct *= 0.5
             self.max_leverage = max(1, self.max_leverage - 1)
             logger.info("Night mode risk reduction applied")
-        elif not enabled and not self._user_profile_locked:
+        else:
             self.set_profile(self._current_profile)
 
     # ---------- Расчёт SL/TP и размера позиции ----------
@@ -116,7 +197,6 @@ class RiskManager:
             distance = max(atr * sl_mult, min_sl_distance)
             sl = entry_price - distance
             tp = entry_price + atr * tp_mult
-            # Защита от отрицательных / некорректных уровней
             if sl <= 0 or sl >= entry_price:
                 sl = entry_price * 0.98
             if tp <= 0 or tp <= entry_price:
@@ -130,7 +210,6 @@ class RiskManager:
             if tp <= 0 or tp >= entry_price:
                 tp = entry_price * 0.98
 
-        # Финальная проверка соотношения SL/TP
         if side == 'BUY':
             if sl >= tp:
                 sl = tp * 0.99

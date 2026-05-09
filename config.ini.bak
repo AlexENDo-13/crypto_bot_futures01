@@ -3,11 +3,11 @@ api_key =
 api_secret = 
 
 [ENGINE]
-scan_interval = 90
-signal_threshold = 0.45
+scan_interval = 60
+signal_threshold = 0.4
 max_positions = 5
 timeframes = 15m,1h,4h,1d
-top_symbols = 30
+top_symbols = 50
 
 [RISK]
 profile = User
@@ -25,17 +25,17 @@ exit_threshold = 500.0
 min_risk_pct = 1.5
 max_risk_pct = 6.0
 min_leverage = 1
-max_leverage = 5
+max_leverage = 10
 aggression = 0.8
 
 [TRADING]
 partial_close = True
 trailing_sl = True
-trailing_distance_pct = 0.7
+trailing_distance_pct = 0.5
 partial_close_pct = 30.0
 breakeven = True
-breakeven_atr_mult = 1.2
-slippage_timeout = 10.0
+breakeven_atr_mult = 1.0
+slippage_timeout = 15.0
 reinvest_profits = True
 
 [MOONSHOT]
@@ -44,8 +44,8 @@ max_risk_pct = 0.0
 scan_interval = 300
 
 [FILTERS]
-volume_surge_min_mult = 0.6
-liquidity_min_ratio = 0.4
+volume_surge_min_mult = 0.3
+liquidity_min_ratio = 0.3
 
 [WHALE]
 enabled = true
@@ -101,33 +101,33 @@ metric = sharpe
 [HUMAN]
 ua_rotation = true
 ua_rotation_interval_minutes = 45
-interface_delay_min = 0.3
-interface_delay_max = 1.2
-scan_jitter_min = 5
-scan_jitter_max = 30
-portfolio_check_jitter_min = 10
-portfolio_check_jitter_max = 60
+interface_delay_min = 0.1
+interface_delay_max = 0.5
+scan_jitter_min = 3
+scan_jitter_max = 10
+portfolio_check_jitter_min = 5
+portfolio_check_jitter_max = 20
 tf_randomization = true
 tf_pool = 15m,1h,4h,1d
 tf_min_count = 2
 tf_max_count = 4
-api_thinking_min = 0.05
-api_thinking_max = 0.4
+api_thinking_min = 0.02
+api_thinking_max = 0.2
 api_thinking_clusters = true
 weekend_mode = true
 idle_mode = true
-idle_skip_chance = 0.10
-idle_cancel_chance = 0.05
+idle_skip_chance = 0.05
+idle_cancel_chance = 0.02
 split_entry_enabled = true
 split_parts_min = 2
 split_parts_max = 4
-split_delay_min = 5.0
-split_delay_max = 30.0
+split_delay_min = 3.0
+split_delay_max = 15.0
 tweak_tpsl_enabled = true
 tweak_percent = 0.001
 random_cancel_enabled = true
 random_cancel_probability = 0.02
-check_frequency_day = 2
+check_frequency_day = 3
 check_frequency_night = 1
 check_frequency_weekend = 1
 gradual_tweak_enabled = true

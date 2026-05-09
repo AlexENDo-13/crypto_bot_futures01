@@ -1,7 +1,7 @@
 """
 BingX Perpetual Futures (Swap v2/v3) API client.
-Исправлено: все параметры передаются в URL, тело запроса всегда пустое.
-Баланс запрашивается по v3, ответ приходит массивом.
+Исправлено: POST/DELETE – параметры в JSON-теле, GET – в URL.
+Баланс v3.
 """
 import hmac
 import hashlib
@@ -46,7 +46,6 @@ class RateLimiter:
 class BingXAPI:
     BASE_URL = "https://open-api.bingx.com"
 
-    # v3 для баланса
     BALANCE = "/openApi/swap/v3/user/balance"
     POSITIONS = "/openApi/swap/v2/user/positions"
     ORDER = "/openApi/swap/v2/trade/order"
@@ -88,17 +87,16 @@ class BingXAPI:
                 signature = self._sign_params(params)
                 params['signature'] = signature
 
-                # Все параметры – в URL, тело всегда пустое (кроме GET, где тело не передаётся)
-                url = f"{self.BASE_URL}{endpoint}?{urlencode(params)}"
+                url = f"{self.BASE_URL}{endpoint}"
                 headers = {"X-BX-APIKEY": self.auth.api_key}
 
                 if method.upper() == 'GET':
+                    url += f"?{urlencode(params)}"
                     response = self.session.get(url, headers=headers, timeout=15)
-                elif method.upper() == 'POST':
-                    response = self.session.post(url, headers=headers, data={}, timeout=15)
-                elif method.upper() == 'DELETE':
-                    response = self.session.delete(url, headers=headers, data={}, timeout=15)
+                elif method.upper() in ('POST', 'DELETE'):
+                    response = self.session.request(method, url, headers=headers, json=params, timeout=15)
                 else:
+                    url += f"?{urlencode(params)}"
                     response = self.session.get(url, headers=headers, timeout=15)
 
                 status_code = response.status_code
@@ -156,7 +154,6 @@ class BingXAPI:
 
     # Account
     def get_balance(self) -> Dict:
-        """Возвращает словарь с данными баланса (v3, массив)."""
         return self._request('GET', self.BALANCE)
 
     def get_positions(self, symbol: Optional[str] = None) -> List[Dict]:
