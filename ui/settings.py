@@ -479,14 +479,12 @@ class SettingsTab(QWidget):
             leverage = self.max_leverage.value()
             profile = self.risk_profile.currentText()
 
-            if profile == 'User':
-                self.engine.risk_manager.set_user_params(risk_pct, leverage)
-            else:
-                self.engine.risk_manager.risk_per_trade_pct = risk_pct
-                self.engine.risk_manager.max_leverage = leverage
-                self.engine.risk_manager.set_profile(profile)
+            # Устанавливаем параметры в риск-менеджер
+            self.engine.risk_manager.risk_per_trade_pct = risk_pct
+            self.engine.risk_manager.max_leverage = leverage
+            self.engine.risk_manager.set_profile(profile)
 
-            # Фиксируем пользовательские лимиты, чтобы адаптация не урезала ниже
+            # Фиксируем пользовательские лимиты (единый метод, работает для всех профилей)
             self.engine.risk_manager.set_user_limits(
                 risk_pct=risk_pct,
                 max_lev=leverage,

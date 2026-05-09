@@ -1,18 +1,18 @@
 === SYSTEM INFO ===
 {
-  "timestamp": "2026-05-09T01:02:32.921014+00:00",
+  "timestamp": "2026-05-09T01:16:37.986749+00:00",
   "os": "Windows-11-10.0.26100-SP0",
   "python_version": "3.12.13",
   "cpu": {
     "model": "AMD64 Family 23 Model 104 Stepping 1, AuthenticAMD",
     "cores_physical": 4,
     "cores_logical": 8,
-    "usage_percent": 15.3
+    "usage_percent": 2.0
   },
   "memory": {
     "total_gb": 11.35,
-    "available_gb": 4.27,
-    "percent_used": 62.4
+    "available_gb": 4.34,
+    "percent_used": 61.8
   },
   "disk": {
     "total_gb": 238.36,
@@ -1580,15 +1580,25 @@ def load_config(engine):
 
         # --- RISK --------------------------------------------------
         if cfg.has_section('RISK'):
-            # 1. Сначала устанавливаем профиль (из конфига или SmartTurbo по умолчанию)
+            # 1. Устанавливаем профиль
             profile = cfg.get('RISK', 'profile', fallback='SmartTurbo')
             engine.risk_manager.set_profile(profile)
 
-            # 2. Затем переопределяем риск/плечо, если они явно заданы в конфиге
-            if cfg.has_option('RISK', 'risk_per_trade'):
-                engine.risk_manager.risk_per_trade_pct = cfg.getfloat('RISK', 'risk_per_trade')
-            if cfg.has_option('RISK', 'max_leverage'):
-                engine.risk_manager.max_leverage = cfg.getint('RISK', 'max_leverage')
+            # 2. Применяем значения из конфига
+            risk_pct = cfg.getfloat('RISK', 'risk_per_trade', fallback=None)
+            max_lev = cfg.getint('RISK', 'max_leverage', fallback=None)
+
+            if risk_pct is not None:
+                engine.risk_manager.risk_per_trade_pct = risk_pct
+            if max_lev is not None:
+                engine.risk_manager.max_leverage = max_lev
+
+            # 3. Фиксируем пользовательские лимиты для адаптивной системы
+            engine.risk_manager.set_user_limits(
+                risk_pct=risk_pct or engine.risk_manager.risk_per_trade_pct,
+                max_lev=max_lev or engine.risk_manager.max_leverage,
+                max_pos=engine.max_positions
+            )
 
             if cfg.has_option('RISK', 'use_day_profile'):
                 engine.risk_manager.use_day_profile = cfg.getboolean('RISK', 'use_day_profile')
@@ -5199,7 +5209,7 @@ class WhaleShield:
 {
   "daily_pnl": 0.0,
   "last_day": 6,
-  "updated": "2026-05-09T00:47:40.847628+00:00"
+  "updated": "2026-05-09T01:12:56.661458+00:00"
 }
 === END FILE: data\engine_state.json ===
 
@@ -5244,7 +5254,7 @@ class WhaleShield:
     "disabled_reason": null
   },
   "Ichimoku": {
-    "weight": 0.9738191626150199,
+    "weight": 0.9476383252300398,
     "trades": 1,
     "wins": 0,
     "total_pnl": 0.0,
@@ -5255,7 +5265,7 @@ class WhaleShield:
     "disabled_reason": null
   },
   "MeanReversion": {
-    "weight": 1.0144386779668817,
+    "weight": 1.0236594526673297,
     "trades": 0,
     "wins": 0,
     "total_pnl": 0.0,
@@ -5278,7 +5288,7 @@ class WhaleShield:
     "disabled_at": 1778282113.5879831
   },
   "RSIDivergence": {
-    "weight": 0.8952528307490183,
+    "weight": 0.8905056614980366,
     "trades": 0,
     "wins": 0,
     "total_pnl": 0.0,
@@ -5300,7 +5310,7 @@ class WhaleShield:
     "disabled_reason": null
   },
   "TrendFollowing": {
-    "weight": 1.5051131560993627,
+    "weight": 1.4985934242063519,
     "trades": 0,
     "wins": 0,
     "total_pnl": 0.0,
@@ -5311,7 +5321,7 @@ class WhaleShield:
     "disabled_reason": null
   },
   "SmartPyramiding": {
-    "weight": 0.9029013950121167,
+    "weight": 0.9042435502403651,
     "trades": 4,
     "wins": 0,
     "total_pnl": 0.0,
@@ -5333,7 +5343,7 @@ class WhaleShield:
     "disabled_reason": null
   },
   "Range": {
-    "weight": 1.0027773864062621,
+    "weight": 0.9975266829799663,
     "trades": 0,
     "wins": 0,
     "total_pnl": 0.0,
@@ -13770,14 +13780,12 @@ class SettingsTab(QWidget):
             leverage = self.max_leverage.value()
             profile = self.risk_profile.currentText()
 
-            if profile == 'User':
-                self.engine.risk_manager.set_user_params(risk_pct, leverage)
-            else:
-                self.engine.risk_manager.risk_per_trade_pct = risk_pct
-                self.engine.risk_manager.max_leverage = leverage
-                self.engine.risk_manager.set_profile(profile)
+            # Устанавливаем параметры в риск-менеджер
+            self.engine.risk_manager.risk_per_trade_pct = risk_pct
+            self.engine.risk_manager.max_leverage = leverage
+            self.engine.risk_manager.set_profile(profile)
 
-            # Фиксируем пользовательские лимиты, чтобы адаптация не урезала ниже
+            # Фиксируем пользовательские лимиты (единый метод, работает для всех профилей)
             self.engine.risk_manager.set_user_limits(
                 risk_pct=risk_pct,
                 max_lev=leverage,
