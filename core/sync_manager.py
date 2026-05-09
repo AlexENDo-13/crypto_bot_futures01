@@ -105,7 +105,7 @@ class PositionSyncManager:
                         close_time=datetime.now(timezone.utc).isoformat()
                     )
                     self.engine.portfolio.record_trade(trade)
-                    self.engine.risk_manager.update_adaptive_risk(pnl)
+                    # Исправлено: используем record_trade_result вместо update_adaptive_risk
                     self.engine.risk_manager.record_trade_result(pnl)
                     self.engine.portfolio.remove_position(pos.symbol, pos.side)
                     cache_key = f"{pos.symbol}_{pos.side}"
