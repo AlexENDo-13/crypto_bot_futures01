@@ -1,5 +1,6 @@
 """
 Trading Engine – coordinator.
+Исправлено: разбор баланса v3
 """
 import os, sys, time, json, logging, threading
 from collections import deque
@@ -215,6 +216,7 @@ class TradingEngine:
     def _market_scan_task(self):
         market_scan_task(self)
 
+    # ИСПРАВЛЕНИЕ: разбор баланса v3
     def _equity_update_task(self):
         try:
             if self.auth.demo_mode:
@@ -222,20 +224,20 @@ class TradingEngine:
                 self.portfolio.available_margin = 1000.0
             else:
                 response = self.api.get_balance()
+                # Структура v3: {"code":0, "data":{"balance":{...}}}
                 data = response.get('data')
                 if not data:
                     return
-                # Баланс v3: может быть объект с полями balance, availableMargin, unrealizedProfit
-                # или массив таких объектов. Обрабатываем универсально.
+                # data может быть как объектом, так и массивом (защита)
                 if isinstance(data, list):
                     if len(data) == 0:
                         return
-                    bal = data[0]  # берем первый элемент
+                    balance_obj = data[0].get('balance', {})
                 else:
-                    bal = data  # уже словарь
-                balance = _safe_float(bal.get('balance', 0))
-                available = _safe_float(bal.get('availableMargin', balance))
-                unrealized = _safe_float(bal.get('unrealizedProfit', 0))
+                    balance_obj = data.get('balance', {})
+                balance = _safe_float(balance_obj.get('balance', 0))
+                available = _safe_float(balance_obj.get('availableMargin', balance))
+                unrealized = _safe_float(balance_obj.get('unrealizedProfit', 0))
                 self.portfolio.update_equity(balance, unrealized)
                 self.portfolio.available_margin = available
                 self.risk_controller.update_drawdown(self.portfolio._equity)

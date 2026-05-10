@@ -57,7 +57,7 @@
     "disabled_at": 1778407668.4739773
   },
   "RSIDivergence": {
-    "weight": 0.8925403319869223,
+    "weight": 0.892278526995531,
     "trades": 4,
     "wins": 0,
     "total_pnl": 0.0,
@@ -79,7 +79,7 @@
     "disabled_reason": null
   },
   "TrendFollowing": {
-    "weight": 1.5040685776308635,
+    "weight": 1.5042769407301224,
     "trades": 0,
     "wins": 0,
     "total_pnl": 0.0,
@@ -90,7 +90,7 @@
     "disabled_reason": null
   },
   "SmartPyramiding": {
-    "weight": 0.9002089949546779,
+    "weight": 0.8999412103569702,
     "trades": 6,
     "wins": 0,
     "total_pnl": 0.0,

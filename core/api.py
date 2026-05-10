@@ -1,6 +1,6 @@
 """
 BingX Perpetual Futures (Swap v2/v3) API client.
-Исправлено: POST/DELETE – параметры в URL query string, тело пустое.
+Исправлено: K-Lines v3, POST/DELETE – параметры в URL query string, тело пустое.
 Баланс v3: данные возвращаются как объект, а не массив.
 """
 import hmac
@@ -52,7 +52,8 @@ class BingXAPI:
     OPEN_ORDERS = "/openApi/swap/v2/trade/openOrders"
     LEVERAGE = "/openApi/swap/v2/trade/leverage"
     CONTRACTS = "/openApi/swap/v2/quote/contracts"
-    KLINES = "/openApi/swap/v2/quote/klines"
+    # ИСПРАВЛЕНИЕ: переход на K-Lines v3
+    KLINES = "/openApi/swap/v3/quote/klines"
     TICKER = "/openApi/swap/v2/quote/ticker"
     DEPTH = "/openApi/swap/v2/quote/depth"
 
@@ -255,6 +256,7 @@ class BingXAPI:
         params = {'symbol': symbol, 'limit': limit}
         return self._request('GET', self.DEPTH, params)
 
+    # ИСПРАВЛЕНИЕ: перешли на v3 K-Lines и корректный парсинг
     def get_klines(self, symbol: str, interval: str,
                    start_time: Optional[int] = None,
                    end_time: Optional[int] = None,
@@ -277,11 +279,12 @@ class BingXAPI:
         data = self.get_klines(symbol, interval, limit=limit)
         if not data:
             return pd.DataFrame()
+        # v3 возвращает список объектов: [{'open':..., 'high':..., ...}, ...]
         df = pd.DataFrame(data)
         column_map = {
             'open': 'open', 'high': 'high', 'low': 'low',
             'close': 'close', 'volume': 'volume',
-            'time': 'timestamp', 'openTime': 'timestamp',
+            'time': 'timestamp'
         }
         for old, new in column_map.items():
             if old in df.columns and new not in df.columns:
