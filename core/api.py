@@ -1,7 +1,9 @@
 """
 BingX Perpetual Futures (Swap v2/v3) API client.
-Исправлено: K-Lines v3, POST/DELETE – параметры в URL query string, тело пустое.
-Баланс v3: данные возвращаются как объект, а не массив.
+Исправлено:
+  - K-Lines v3
+  - POST/DELETE передают параметры в теле запроса (устраняет ошибку 100001)
+  - Баланс v3 парсится как массив объектов (берется USDT)
 """
 import hmac
 import hashlib
@@ -52,8 +54,7 @@ class BingXAPI:
     OPEN_ORDERS = "/openApi/swap/v2/trade/openOrders"
     LEVERAGE = "/openApi/swap/v2/trade/leverage"
     CONTRACTS = "/openApi/swap/v2/quote/contracts"
-    # ИСПРАВЛЕНИЕ: переход на K-Lines v3
-    KLINES = "/openApi/swap/v3/quote/klines"
+    KLINES = "/openApi/swap/v3/quote/klines"          # фикс: v3
     TICKER = "/openApi/swap/v2/quote/ticker"
     DEPTH = "/openApi/swap/v2/quote/depth"
 
@@ -65,6 +66,7 @@ class BingXAPI:
         self._last_ping_ms: Optional[float] = None
 
     def _sign_params(self, params: Dict[str, Any]) -> str:
+        """Строит подпись HMAC-SHA256 по отсортированным ключам."""
         sorted_keys = sorted(params.keys())
         query_string = "&".join([f"{k}={params[k]}" for k in sorted_keys])
         signature = hmac.new(
@@ -85,24 +87,24 @@ class BingXAPI:
 
                 params = params or {}
                 params['timestamp'] = int(time.time() * 1000)
-                # Подпись вычисляется ПОСЛЕ добавления timestamp, но ДО добавления signature
+                # Подпись вычисляется ДО добавления signature
                 signature = self._sign_params(params)
                 params['signature'] = signature
 
                 url = f"{self.BASE_URL}{endpoint}"
                 headers = {"X-BX-APIKEY": self.auth.api_key}
 
-                # Формируем URL со всеми параметрами (включая timestamp и signature)
-                full_url = f"{url}?{urlencode(params)}"
-
                 if method.upper() == 'GET':
+                    full_url = f"{url}?{urlencode(params)}"
                     response = self.session.get(full_url, headers=headers, timeout=15)
-                elif method.upper() in ('POST', 'DELETE'):
-                    # Согласно документации BingX, для торговых запросов параметры передаются в query string,
-                    # тело запроса должно быть пустым.
-                    response = self.session.request(method, full_url, headers=headers, data={}, timeout=15)
                 else:
-                    response = self.session.get(full_url, headers=headers, timeout=15)
+                    # POST/PUT/DELETE – параметры передаём в теле (форма x-www-form-urlencoded)
+                    response = self.session.request(
+                        method, url,
+                        headers=headers,
+                        data=params,                # автоматически добавляет Content-Type
+                        timeout=15
+                    )
 
                 status_code = response.status_code
                 if status_code == 200:
@@ -256,7 +258,6 @@ class BingXAPI:
         params = {'symbol': symbol, 'limit': limit}
         return self._request('GET', self.DEPTH, params)
 
-    # ИСПРАВЛЕНИЕ: перешли на v3 K-Lines и корректный парсинг
     def get_klines(self, symbol: str, interval: str,
                    start_time: Optional[int] = None,
                    end_time: Optional[int] = None,
@@ -279,12 +280,10 @@ class BingXAPI:
         data = self.get_klines(symbol, interval, limit=limit)
         if not data:
             return pd.DataFrame()
-        # v3 возвращает список объектов: [{'open':..., 'high':..., ...}, ...]
         df = pd.DataFrame(data)
         column_map = {
             'open': 'open', 'high': 'high', 'low': 'low',
-            'close': 'close', 'volume': 'volume',
-            'time': 'timestamp'
+            'close': 'close', 'volume': 'volume', 'time': 'timestamp'
         }
         for old, new in column_map.items():
             if old in df.columns and new not in df.columns:
