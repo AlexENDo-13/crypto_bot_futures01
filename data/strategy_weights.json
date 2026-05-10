@@ -11,7 +11,7 @@
     "disabled_reason": null
   },
   "DualThrust": {
-    "weight": 0.7,
+    "weight": 0.6947547744834115,
     "trades": 0,
     "wins": 0,
     "total_pnl": 0.0,
@@ -22,7 +22,7 @@
     "disabled_reason": null
   },
   "Ichimoku": {
-    "weight": 0.9738191626150199,
+    "weight": 0.9214574878450597,
     "trades": 2,
     "wins": 0,
     "total_pnl": 0.0,
@@ -33,7 +33,7 @@
     "disabled_reason": null
   },
   "MeanReversion": {
-    "weight": 1.0132152564591204,
+    "weight": 1.0224330105533375,
     "trades": 5,
     "wins": 0,
     "total_pnl": 0.0,
@@ -57,7 +57,7 @@
     "disabled_at": 1778407668.4739773
   },
   "RSIDivergence": {
-    "weight": 0.892278526995531,
+    "weight": 0.8771814259936336,
     "trades": 4,
     "wins": 0,
     "total_pnl": 0.0,
@@ -79,7 +79,7 @@
     "disabled_reason": null
   },
   "TrendFollowing": {
-    "weight": 1.5042472204544846,
+    "weight": 1.5236369736182733,
     "trades": 0,
     "wins": 0,
     "total_pnl": 0.0,
@@ -90,7 +90,7 @@
     "disabled_reason": null
   },
   "SmartPyramiding": {
-    "weight": 0.8999088773098477,
+    "weight": 0.899726631929543,
     "trades": 6,
     "wins": 0,
     "total_pnl": 0.0,
@@ -113,7 +113,7 @@
     "disabled_reason": null
   },
   "Range": {
-    "weight": 1.0015431681423892,
+    "weight": 1.0003475158993187,
     "trades": 5,
     "wins": 0,
     "total_pnl": 0.0,
@@ -147,7 +147,7 @@
     "disabled_reason": null
   },
   "EMACrossoverSwing": {
-    "weight": 0.9447214304167275,
+    "weight": 0.8341642912501825,
     "trades": 5,
     "wins": 0,
     "total_pnl": 0.0,
@@ -159,7 +159,7 @@
     "disabled_at": 1778337047.2596035
   },
   "SuperTrendSwing": {
-    "weight": 0.996335778592819,
+    "weight": 0.9890073357784569,
     "trades": 1,
     "wins": 0,
     "total_pnl": 0.0,
@@ -181,7 +181,7 @@
     "disabled_reason": null
   },
   "TurtleTrading": {
-    "weight": 1.0123510629470318,
+    "weight": 1.0370531888410954,
     "trades": 0,
     "wins": 0,
     "total_pnl": 0.0,

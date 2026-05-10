@@ -5,14 +5,14 @@ api_secret =
 [ENGINE]
 scan_interval = 60
 signal_threshold = 0.35
-max_positions = 5
+max_positions = 4
 timeframes = 15m,1h,4h,1d
 top_symbols = 60
 
 [RISK]
 profile = User
 risk_per_trade = 5.0
-max_leverage = 5
+max_leverage = 10
 use_day_profile = False
 kelly_enabled = True
 kelly_winrate = 0.5

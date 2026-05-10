@@ -1,9 +1,9 @@
 """
 BingX Perpetual Futures (Swap v2/v3) API client.
 Исправлено:
-  - K-Lines v3
-  - POST/DELETE передают параметры в теле запроса (устраняет ошибку 100001)
-  - Баланс v3 парсится как массив объектов (берется USDT)
+  - Все методы (GET, POST, DELETE) передают параметры в query string (без тела).
+  - K-Lines v3 с корректным парсингом.
+  - Баланс v3: массив объектов, ищем USDT.
 """
 import hmac
 import hashlib
@@ -54,7 +54,7 @@ class BingXAPI:
     OPEN_ORDERS = "/openApi/swap/v2/trade/openOrders"
     LEVERAGE = "/openApi/swap/v2/trade/leverage"
     CONTRACTS = "/openApi/swap/v2/quote/contracts"
-    KLINES = "/openApi/swap/v3/quote/klines"          # фикс: v3
+    KLINES = "/openApi/swap/v3/quote/klines"
     TICKER = "/openApi/swap/v2/quote/ticker"
     DEPTH = "/openApi/swap/v2/quote/depth"
 
@@ -94,17 +94,14 @@ class BingXAPI:
                 url = f"{self.BASE_URL}{endpoint}"
                 headers = {"X-BX-APIKEY": self.auth.api_key}
 
+                # Все параметры всегда в query string (как для GET, так и для POST/DELETE)
+                full_url = f"{url}?{urlencode(params)}"
+
                 if method.upper() == 'GET':
-                    full_url = f"{url}?{urlencode(params)}"
                     response = self.session.get(full_url, headers=headers, timeout=15)
                 else:
-                    # POST/PUT/DELETE – параметры передаём в теле (форма x-www-form-urlencoded)
-                    response = self.session.request(
-                        method, url,
-                        headers=headers,
-                        data=params,                # автоматически добавляет Content-Type
-                        timeout=15
-                    )
+                    # POST/PUT/DELETE – параметры в query string, тело пустое
+                    response = self.session.request(method, full_url, headers=headers, timeout=15)
 
                 status_code = response.status_code
                 if status_code == 200:
