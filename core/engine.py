@@ -1,6 +1,6 @@
 """
 Trading Engine – coordinator.
-Исправлено: разбор баланса v3
+Исправлено: разбор баланса v3 (массив объектов, ищем USDT)
 """
 import os, sys, time, json, logging, threading
 from collections import deque
@@ -216,7 +216,7 @@ class TradingEngine:
     def _market_scan_task(self):
         market_scan_task(self)
 
-    # ИСПРАВЛЕНИЕ: разбор баланса v3
+    # ИСПРАВЛЕНИЕ: разбор баланса v3 (массив объектов, ищем USDT)
     def _equity_update_task(self):
         try:
             if self.auth.demo_mode:
@@ -224,22 +224,27 @@ class TradingEngine:
                 self.portfolio.available_margin = 1000.0
             else:
                 response = self.api.get_balance()
-                # Структура v3: {"code":0, "data":{"balance":{...}}}
-                data = response.get('data')
-                if not data:
+                # Реальный ответ v3: {"code":0, "data": [ { "asset":"USDT", "balance":"...", ... }, ... ]}
+                data_list = response.get('data', [])
+                if not data_list or not isinstance(data_list, list):
                     return
-                # data может быть как объектом, так и массивом (защита)
-                if isinstance(data, list):
-                    if len(data) == 0:
-                        return
-                    balance_obj = data[0].get('balance', {})
-                else:
-                    balance_obj = data.get('balance', {})
-                balance = _safe_float(balance_obj.get('balance', 0))
-                available = _safe_float(balance_obj.get('availableMargin', balance))
-                unrealized = _safe_float(balance_obj.get('unrealizedProfit', 0))
+
+                # Ищем актив USDT (основная маржа)
+                usdt_info = None
+                for item in data_list:
+                    if item.get('asset') == 'USDT':
+                        usdt_info = item
+                        break
+                # Если USDT не найден, берём первый элемент
+                if not usdt_info:
+                    usdt_info = data_list[0]
+
+                balance = _safe_float(usdt_info.get('balance', 0))
+                available = _safe_float(usdt_info.get('availableMargin', balance))
+                unrealized = _safe_float(usdt_info.get('unrealizedProfit', 0))
                 self.portfolio.update_equity(balance, unrealized)
                 self.portfolio.available_margin = available
+
                 self.risk_controller.update_drawdown(self.portfolio._equity)
                 self.risk_controller.check_daily_limits()
                 self.risk_manager.adapt_to_market(self)
