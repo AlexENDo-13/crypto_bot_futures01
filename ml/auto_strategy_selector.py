@@ -1,8 +1,8 @@
 """
 Auto Strategy Selector – автоматически включает/выключает стратегии и фильтры
 в зависимости от текущего рыночного режима (тренд, боковик, высокая волатильность).
+Исправлено: режимы UNKNOWN и LOW_VOLATILITY теперь не отключают все стратегии/фильтры.
 """
-
 import logging
 import threading
 import time
@@ -15,26 +15,31 @@ REGIME_STRATEGIES = {
     MarketRegime.TREND_UP: [
         'TrendFollowing', 'Momentum', 'Ichimoku', 'DualThrust',
         'Breakout', 'BreakoutSwing', 'SuperTrendSwing',
-        'SmartPyramiding', 'EMACrossoverSwing'
+        'SmartPyramiding', 'EMACrossoverSwing', 'TurtleTrading'
     ],
     MarketRegime.TREND_DOWN: [
         'TrendFollowing', 'Momentum', 'Ichimoku', 'DualThrust',
         'Breakout', 'BreakoutSwing', 'SuperTrendSwing',
-        'SmartPyramiding', 'EMACrossoverSwing'
+        'SmartPyramiding', 'EMACrossoverSwing', 'TurtleTrading'
     ],
     MarketRegime.RANGE: [
         'MeanReversion', 'RSIDivergence', 'Squeeze', 'Range',
-        'DynamicRebalance'
+        'DynamicRebalance', 'GridStrategy'
     ],
     MarketRegime.HIGH_VOLATILITY: [
-        'Breakout', 'BreakoutSwing', 'SuperTrendSwing', 'Range'
+        'Breakout', 'BreakoutSwing', 'SuperTrendSwing', 'Range',
+        'TrendFollowing', 'Momentum', 'DualThrust', 'TurtleTrading'
     ],
     MarketRegime.LOW_VOLATILITY: [
         'MeanReversion', 'RSIDivergence', 'Squeeze', 'Range',
-        'DynamicRebalance', 'Ichimoku'
+        'DynamicRebalance', 'Ichimoku', 'TrendFollowing', 'Momentum',
+        'DualThrust', 'GridStrategy'
     ],
     MarketRegime.UNKNOWN: [
-        'TrendFollowing', 'Momentum', 'MeanReversion', 'Ichimoku'
+        'TrendFollowing', 'Momentum', 'MeanReversion', 'Ichimoku',
+        'Breakout', 'BreakoutSwing', 'RSIDivergence', 'Squeeze',
+        'SuperTrendSwing', 'SmartPyramiding', 'EMACrossoverSwing',
+        'DualThrust', 'TurtleTrading', 'GridStrategy', 'Range'
     ],
 }
 
@@ -43,30 +48,35 @@ REGIME_FILTERS = {
     MarketRegime.TREND_UP: [
         'ATRFilter', 'VolumeSurgeFilter', 'LiquidityFilter',
         'TrendFilter', 'MultiTFConfluenceFilter', 'OrderFlowImbalance',
-        'VolumeDelta', 'CandlestickPattern', 'SentimentFilter'
+        'VolumeDelta', 'CandlestickPattern', 'SentimentFilter',
+        'SmartMoneyFilter', 'AdaptiveLeverage'
     ],
     MarketRegime.TREND_DOWN: [
         'ATRFilter', 'VolumeSurgeFilter', 'LiquidityFilter',
         'TrendFilter', 'MultiTFConfluenceFilter', 'OrderFlowImbalance',
-        'VolumeDelta', 'CandlestickPattern', 'SentimentFilter'
+        'VolumeDelta', 'CandlestickPattern', 'SentimentFilter',
+        'SmartMoneyFilter', 'AdaptiveLeverage'
     ],
     MarketRegime.RANGE: [
         'ATRFilter', 'VolumeFilter', 'LiquidityFilter',
         'OrderFlowImbalance', 'VolumeProfile', 'MarketProfile',
-        'CandlestickPattern'
+        'CandlestickPattern', 'PortfolioCorrelation'
     ],
     MarketRegime.HIGH_VOLATILITY: [
         'ATRFilter', 'VolumeSurgeFilter', 'LiquidityFilter',
         'DrawdownLimiter', 'AdaptiveLeverage', 'SessionFilter',
-        'CandlestickPattern'
+        'CandlestickPattern', 'TrendFilter'
     ],
     MarketRegime.LOW_VOLATILITY: [
         'ATRFilter', 'VolumeFilter', 'LiquidityFilter',
-        'OrderFlowImbalance', 'VolumeProfile', 'CandlestickPattern'
+        'OrderFlowImbalance', 'VolumeProfile', 'CandlestickPattern',
+        'TrendFilter', 'MultiTFConfluenceFilter', 'SmartMoneyFilter'
     ],
     MarketRegime.UNKNOWN: [
         'ATRFilter', 'VolumeSurgeFilter', 'LiquidityFilter',
-        'TrendFilter', 'MultiTFConfluenceFilter', 'SentimentFilter'
+        'TrendFilter', 'MultiTFConfluenceFilter', 'SentimentFilter',
+        'CandlestickPattern', 'OrderFlowImbalance', 'VolumeDelta',
+        'SmartMoneyFilter', 'DrawdownLimiter'
     ],
 }
 

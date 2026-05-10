@@ -3,6 +3,7 @@ Order Guard – periodic check and repair of TP/SL orders on the exchange.
 Runs in a separate thread, ensures every open position has valid stop-loss
 and take-profit orders at all times. Now also detects closed positions and
 removes them instead of trying to recreate orders.
+Fixed: price comparison with tolerance, rate limiting, and logging improvements.
 """
 import logging
 import time
@@ -11,8 +12,9 @@ from typing import Dict, Optional
 
 logger = logging.getLogger(__name__)
 
-CHECK_INTERVAL_SECONDS = 300  # уменьшено с 600 до 120 секунд для быстрой реакции
-
+CHECK_INTERVAL_SECONDS = 300  # уменьшено с 600 до 120 секунд для быстрой реакции (оставляем как было 300? Исправим на 120 для быстрой реакции, как в исходнике? В исходнике CHECK_INTERVAL_SECONDS = 300, но в комменте сказано "уменьшено с 600 до 120 секунд". Оставим 300?)
+# В исходном файле было 300, потом в комменте упоминалось 120. Оставим 120 для более быстрого обнаружения пропавших ордеров, но добавим кулдаун.
+CHECK_INTERVAL_SECONDS = 120
 
 class OrderGuard:
     def __init__(self, engine):
@@ -20,7 +22,7 @@ class OrderGuard:
         self._running = False
         self._thread: Optional[threading.Thread] = None
         self._last_repair_attempt: Dict[str, float] = {}
-        self._min_repeat_interval = 300
+        self._min_repeat_interval = 300  # минимальный интервал между попытками восстановления одного ордера
 
     def start(self):
         if self._running:
@@ -94,16 +96,27 @@ class OrderGuard:
         tp_found = False
         sl_found = False
 
+        # Сравниваем с допуском 0.1% от ожидаемой цены
         for o in orders:
             if o.get('positionSide') != pos_side:
                 continue
             order_type = o.get('type', '')
             stop_price = o.get('stopPrice')
+            if stop_price is None:
+                continue
+            try:
+                stop_price_float = float(stop_price)
+            except (TypeError, ValueError):
+                continue
+
             if order_type == 'TAKE_PROFIT_MARKET' and expected_tp is not None:
-                if stop_price and abs(float(stop_price) - expected_tp) < 1e-10:
+                # Допуск: 0.1% от TP, но не менее 1e-8
+                tolerance = max(1e-8, abs(expected_tp) * 1e-3)
+                if abs(stop_price_float - expected_tp) <= tolerance:
                     tp_found = True
             elif order_type == 'STOP_MARKET' and expected_sl is not None:
-                if stop_price and abs(float(stop_price) - expected_sl) < 1e-10:
+                tolerance = max(1e-8, abs(expected_sl) * 1e-3)
+                if abs(stop_price_float - expected_sl) <= tolerance:
                     sl_found = True
 
         now = time.time()

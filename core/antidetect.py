@@ -1,5 +1,6 @@
 """
 Anti-detection measures: random delays, User-Agent rotation, human-like behavior.
+Fixed: can_trade_now correctly blocks trades when interval is too short.
 """
 import random
 import time
@@ -97,7 +98,7 @@ class AntiDetect:
         min_interval = self._trade_delay_min * 60  # Convert to seconds
         
         if now - self._last_trade_time < min_interval:
-            return True
+            return False  # <-- ИСПРАВЛЕНО: не даём торговать, если интервал не выдержан
         
         self._last_trade_time = now
         return True

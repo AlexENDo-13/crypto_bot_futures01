@@ -1,5 +1,6 @@
 """
 Candlestick pattern filter – анализирует 12 свечных моделей и подтверждает/отклоняет сигналы.
+Исправлено: медвежьи паттерны при BUY теперь не блокируют полностью, а лишь снижают confidence.
 """
 import logging
 from filters.base import BaseFilter
@@ -19,6 +20,8 @@ class CandlestickPatternFilter(BaseFilter):
         'use_morning_star': True,
         'use_three_soldiers': True,
         'use_marubozu': True,
+        'bearish_penalty': 0.3,      # коэффициент штрафа при противодействующем паттерне
+        'bullish_boost': 1.15,       # коэффициент усиления при подтверждающем паттерне
     }
 
     def assess(self, signal: Signal, data: dict) -> float:
@@ -94,18 +97,22 @@ class CandlestickPatternFilter(BaseFilter):
                 else:
                     bearish = True
 
-        # Принятие решения
+        # --- Принятие решения (ИЗМЕНЕНО) ---
         if signal.action == 'BUY':
-            if bearish:
-                logger.info(f"CandlestickPattern blocked BUY {signal.symbol}: bearish pattern")
-                return 0.0
+            if bearish and not bullish:
+                # Медвежий паттерн при BUY – снижаем уверенность, а не блокируем полностью
+                new_conf = signal.confidence * self.config['bearish_penalty']
+                logger.info(f"CandlestickPattern penalty for BUY {signal.symbol}: bearish pattern, conf {signal.confidence:.2f} -> {new_conf:.2f}")
+                return new_conf
             if bullish:
-                return min(1.0, signal.confidence * 1.15)
+                return min(1.0, signal.confidence * self.config['bullish_boost'])
         elif signal.action == 'SELL':
-            if bullish:
-                logger.info(f"CandlestickPattern blocked SELL {signal.symbol}: bullish pattern")
-                return 0.0
+            if bullish and not bearish:
+                new_conf = signal.confidence * self.config['bearish_penalty']
+                logger.info(f"CandlestickPattern penalty for SELL {signal.symbol}: bullish pattern, conf {signal.confidence:.2f} -> {new_conf:.2f}")
+                return new_conf
             if bearish:
-                return min(1.0, signal.confidence * 1.15)
+                return min(1.0, signal.confidence * self.config['bullish_boost'])
 
+        # Если нет явных паттернов, лёгкий штраф за неопределённость (0.95 вместо 0.9, чтобы не снижать слишком сильно)
         return signal.confidence * 0.95

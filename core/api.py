@@ -1,7 +1,7 @@
 """
 BingX Perpetual Futures (Swap v2/v3) API client.
-Исправлено: POST/DELETE – параметры в JSON-теле, GET – в URL.
-Баланс v3.
+Исправлено: POST/DELETE – параметры в URL query string, тело пустое.
+Баланс v3: данные возвращаются как объект, а не массив.
 """
 import hmac
 import hashlib
@@ -84,20 +84,24 @@ class BingXAPI:
 
                 params = params or {}
                 params['timestamp'] = int(time.time() * 1000)
+                # Подпись вычисляется ПОСЛЕ добавления timestamp, но ДО добавления signature
                 signature = self._sign_params(params)
                 params['signature'] = signature
 
                 url = f"{self.BASE_URL}{endpoint}"
                 headers = {"X-BX-APIKEY": self.auth.api_key}
 
+                # Формируем URL со всеми параметрами (включая timestamp и signature)
+                full_url = f"{url}?{urlencode(params)}"
+
                 if method.upper() == 'GET':
-                    url += f"?{urlencode(params)}"
-                    response = self.session.get(url, headers=headers, timeout=15)
+                    response = self.session.get(full_url, headers=headers, timeout=15)
                 elif method.upper() in ('POST', 'DELETE'):
-                    response = self.session.request(method, url, headers=headers, json=params, timeout=15)
+                    # Согласно документации BingX, для торговых запросов параметры передаются в query string,
+                    # тело запроса должно быть пустым.
+                    response = self.session.request(method, full_url, headers=headers, data={}, timeout=15)
                 else:
-                    url += f"?{urlencode(params)}"
-                    response = self.session.get(url, headers=headers, timeout=15)
+                    response = self.session.get(full_url, headers=headers, timeout=15)
 
                 status_code = response.status_code
                 if status_code == 200:

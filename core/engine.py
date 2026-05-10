@@ -222,10 +222,12 @@ class TradingEngine:
                 self.portfolio.available_margin = 1000.0
             else:
                 response = self.api.get_balance()
-                data = response.get('data', [])
+                data = response.get('data')
                 if not data:
                     return
-                bal = data[0]
+                # Баланс v3: data - объект с полями balance, availableMargin, unrealizedProfit
+                # (не массив)
+                bal = data  # уже словарь
                 balance = _safe_float(bal.get('balance', 0))
                 available = _safe_float(bal.get('availableMargin', balance))
                 unrealized = _safe_float(bal.get('unrealizedProfit', 0))

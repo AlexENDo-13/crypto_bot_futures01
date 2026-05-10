@@ -1,5 +1,6 @@
 """
 Volume Profile Filter – использует POC и Value Area для подтверждения сигналов.
+Исправлено: price above VAH больше не блокирует BUY полностью, а снижает confidence.
 """
 import logging
 import numpy as np
@@ -18,6 +19,8 @@ class VolumeProfileFilter(BaseFilter):
         'lookback_bars': 100,
         'value_area_pct': 0.70,   # 70% объёма для Value Area
         'poc_tolerance': 0.005,   # 0.5% близость к POC
+        'vah_penalty': 0.7,       # коэффициент при нахождении выше VAH для BUY / ниже VAL для SELL
+        'poc_boost': 1.1,         # усиление при нахождении вблизи POC
     }
 
     def assess(self, signal: Signal, data: dict) -> float:
@@ -86,23 +89,27 @@ class VolumeProfileFilter(BaseFilter):
 
         poc_tol = self.config['poc_tolerance']
 
-        # Логика фильтрации
+        # Логика фильтрации (ИЗМЕНЕНА)
         if signal.action == 'BUY':
-            # Для покупки хорошо, если цена недалеко от POC или ниже VAL
-            if price > vah_price * (1 + poc_tol):
-                logger.info(f"VolumeProfile blocked BUY {signal.symbol}: price above VAH")
-                return 0.0
+            # Близость к POC – усиление
             if abs(price - poc_price) / poc_price <= poc_tol:
-                return min(1.0, signal.confidence * 1.1)
+                return min(1.0, signal.confidence * self.config['poc_boost'])
+            # Цена ниже VAL – хорошая возможность для покупки
             if price < val_price:
                 return min(1.0, signal.confidence * 1.05)
+            # Цена выше VAH – снижаем уверенность, но не блокируем
+            if price > vah_price * (1 + poc_tol):
+                new_conf = signal.confidence * self.config['vah_penalty']
+                logger.info(f"VolumeProfile penalty for BUY {signal.symbol}: price above VAH, conf {signal.confidence:.2f} -> {new_conf:.2f}")
+                return new_conf
         elif signal.action == 'SELL':
-            if price < val_price * (1 - poc_tol):
-                logger.info(f"VolumeProfile blocked SELL {signal.symbol}: price below VAL")
-                return 0.0
             if abs(price - poc_price) / poc_price <= poc_tol:
-                return min(1.0, signal.confidence * 1.1)
+                return min(1.0, signal.confidence * self.config['poc_boost'])
             if price > vah_price:
                 return min(1.0, signal.confidence * 1.05)
+            if price < val_price * (1 - poc_tol):
+                new_conf = signal.confidence * self.config['vah_penalty']
+                logger.info(f"VolumeProfile penalty for SELL {signal.symbol}: price below VAL, conf {signal.confidence:.2f} -> {new_conf:.2f}")
+                return new_conf
 
         return signal.confidence

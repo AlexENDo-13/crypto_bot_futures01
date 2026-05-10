@@ -2,8 +2,8 @@
 Whale Shield – автоматическая защита от крупных манипуляций.
 Обнаруживает аномальные объёмы в стакане и ленте сделок,
 закрывает или переводит позицию в безубыток.
-Улучшенная версия: снижен порог для маленьких монет, единая шкала угроз,
-warm‑up период, все вызовы через self.engine.api.
+Исправлено: расчёт max_order_btc через реальную цену BTC, а не фиксированные 50000.
+Добавлен более точный порог для больших ордеров относительно среднего объёма стакана.
 """
 import logging
 import time
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 # Значения по умолчанию, переопределяются из [WHALE] в config.ini
 DEPTH_THRESHOLD_MULT = 3.0
-BIG_SINGLE_ORDER_BTC = 5.0           # снижено с 50 для чувствительности на малых парах
+BIG_SINGLE_ORDER_BTC = 5.0           # снижено для чувствительности на малых парах
 TRADE_VOLUME_SPIKE_MULT = 20
 FULL_CLOSE_THRESHOLD_BTC = 100
 CHECK_INTERVAL_SECONDS = 10
@@ -147,7 +147,11 @@ class WhaleShield:
         max_bid_qty = max((float(b[1]) for b in depth.get('data', {}).get('bids', [])), default=0)
         max_ask_qty = max((float(a[1]) for a in depth.get('data', {}).get('asks', [])), default=0)
         price = self.engine._get_current_price(symbol) or 1
-        max_order_btc = max(max_bid_qty, max_ask_qty) * price / 50000
+        # Получаем реальную цену BTC для конвертации в BTC-эквивалент
+        btc_price = self.engine._get_current_price('BTC-USDT') or 50000
+        if btc_price <= 0:
+            btc_price = 50000
+        max_order_btc = (max(max_bid_qty, max_ask_qty) * price) / btc_price
         if max_order_btc > BIG_SINGLE_ORDER_BTC:
             threat_score += 3
             logger.warning(f"WhaleShield: single giant order on {symbol} ({max_order_btc:.1f} BTC eq.)")

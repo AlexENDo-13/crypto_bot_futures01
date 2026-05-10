@@ -1,0 +1,127 @@
+🔴 Критические ошибки (прямая угроза депозиту / неработоспособность)
+1. WhaleShield — неверный расчёт «китовских» ордеров
+Файл: core/whale_shield.py (строка ~165)
+Python
+Copy
+max_order_btc = max(max_bid_qty, max_ask_qty) * price / 50000
+Проблема: Код делит USDT-эквивалент ордера на фиксированное число 50000, выдавая псевдо-BTC значение. Для дешёвых монет (FIL ~1.2 USDT) это занижает реальный объём, для дорогих — завышает. В логах видно абсурд: single giant order on FIL-USDT (20.7 BTC eq.) — в стакане FIL нет ордеров на 20 BTC эквивалента при нормальной ликвидности.
+Последствие: Ложные срабатывания, перевод SL в безубыток и частичное закрытие по фейковым «китам».
+Исправление:
+Python
+Copy
+btc_price = self.engine._get_current_price('BTC-USDT') or 50000
+max_order_btc = (max(max_bid_qty, max_ask_qty) * price) / btc_price
+2. OrderGuard + SyncManager — бесконечный цикл пересоздания TP/SL
+Файлы: core/order_guard.py, core/sync_manager.py
+Проблема: OrderGuard каждые 5 минут проверяет TP/SL на точное совпадение цены (abs(float(stop_price) - expected_tp) < 1e-10). Биржа может округлять цены, и совпадение не находится. SyncManager вообще отменяет все TP/SL и создаёт заново при любом вызове _sync_tpsl_orders, если кэш не совпал.
+В логах: 100+ строк вида:
+plain
+Copy
+OrderGuard: TP missing for AAVE-USDT SHORT, recreating TP=95.815
+OrderGuard: SL missing for 1INCH-USDT SHORT, recreating SL=0.103385...
+Риск: В промежутке между отменой и созданием нового ордера позиция остаётся без защиты. При резком движении — просадка без SL.
+Исправление:
+В order_guard.py заменить точное сравнение на допуск:
+Python
+Copy
+if stop_price and abs(float(stop_price) - expected_tp) < 1e-6 * expected_tp:
+В sync_manager.py не отменять ордера, если цена изменилась менее чем на 0.1%. Обновлять только при реальном расхождении.
+3. RiskController — KeyError в корреляционном фильтре
+Файл: core/risk_controller.py, метод _get_pair_correlation
+Проблема: Метод ожидает all_candles как словарь {symbol: {tf: df}}, но pre_trade_check вызывается из signal_processor.py, где all_candles содержит данные только для текущего символа ({tf: df}). При обращении all_candles.get(sym2, {}).get('1h') получаем None, и корреляция считается как 0.0. Но если структура данных изменится, получим AttributeError или KeyError.
+Исправление: Проверять тип all_candles и наличие вложенных символов:
+Python
+Copy
+if sym1 not in all_candles or sym2 not in all_candles:
+    return 0.0
+4. CandlestickPatternFilter блокирует ~95% сигналов
+Файл: filters/candlestick_pattern_filter.py
+Проблема: Фильтр анализирует текущую свечу. Если она медвежья (даже в рамках бычьего тренда), BUY блокируется полностью (return 0.0). В логах десятки блокировок подряд:
+plain
+Copy
+CandlestickPattern blocked BUY AVAX-USDT: bearish pattern
+CandlestickPattern blocked BUY DOGE-USDT: bearish pattern
+...
+Последствие: Бот практически не торгует. За 7 часов — 3-4 сделки.
+Исправление: Не блокировать полностью, а снижать confidence:
+Python
+Copy
+if signal.action == 'BUY' and bearish:
+    return signal.confidence * 0.3  # штраф, не блокировка
+5. AutoStrategySelector отключает всё при unknown regime
+Файл: ml/auto_strategy_selector.py
+Проблема: При запуске рынок определяется как unknown, и отключаются 13 из 17 стратегий и 15 из 21 фильтра. Остаются 4 стратегии, но они тоже не дают сигналов из-за фильтров.
+В логах:
+plain
+Copy
+Auto: disabled strategy Breakout (unsuitable for unknown)
+Auto: disabled filter TrendFilter (unsuitable for unknown)
+...
+Исправление: Для MarketRegime.UNKNOWN оставлять активными трендовые стратегии по умолчанию, а не отключать всё.
+6. AntiDetect / HumanEmulator — can_trade_now всегда возвращает True
+Файлы: core/antidetect.py, core/human_emulator.py
+Проблема: Условие перепутано:
+Python
+Copy
+if now - self._last_trade_time < min_interval:
+    return True   # ← должно быть False
+Это означает, что защита от частых сделок не работает.
+🟡 Серьёзные проблемы (стабильность, API, риски)
+7. API подпись для POST/DELETE
+Файл: core/api.py
+Проблема: Для POST/DELETE timestamp и signature добавляются в JSON body вместе с остальными параметрами. BingX Swap API v2 требует подпись либо в query string, либо в отдельном header, и не всегда принимает signature внутри JSON. Это потенциальная причина ошибок 100412/100001.
+Рекомендация: Для POST/DELETE передавать timestamp и signature в URL query string, а торговые параметры — в JSON body.
+8. VolumeProfileFilter / MarketProfileFilter — блокируют тренд
+Файлы: filters/volume_profile_filter.py, filters/market_profile_filter.py
+Проблема: price above VAH блокирует BUY. В тренде цена естественно находится выше VAH. Это нормально для mean-reversion, но убивает трендовые стратегии.
+В логах:
+plain
+Copy
+VolumeProfile blocked BUY AVAX-USDT: price above VAH
+Рекомендация: Отключить эти фильтры для трендовых стратегий или ослабить до снижения confidence.
+9. ATR fallback = 0.02 — неверные SL/TP
+Файл: core/engine_data.py
+Если данные не загружены, ATR = 0.02. Для BTC ($50k) это 0.0004% — SL/TP в 1 копейку. Для SHIB — сотни процентов.
+Исправление:
+Python
+Copy
+return price * 0.02  # 2% от цены как fallback
+10. OrderGuard восстанавливает неверные SL/TP для SHORT
+В логах: AAVE-USDT SHORT: TP=95.815, SL=95.82408
+Для SHORT SL должен быть выше entry price, а TP — ниже. В логе оба значения ~95.8, что ниже типичной цены AAVE (~96-100). Возможно, позиция была восстановлена из биржи с искажёнными данными, или ATR был настолько мал, что SL/TP «схлопнулись».
+Рекомендация: В sync_manager.py при восстановлении позиции всегда пересчитывать SL/TP через risk_manager.get_sl_tp_levels, если они отсутствуют или нелогичны.
+11. config.ini — float precision
+ini
+Copy
+risk_per_trade = 5.499999999999998
+Использовать round(..., 2) при сохранении.
+12. main.py — импорт PyQt5 до проверки --console
+Если PyQt5 не установлен, скрипт падает сразу, даже если пользователь хотел консольный режим.
+Исправление: Оборачивать импорт PyQt5 в try/except или перенести проверку аргументов выше.
+13. WebServer на 0.0.0.0:5000 без авторизации
+Любой в локальной сети может получить доступ к дашборду и управлению.
+Рекомендация: Добавить базовую авторизацию (логин/пароль) или bind на 127.0.0.1.
+14. SlidingBacktest отрицательный
+plain
+Copy
+Sliding backtest completed: total score=-0.2162
+Текущий набор стратегий убыточен на истории. Bayesian оптимизатор крутит параметры, но не улучшает результат.
+📊 Сводка по логам
+Table
+Метрика	Значение
+Реальных сделок за ~7ч	4 (AAVE, 1INCH, TRX, BCH)
+Попыток сигналов	1000+
+Блокировок фильтрами	~95%
+OrderGuard рекреаций	100+
+Алертов «баланс <$50»	~30
+Отключённых стратегий	13 из 17 (при unknown)
+Winrate стратегий	0% (в strategy_weights.json)
+🔧 Приоритетные исправления
+WhaleShield — исправить формулу BTC-эквивалента.
+OrderGuard/SyncManager — сравнивать цены с допуском, не отменять ордера без причины.
+CandlestickPatternFilter — заменить блокировку на штраф к confidence.
+AutoStrategySelector — не отключать стратегии при unknown regime.
+AntiDetect/HumanEmulator — исправить can_trade_now.
+VolumeProfileFilter — отключить или ослабить.
+API POST — вынести signature в query string для POST/DELETE.
+Хотите, чтобы я подготовил готовые патчи (diff) для критических файлов?

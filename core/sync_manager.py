@@ -3,6 +3,7 @@ Position sync manager: synchronises local portfolio with exchange,
 applies trailing/breakeven, partial close, trailing take profit,
 corrects TP/SL orders, enforces maximum position limit, records closed trades,
 and supports smart replacement of weakest positions.
+Fixed: only cancels/recreates TP/SL when truly needed, with tolerance.
 """
 import logging
 import re
@@ -105,7 +106,6 @@ class PositionSyncManager:
                         close_time=datetime.now(timezone.utc).isoformat()
                     )
                     self.engine.portfolio.record_trade(trade)
-                    # Исправлено: используем record_trade_result вместо update_adaptive_risk
                     self.engine.risk_manager.record_trade_result(pnl)
                     self.engine.portfolio.remove_position(pos.symbol, pos.side)
                     cache_key = f"{pos.symbol}_{pos.side}"
@@ -132,7 +132,6 @@ class PositionSyncManager:
                     # ---------- Адаптивный трейлинг стоп ----------
                     if current_price > 0 and existing.sl_price is not None:
                         if self.engine.trailing_sl_enabled:
-                            # Используем новый адаптивный трейлинг вместо старого процентного
                             if not hasattr(self.engine, 'adaptive_trailing_stop'):
                                 from core.adaptive_trailing_stop import AdaptiveTrailingStop
                                 self.engine.adaptive_trailing_stop = AdaptiveTrailingStop(self.engine)
@@ -159,6 +158,7 @@ class PositionSyncManager:
                     if self.engine.partial_close_enabled and existing.tp_price is not None:
                         self.engine.executor.apply_partial_close(existing, current_price)
 
+                    # Синхронизируем TP/SL только при изменении
                     self._sync_tpsl_orders(symbol, pos_side, existing.quantity,
                                            existing.tp_price, existing.sl_price)
                 else:
@@ -304,16 +304,35 @@ class PositionSyncManager:
     def _sync_tpsl_orders(self, symbol, pos_side, quantity, expected_tp, expected_sl):
         cache_key = f"{symbol}_{pos_side}"
         cached = self._tpsl_cache.get(cache_key)
-        if (cached and cached['tp'] == expected_tp and cached['sl'] == expected_sl and cached['qty'] == quantity):
-            return
+
+        # Допуск 0.1% для цен и 0 для количества (количество должно совпадать точно)
+        if cached and cached['qty'] == quantity:
+            tp_close = True
+            sl_close = True
+            if expected_tp is not None and cached['tp'] is not None:
+                if abs(expected_tp - cached['tp']) / max(abs(expected_tp), 1e-8) < 0.001:
+                    tp_close = False
+            if expected_sl is not None and cached['sl'] is not None:
+                if abs(expected_sl - cached['sl']) / max(abs(expected_sl), 1e-8) < 0.001:
+                    sl_close = False
+            if not tp_close and not sl_close:
+                return  # всё совпадает, не надо обновлять
 
         try:
             orders = self.engine.api.get_open_orders(symbol)
+            # Отменяем только старые TP/SL, которые действительно отличаются
             for o in orders:
                 if o.get('positionSide') != pos_side:
                     continue
                 order_type = o.get('type', '')
                 if order_type in ('TAKE_PROFIT_MARKET', 'STOP_MARKET'):
+                    existing_price = float(o.get('stopPrice', 0))
+                    if order_type == 'TAKE_PROFIT_MARKET' and expected_tp is not None:
+                        if abs(existing_price - expected_tp) / max(abs(expected_tp), 1e-8) < 0.001 and quantity == int(o.get('origQty', 0)):
+                            continue  # этот TP не меняем
+                    elif order_type == 'STOP_MARKET' and expected_sl is not None:
+                        if abs(existing_price - expected_sl) / max(abs(expected_sl), 1e-8) < 0.001 and quantity == int(o.get('origQty', 0)):
+                            continue  # этот SL не меняем
                     try:
                         self.engine.api.cancel_order(symbol, o.get('orderId', ''))
                     except Exception as e:

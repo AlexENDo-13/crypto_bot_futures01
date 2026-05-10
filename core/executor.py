@@ -1,6 +1,7 @@
 """
 Trade executor: places orders, handles trailing stop, breakeven, partial close,
 slippage protection and sound notifications.
+Fixed: round entry_price and TP/SL to symbol's pricePrecision.
 """
 import time
 import logging
@@ -17,6 +18,13 @@ except ImportError:
 from core.portfolio import Position
 
 logger = logging.getLogger(__name__)
+
+
+def _round_to_precision(value: float, precision: int) -> float:
+    """Округляет цену/количество до указанного количества знаков после запятой."""
+    if precision <= 0:
+        return round(value, 1)
+    return round(value, precision)
 
 
 class TradeExecutor:
@@ -51,12 +59,17 @@ class TradeExecutor:
             self._simulate(signal, entry_price, quantity, leverage, tp_price, sl_price)
             return
 
-        # Повтор с увеличением количества при ошибке минимального лота
-        max_attempts = 3
+        # Получаем точность цены для символа
         contract_info = self.engine._contracts_info.get(signal.symbol, {})
+        price_precision = contract_info.get('pricePrecision', 1)
         min_qty = contract_info.get('minQty', 0)
         step_size = contract_info.get('stepSize', 0.001)
 
+        # Округляем цену входа до допустимой точности
+        entry_price = _round_to_precision(entry_price, price_precision)
+
+        # Повтор с увеличением количества при ошибке минимального лота
+        max_attempts = 3
         for attempt in range(max_attempts):
             try:
                 resp = self.engine.api.set_leverage(signal.symbol, leverage, pos_side)
@@ -125,6 +138,10 @@ class TradeExecutor:
         sl_tp = self.engine.risk_manager.get_sl_tp_levels(actual_entry, side, atr, signal.symbol)
         final_tp = sl_tp['tp2']
         final_sl = sl_tp['sl']
+
+        # Округляем TP и SL до допустимой точности
+        final_tp = _round_to_precision(final_tp, price_precision)
+        final_sl = _round_to_precision(final_sl, price_precision)
 
         # ---------------------------------------------------------------
         # КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: гарантируем корректность SL относительно TP

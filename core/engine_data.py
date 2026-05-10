@@ -19,7 +19,7 @@ def discover_symbols(engine):
 
 def load_contracts_info(engine):
     if engine.auth.demo_mode:
-        engine._contracts_info = {s: {'minQty': 0.001, 'stepSize': 0.001} for s in engine._top_symbols}
+        engine._contracts_info = {s: {'minQty': 0.001, 'stepSize': 0.001, 'pricePrecision': 1} for s in engine._top_symbols}
         return
     try:
         contracts = engine.api.get_contracts()
@@ -37,7 +37,8 @@ def load_contracts_info(engine):
                 continue
             engine._contracts_info[sym] = {
                 'minQty': min_qty,
-                'stepSize': step_size
+                'stepSize': step_size,
+                'pricePrecision': price_precision
             }
         logger.info(f"Loaded contract info for {len(engine._contracts_info)} symbols")
     except Exception as e:
@@ -64,4 +65,9 @@ def get_current_atr(engine, symbol, candles_dict=None):
             return float(atr_series.iloc[-1]) if len(atr_series) > 0 else 0.02
     except Exception as e:
         logger.debug(f"ATR calc failed for {symbol}: {e}")
+    # ИСПРАВЛЕНИЕ: Если ATR не удалось рассчитать, возвращаем 2% от цены,
+    # а не фиксированное 0.02 (что для BTC даёт SL в 1 цент, а для SHIB – 200%).
+    price = engine._get_current_price(symbol)
+    if price > 0:
+        return price * 0.02
     return 0.02
