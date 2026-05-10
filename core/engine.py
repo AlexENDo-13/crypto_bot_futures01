@@ -225,9 +225,14 @@ class TradingEngine:
                 data = response.get('data')
                 if not data:
                     return
-                # Баланс v3: data - объект с полями balance, availableMargin, unrealizedProfit
-                # (не массив)
-                bal = data  # уже словарь
+                # Баланс v3: может быть объект с полями balance, availableMargin, unrealizedProfit
+                # или массив таких объектов. Обрабатываем универсально.
+                if isinstance(data, list):
+                    if len(data) == 0:
+                        return
+                    bal = data[0]  # берем первый элемент
+                else:
+                    bal = data  # уже словарь
                 balance = _safe_float(bal.get('balance', 0))
                 available = _safe_float(bal.get('availableMargin', balance))
                 unrealized = _safe_float(bal.get('unrealizedProfit', 0))
