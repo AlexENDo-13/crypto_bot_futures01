@@ -1,9 +1,6 @@
 """
 BingX Perpetual Futures (Swap v2/v3) API client.
-Исправлено:
-  - Все методы (GET, POST, DELETE) передают параметры в query string (без тела).
-  - K-Lines v3 с корректным парсингом.
-  - Баланс v3: массив объектов, ищем USDT.
+Fixed: proper parameter ordering for signature validation.
 """
 import hmac
 import hashlib
@@ -54,9 +51,10 @@ class BingXAPI:
     OPEN_ORDERS = "/openApi/swap/v2/trade/openOrders"
     LEVERAGE = "/openApi/swap/v2/trade/leverage"
     CONTRACTS = "/openApi/swap/v2/quote/contracts"
-    KLINES = "/openApi/swap/v3/quote/klines"
+    KLINES = "/openApi/swap/v2/quote/klines"
     TICKER = "/openApi/swap/v2/quote/ticker"
     DEPTH = "/openApi/swap/v2/quote/depth"
+    POSITION_MODE = "/openApi/swap/v1/positionSide/dual"
 
     def __init__(self, auth_manager):
         self.auth = auth_manager
@@ -66,7 +64,6 @@ class BingXAPI:
         self._last_ping_ms: Optional[float] = None
 
     def _sign_params(self, params: Dict[str, Any]) -> str:
-        """Строит подпись HMAC-SHA256 по отсортированным ключам."""
         sorted_keys = sorted(params.keys())
         query_string = "&".join([f"{k}={params[k]}" for k in sorted_keys])
         signature = hmac.new(
@@ -87,21 +84,26 @@ class BingXAPI:
 
                 params = params or {}
                 params['timestamp'] = int(time.time() * 1000)
-                # Подпись вычисляется ДО добавления signature
+                # Compute signature from sorted params (without signature)
                 signature = self._sign_params(params)
-                params['signature'] = signature
+
+                # Build sorted parameter list for URL (including signature)
+                sorted_keys = sorted(params.keys())
+                param_items = [(k, params[k]) for k in sorted_keys]
+                param_items.append(('signature', signature))
+                query_string = urlencode(param_items)
 
                 url = f"{self.BASE_URL}{endpoint}"
-                headers = {"X-BX-APIKEY": self.auth.api_key}
+                full_url = f"{url}?{query_string}"
 
-                # Все параметры всегда в query string (как для GET, так и для POST/DELETE)
-                full_url = f"{url}?{urlencode(params)}"
+                headers = {"X-BX-APIKEY": self.auth.api_key}
 
                 if method.upper() == 'GET':
                     response = self.session.get(full_url, headers=headers, timeout=15)
+                elif method.upper() in ('POST', 'DELETE'):
+                    response = self.session.request(method, full_url, headers=headers, data={}, timeout=15)
                 else:
-                    # POST/PUT/DELETE – параметры в query string, тело пустое
-                    response = self.session.request(method, full_url, headers=headers, timeout=15)
+                    response = self.session.get(full_url, headers=headers, timeout=15)
 
                 status_code = response.status_code
                 if status_code == 200:
@@ -156,7 +158,7 @@ class BingXAPI:
     def last_ping_ms(self) -> Optional[float]:
         return self._last_ping_ms
 
-    # Account
+    # ---- Account ----
     def get_balance(self) -> Dict:
         return self._request('GET', self.BALANCE)
 
@@ -167,7 +169,14 @@ class BingXAPI:
         response = self._request('GET', self.POSITIONS, params)
         return response.get('data', [])
 
-    # Trading
+    # ---- Position mode ----
+    def set_position_mode(self, dual_side: bool = True) -> Dict:
+        params = {
+            'dualSidePosition': 'true' if dual_side else 'false'
+        }
+        return self._request('POST', self.POSITION_MODE, params)
+
+    # ---- Trading ----
     def set_leverage(self, symbol: str, leverage: int, position_side: str = "LONG") -> Dict:
         params = {
             'symbol': symbol,
@@ -240,7 +249,7 @@ class BingXAPI:
         response = self._request('GET', self.OPEN_ORDERS, params)
         return response.get('data', {}).get('orders', [])
 
-    # Market Data
+    # ---- Market Data ----
     def get_contracts(self) -> List[Dict]:
         response = self._request('GET', self.CONTRACTS)
         return response.get('data', [])
@@ -280,7 +289,8 @@ class BingXAPI:
         df = pd.DataFrame(data)
         column_map = {
             'open': 'open', 'high': 'high', 'low': 'low',
-            'close': 'close', 'volume': 'volume', 'time': 'timestamp'
+            'close': 'close', 'volume': 'volume',
+            'time': 'timestamp', 'openTime': 'timestamp',
         }
         for old, new in column_map.items():
             if old in df.columns and new not in df.columns:

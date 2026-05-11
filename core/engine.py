@@ -1,6 +1,6 @@
 """
 Trading Engine – coordinator.
-Исправлено: разбор баланса v3 (массив объектов, ищем USDT)
+Исправлено: баланс v3 — массив объектов, ищем USDT.
 """
 import os, sys, time, json, logging, threading
 from collections import deque
@@ -216,7 +216,7 @@ class TradingEngine:
     def _market_scan_task(self):
         market_scan_task(self)
 
-    # ИСПРАВЛЕНИЕ: разбор баланса v3 (массив объектов, ищем USDT)
+    # ИСПРАВЛЕНИЕ: баланс v3 – массив объектов, ищем USDT
     def _equity_update_task(self):
         try:
             if self.auth.demo_mode:
@@ -224,20 +224,23 @@ class TradingEngine:
                 self.portfolio.available_margin = 1000.0
             else:
                 response = self.api.get_balance()
-                # Реальный ответ v3: {"code":0, "data": [ { "asset":"USDT", "balance":"...", ... }, ... ]}
+                # Структура v3: {"code":0, "data": [ { "asset":"USDT", "balance":"...", ... }, ... ]}
                 data_list = response.get('data', [])
                 if not data_list or not isinstance(data_list, list):
+                    logger.warning("Balance data is empty or not a list")
                     return
 
-                # Ищем актив USDT (основная маржа)
+                # Ищем ассет USDT
                 usdt_info = None
                 for item in data_list:
                     if item.get('asset') == 'USDT':
                         usdt_info = item
                         break
-                # Если USDT не найден, берём первый элемент
-                if not usdt_info:
-                    usdt_info = data_list[0]
+                if usdt_info is None and data_list:
+                    usdt_info = data_list[0]  # fallback
+
+                if usdt_info is None:
+                    return
 
                 balance = _safe_float(usdt_info.get('balance', 0))
                 available = _safe_float(usdt_info.get('availableMargin', balance))
