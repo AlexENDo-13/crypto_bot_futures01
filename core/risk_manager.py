@@ -1,6 +1,7 @@
 """
 Risk Management – микро‑режим для скальпинга и наращивания депозита.
 При балансе < 50 USDT: плечо 5x, 1 позиция, SL=0.8 ATR, TP=1.6 ATR, сигнал ≥0.3.
+Добавлен пустой метод set_night_mode для совместимости с движком.
 """
 import logging, json, os, time
 from datetime import datetime, timezone
@@ -30,7 +31,6 @@ class RiskManager:
         self._user_max_positions: Optional[int] = None
         self._user_risk_pct: Optional[float] = None
         self._user_max_leverage: Optional[int] = None
-        # Единственный профиль для микро‑скальпинга
         self._profiles = {
             'Micro': {'risk_pct': 5.0, 'max_lev': 5, 'max_pos': 1, 'atr_mult': {'sl': 0.8, 'tp': 1.6}},
             'User':  {'risk_pct': 5.0, 'max_lev': 5, 'max_pos': 1, 'atr_mult': {'sl': 0.8, 'tp': 1.6}},
@@ -66,7 +66,6 @@ class RiskManager:
         if balance < 50:
             self._apply_micro_mode(engine)
             return
-        # Обычная адаптация (не достигается при малом балансе)
         self.risk_per_trade_pct = 5.0
         self.max_leverage = 5
         if engine: engine.max_positions = 1
@@ -77,11 +76,15 @@ class RiskManager:
         self._current_profile = 'Micro'
         self._atr_multipliers['__default__'] = {'sl': 0.8, 'tp': 1.6}
         if engine:
-            engine.max_positions = 2
+            engine.max_positions = 1
             engine.signal_threshold = 0.3
             f = engine.filters.get('OrderFlowImbalance')
             if f and f.enabled: f.config['min_delta_ratio'] = 0.6
         logger.info("Micro-mode for scalping: SL=0.8 ATR, TP=1.6 ATR, 1 position, threshold=0.3")
+
+    # Заглушка, чтобы движок не падал при переходе в ночной режим
+    def set_night_mode(self, enabled: bool):
+        self._night_mode = enabled
 
     def get_sl_tp_levels(self, entry_price, side, atr, symbol=None):
         sl_mult, tp_mult = self.get_atr_multipliers(symbol)

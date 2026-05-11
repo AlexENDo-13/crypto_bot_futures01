@@ -1,7 +1,7 @@
 """
 Auto Strategy Selector – автоматически включает/выключает стратегии и фильтры
 в зависимости от текущего рыночного режима (тренд, боковик, высокая волатильность).
-Исправлено: режимы UNKNOWN и LOW_VOLATILITY теперь не отключают все стратегии/фильтры.
+MicroScalper и MultiTFConsensus теперь разрешены всегда.
 """
 import logging
 import threading
@@ -10,8 +10,8 @@ from ml.market_regime import MarketRegime
 
 logger = logging.getLogger(__name__)
 
-# Маппинг: режим -> список рекомендуемых стратегий (остальные будут отключены)
-REGIME_STRATEGIES = {
+# Базовые списки стратегий для каждого режима
+BASE_STRATEGIES = {
     MarketRegime.TREND_UP: [
         'TrendFollowing', 'Momentum', 'Ichimoku', 'DualThrust',
         'Breakout', 'BreakoutSwing', 'SuperTrendSwing',
@@ -30,7 +30,6 @@ REGIME_STRATEGIES = {
         'Breakout', 'BreakoutSwing', 'SuperTrendSwing', 'Range',
         'TrendFollowing', 'Momentum', 'DualThrust', 'TurtleTrading'
     ],
-    # === ИЗМЕНЕНО: добавлены мягкие трендовые стратегии, чтобы бот не засыпал ===
     MarketRegime.LOW_VOLATILITY: [
         'MeanReversion', 'RSIDivergence', 'Squeeze', 'Range',
         'DynamicRebalance', 'Ichimoku', 'TrendFollowing', 'Momentum',
@@ -43,6 +42,12 @@ REGIME_STRATEGIES = {
         'DualThrust', 'TurtleTrading', 'GridStrategy', 'Range'
     ],
 }
+
+# Добавляем MicroScalper и MultiTFConsensus во все режимы
+for regime in BASE_STRATEGIES:
+    BASE_STRATEGIES[regime].extend(['MicroScalper', 'MultiTFConsensus'])
+
+REGIME_STRATEGIES = BASE_STRATEGIES
 
 # Маппинг: режим -> список рекомендуемых фильтров (остальные отключаются)
 REGIME_FILTERS = {
@@ -68,7 +73,6 @@ REGIME_FILTERS = {
         'DrawdownLimiter', 'AdaptiveLeverage', 'SessionFilter',
         'CandlestickPattern', 'TrendFilter'
     ],
-    # === ИЗМЕНЕНО: убрали часть строгих фильтров, оставили VolumeProfile и ослабленный OrderFlowImbalance ===
     MarketRegime.LOW_VOLATILITY: [
         'ATRFilter', 'VolumeFilter', 'LiquidityFilter',
         'OrderFlowImbalance', 'VolumeProfile', 'CandlestickPattern',

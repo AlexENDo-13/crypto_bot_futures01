@@ -25,7 +25,7 @@ partial_close = False
 partial_close_pct = 30.0
 breakeven = False
 breakeven_atr_mult = 1.0
-slippage_timeout = 0
+slippage_timeout = 0.0
 reinvest_profits = True
 
 [MOONSHOT]
