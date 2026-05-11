@@ -11,8 +11,8 @@ top_symbols = 60
 
 [RISK]
 profile = User
-risk_per_trade = 5.0
-max_leverage = 10
+risk_per_trade = 2.0
+max_leverage = 3
 use_day_profile = False
 kelly_enabled = True
 kelly_winrate = 0.5

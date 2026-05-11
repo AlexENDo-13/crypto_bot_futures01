@@ -4,6 +4,7 @@ applies trailing/breakeven, partial close, trailing take profit,
 corrects TP/SL orders, enforces maximum position limit, records closed trades,
 and supports smart replacement of weakest positions.
 Fixed: only cancels/recreates TP/SL when truly needed, with tolerance.
+Also fixed int/float conversion for order quantities.
 """
 import logging
 import re
@@ -305,8 +306,8 @@ class PositionSyncManager:
         cache_key = f"{symbol}_{pos_side}"
         cached = self._tpsl_cache.get(cache_key)
 
-        # Допуск 0.1% для цен и 0 для количества (количество должно совпадать точно)
-        if cached and cached['qty'] == quantity:
+        # Допуск 0.1% для цен и допустимая разница в количестве (используем float)
+        if cached and abs(cached['qty'] - quantity) < 1e-8:
             tp_close = True
             sl_close = True
             if expected_tp is not None and cached['tp'] is not None:
@@ -327,11 +328,13 @@ class PositionSyncManager:
                 order_type = o.get('type', '')
                 if order_type in ('TAKE_PROFIT_MARKET', 'STOP_MARKET'):
                     existing_price = float(o.get('stopPrice', 0))
+                    # Исправлено: используем float для количества
+                    order_qty = float(o.get('origQty', 0))
                     if order_type == 'TAKE_PROFIT_MARKET' and expected_tp is not None:
-                        if abs(existing_price - expected_tp) / max(abs(expected_tp), 1e-8) < 0.001 and quantity == int(o.get('origQty', 0)):
+                        if abs(existing_price - expected_tp) / max(abs(expected_tp), 1e-8) < 0.001 and abs(quantity - order_qty) < 1e-8:
                             continue  # этот TP не меняем
                     elif order_type == 'STOP_MARKET' and expected_sl is not None:
-                        if abs(existing_price - expected_sl) / max(abs(expected_sl), 1e-8) < 0.001 and quantity == int(o.get('origQty', 0)):
+                        if abs(existing_price - expected_sl) / max(abs(expected_sl), 1e-8) < 0.001 and abs(quantity - order_qty) < 1e-8:
                             continue  # этот SL не меняем
                     try:
                         self.engine.api.cancel_order(symbol, o.get('orderId', ''))
