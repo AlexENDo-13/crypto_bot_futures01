@@ -1,8 +1,9 @@
 """
-Trade executor: places orders, handles trailing stop, breakeven, partial close,
+Trade executor: places MARKET orders, handles trailing stop, breakeven, partial close,
 slippage protection and sound notifications.
 Fixed: round entry_price and TP/SL to symbol's pricePrecision.
-Now uses LIMIT orders with slight price offset to save maker fees.
+Uses MARKET orders for instant execution.
+Prioritises signal.suggested_tp/sl when available (for micro-scalping).
 """
 import time
 import logging
@@ -40,17 +41,14 @@ class TradeExecutor:
         """
         try:
             error_str = str(exception)
-            # Ищем JSON-объект с полем "code" в строке ошибки
             match = re.search(r'\{.*"code":\s*(\d+).*\}', error_str)
             if match:
                 code = int(match.group(1))
                 return code in (110406, 110407)
         except Exception:
             pass
-        # Fallback: если JSON не найден, проверяем старую подстроку
         return 'already exists' in str(exception).lower()
 
-    # ------------------------------------------------------------------
     def execute(self, signal, entry_price, quantity, leverage, tp_price, sl_price):
         side = signal.action
         pos_side = "LONG" if side == "BUY" else "SHORT"
@@ -60,22 +58,12 @@ class TradeExecutor:
             self._simulate(signal, entry_price, quantity, leverage, tp_price, sl_price)
             return
 
-        # Получаем точность цены для символа
         contract_info = self.engine._contracts_info.get(signal.symbol, {})
         price_precision = contract_info.get('pricePrecision', 1)
         min_qty = contract_info.get('minQty', 0)
         step_size = contract_info.get('stepSize', 0.001)
 
-        # Округляем цену входа до допустимой точности
         entry_price = _round_to_precision(entry_price, price_precision)
-
-        # --- ИЗМЕНЕНО: используем лимитный ордер с небольшим смещением для экономии комиссии ---
-        # Для BUY – чуть ниже текущей цены (0.1%), для SELL – чуть выше
-        price_offset = entry_price * 0.001  # 0.1% смещение
-        if side == 'BUY':
-            limit_price = _round_to_precision(entry_price - price_offset, price_precision)
-        else:
-            limit_price = _round_to_precision(entry_price + price_offset, price_precision)
 
         # Повтор с увеличением количества при ошибке минимального лота
         max_attempts = 3
@@ -88,7 +76,7 @@ class TradeExecutor:
 
                 order = self.engine.api.place_order(
                     symbol=signal.symbol, side=side, position_side=pos_side,
-                    order_type='LIMIT', quantity=quantity, price=limit_price
+                    order_type='MARKET', quantity=quantity
                 )
                 if order.get('code') == 101400:
                     if min_qty > 0:
@@ -98,10 +86,10 @@ class TradeExecutor:
                         logger.info(f"Increasing quantity to {quantity} due to min order amount")
                         continue
                     else:
-                        logger.error(f"Limit order failed with min amount error, but no minQty info")
+                        logger.error(f"Market order failed with min amount error, but no minQty info")
                         return
                 elif order.get('code') != 0:
-                    logger.error(f"Limit order failed: {order}")
+                    logger.error(f"Market order failed: {order}")
                     return
                 else:
                     break
@@ -112,23 +100,8 @@ class TradeExecutor:
             logger.error(f"Failed to place order after {max_attempts} attempts")
             return
 
-        # Ожидание исполнения (если за timeout не исполнилось – переходим в MARKET)
-        timeout = getattr(self.engine, 'slippage_timeout_sec', 10.0)
-        if timeout > 0:
-            executed = False
-            for _ in range(int(timeout * 2)):
-                time.sleep(0.5)
-                positions = self.engine.api.get_positions(signal.symbol)
-                if any(p['symbol'] == signal.symbol and p['positionSide'] == pos_side for p in positions):
-                    executed = True
-                    break
-            if not executed:
-                self.engine.api.cancel_order(signal.symbol, order.get('orderId', ''))
-                logger.warning(f"Limit order not filled, switching to market for {signal.symbol}")
-                self.engine.api.place_order(
-                    symbol=signal.symbol, side=side, position_side=pos_side,
-                    order_type='MARKET', quantity=quantity
-                )
+        # MARKET ордер исполняется мгновенно
+        time.sleep(1)
 
         # Фактическая цена входа
         actual_entry = entry_price
@@ -143,40 +116,38 @@ class TradeExecutor:
 
         logger.info(f"Actual entry price for {signal.symbol}: {actual_entry} (requested: {entry_price})")
 
-        atr = self.engine._get_current_atr(signal.symbol)
-        sl_tp = self.engine.risk_manager.get_sl_tp_levels(actual_entry, side, atr, signal.symbol)
-        final_tp = sl_tp['tp2']
-        final_sl = sl_tp['sl']
+        # --------------- ПРИОРИТЕТ suggested TP/SL из стратегии ---------------
+        if signal.suggested_tp is not None and signal.suggested_sl is not None:
+            final_tp = signal.suggested_tp
+            final_sl = signal.suggested_sl
+            logger.info(f"Using signal-suggested TP={final_tp:.6f}, SL={final_sl:.6f}")
+        else:
+            atr = self.engine._get_current_atr(signal.symbol)
+            sl_tp = self.engine.risk_manager.get_sl_tp_levels(actual_entry, side, atr, signal.symbol)
+            final_tp = sl_tp['tp2']
+            final_sl = sl_tp['sl']
 
-        # Округляем TP и SL до допустимой точности
         final_tp = _round_to_precision(final_tp, price_precision)
         final_sl = _round_to_precision(final_sl, price_precision)
 
-        # ---------------------------------------------------------------
-        # КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: гарантируем корректность SL относительно TP
-        # ---------------------------------------------------------------
+        # Гарантируем корректность SL относительно TP
         if pos_side == 'LONG':
             if final_sl >= actual_entry:
                 final_sl = actual_entry * 0.99
             if final_tp <= actual_entry:
                 final_tp = actual_entry * 1.01
             if final_sl >= final_tp:
-                final_sl = final_tp * 0.99  # SL ниже TP
-        else:  # SHORT
+                final_sl = final_tp * 0.99
+        else:
             if final_sl <= actual_entry:
                 final_sl = actual_entry * 1.01
             if final_tp >= actual_entry:
                 final_tp = actual_entry * 0.99
             if final_sl <= final_tp:
-                final_sl = final_tp * 1.01  # SL выше TP
+                final_sl = final_tp * 1.01
 
-        # Дополнительный предохранитель: цены должны быть положительны
         if final_sl <= 0 or final_tp <= 0:
             logger.error(f"Invalid SL/TP after corrections for {signal.symbol}: SL={final_sl}, TP={final_tp}. Aborting trade.")
-            try:
-                self.engine.api.cancel_order(signal.symbol, order.get('orderId', ''))
-            except:
-                pass
             return
 
         self._place_tpsl_orders(signal.symbol, pos_side, quantity, final_tp, final_sl)
@@ -245,7 +216,6 @@ class TradeExecutor:
                 pos.partial_done = True
                 logger.info(f"Partial close {self.engine.partial_close_pct}% for {pos.symbol}")
 
-                # Перевыставить TP/SL с новым количеством
                 if pos.quantity > 0:
                     self._place_tpsl_orders(pos.symbol, pos.side, pos.quantity, pos.tp_price, pos.sl_price)
 
@@ -267,7 +237,7 @@ class TradeExecutor:
         except Exception as e:
             logger.warning(f"Не удалось отменить старые TP/SL для {symbol}: {e}")
 
-        # 2. Создаём новые TP/SL, игнорируя ошибку "already exists"
+        # 2. Создаём новые TP/SL
         if tp_price is not None:
             try:
                 self.engine.api.place_order(
@@ -281,8 +251,6 @@ class TradeExecutor:
                     logger.error(f"Failed to place TP for {symbol}: {e}")
 
         if sl_price is not None:
-            # Гарантируется, что SL и TP корректны по отношению друг к другу,
-            # но дополнительная проверка для логов оставлена.
             if pos_side == 'LONG' and sl_price >= tp_price:
                 logger.error(f"Invalid SL for LONG: {sl_price} >= TP {tp_price}, skipping SL order")
                 return
