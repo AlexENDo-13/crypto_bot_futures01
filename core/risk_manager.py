@@ -1,7 +1,7 @@
 """
 Risk Management – микро‑режим для скальпинга и наращивания депозита.
 При балансе < 50 USDT: плечо 5x, 1 позиция, SL=0.8 ATR, TP=1.6 ATR, сигнал ≥0.3.
-Исправлен расчёт размера позиции, чтобы не завышал required margin.
+Исправлена ошибка NameError (symbol).
 """
 import logging, json, os, time
 from datetime import datetime, timezone
@@ -76,7 +76,7 @@ class RiskManager:
         self._current_profile = 'Micro'
         self._atr_multipliers['__default__'] = {'sl': 0.8, 'tp': 1.6}
         if engine:
-            engine.max_positions = 2
+            engine.max_positions = 1
             engine.signal_threshold = 0.3
             f = engine.filters.get('OrderFlowImbalance')
             if f and f.enabled: f.config['min_delta_ratio'] = 0.6
@@ -97,29 +97,27 @@ class RiskManager:
             tp = entry_price - atr * tp_mult
         return {'sl': max(sl, 1e-8), 'tp': max(tp, 1e-8), 'tp2': tp}
 
-    def calculate_position_size(self, free_margin, entry_price, sl_price, confidence):
+    def calculate_position_size(self, free_margin, entry_price, sl_price, confidence,
+                                min_qty=0.0, step_size=0.0):
         if entry_price <= 0 or free_margin <= 0:
             return 0.0, 1
-        # Риск‑сумма, которую готовы потерять на сделку
         risk_amount = free_margin * (self.risk_per_trade_pct / 100.0) * confidence
         sl_distance = abs(entry_price - sl_price)
         if sl_distance == 0:
             sl_distance = entry_price * 0.001
-        # Количество, соответствующее риску
         quantity = risk_amount / sl_distance
         leverage = self.max_leverage
-        # Учёт Келли, если включён
         if self._kelly_enabled:
             f = self._kelly_winrate - ((1 - self._kelly_winrate) / self._kelly_avg_win_loss_ratio)
             quantity *= max(0.1, f)
-        # Не даём марже превысить free_margin
         max_qty_by_margin = (free_margin * leverage) / entry_price
         if quantity > max_qty_by_margin:
             quantity = max_qty_by_margin
-        # Применяем minQty из контрактов
-        if self.engine and symbol:
-            info = self.engine._contracts_info.get(symbol, {})
-            min_qty = info.get('minQty', 0)
+        # minQty и step_size теперь передаются из signal_processor, но здесь не обязательны
+        if min_qty > 0 and quantity < min_qty:
+            quantity = min_qty
+        if step_size > 0:
+            quantity = ((quantity + step_size - 1e-10) // step_size) * step_size
             if min_qty > 0 and quantity < min_qty:
                 quantity = min_qty
         return quantity, leverage

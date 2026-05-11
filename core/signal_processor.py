@@ -128,27 +128,16 @@ class SignalProcessor:
         reinvest = getattr(self.engine, 'reinvest_profits', True)
         base_for_calc = equity if reinvest else free_margin
 
+        # Получаем minQty и stepSize из контрактов
+        contract_info = self.engine._contracts_info.get(signal.symbol, {})
+        min_qty = float(contract_info.get('minQty', 0))
+        step_size = float(contract_info.get('stepSize', 0.001))
+
         quantity, leverage = self.engine.risk_manager.calculate_position_size(
-            base_for_calc, price, sl_tp['sl'], signal.confidence
+            base_for_calc, price, sl_tp['sl'], signal.confidence,
+            min_qty=min_qty, step_size=step_size
         )
         leverage = self.engine.risk_manager.get_optimal_leverage(signal.symbol, price, atr_val)
-
-        # --- Нормализация количества под требования биржи ---
-        contract_info = self.engine._contracts_info.get(signal.symbol, {})
-        raw_min_qty = contract_info.get('minQty')
-        raw_step_size = contract_info.get('stepSize')
-        min_qty = float(raw_min_qty) if raw_min_qty is not None else 0.0
-        step_size = float(raw_step_size) if raw_step_size is not None else 0.001
-
-        if min_qty > 0 and quantity < min_qty:
-            quantity = min_qty
-        if step_size > 0:
-            quantity = ((quantity + step_size - 1e-10) // step_size) * step_size
-            if min_qty > 0 and quantity < min_qty:
-                quantity = min_qty
-
-        # Убрана избыточная проверка required_margin > free_margin,
-        # так как calculate_position_size уже гарантирует, что маржа вписывается.
 
         if quantity <= 0:
             logger.info(f"Zero quantity for {signal.symbol}, skipping")
