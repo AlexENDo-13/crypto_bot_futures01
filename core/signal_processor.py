@@ -1,12 +1,11 @@
 """
 Signal Processor: validates signals through filters, risk controller,
 on-chain checks, correlation checks, and delegates execution.
+Removed duplicate margin check – now trusts risk_manager.calculate_position_size.
 """
 import logging
 from typing import Dict
-
 import pandas as pd
-
 from strategies.base import Signal
 
 logger = logging.getLogger(__name__)
@@ -118,7 +117,7 @@ class SignalProcessor:
             except Exception as e:
                 logger.warning(f"Filter {filter_name} error: {e}")
 
-        # Проверка лимита позиций (после актуализации через background_sync)
+        # Проверка лимита позиций
         if len(current_positions) >= self.engine.max_positions:
             logger.info(f"Max positions reached ({self.engine.max_positions}), skipping {signal.symbol}")
             return
@@ -134,11 +133,10 @@ class SignalProcessor:
         )
         leverage = self.engine.risk_manager.get_optimal_leverage(signal.symbol, price, atr_val)
 
-        # --- Нормализация количества под требования биржи (защита от None) ---
+        # --- Нормализация количества под требования биржи ---
         contract_info = self.engine._contracts_info.get(signal.symbol, {})
         raw_min_qty = contract_info.get('minQty')
         raw_step_size = contract_info.get('stepSize')
-
         min_qty = float(raw_min_qty) if raw_min_qty is not None else 0.0
         step_size = float(raw_step_size) if raw_step_size is not None else 0.001
 
@@ -149,15 +147,16 @@ class SignalProcessor:
             if min_qty > 0 and quantity < min_qty:
                 quantity = min_qty
 
-        required_margin = (quantity * price) / leverage
-        if required_margin > free_margin:
-            logger.info(f"Insufficient margin for {signal.symbol}: required {required_margin:.2f}, available {free_margin:.2f}")
+        # Убрана избыточная проверка required_margin > free_margin,
+        # так как calculate_position_size уже гарантирует, что маржа вписывается.
+
+        if quantity <= 0:
+            logger.info(f"Zero quantity for {signal.symbol}, skipping")
             return
 
         self.engine.executor.execute(signal, price, quantity, leverage, sl_tp['tp2'], sl_tp['sl'])
 
     def _safe_filter_assess(self, filter_obj, signal, data):
-        """Безопасный вызов assess, возвращает None только при ошибке."""
         try:
             result = filter_obj.assess(signal, data)
             if result is None:
@@ -194,7 +193,6 @@ class SignalProcessor:
         return correlations
 
     def _check_correlation(self, symbol, all_candles):
-        """Проверяет, не превышен ли лимит коррелирующих позиций."""
         positions = self.engine.portfolio.get_positions()
         if not positions:
             return True

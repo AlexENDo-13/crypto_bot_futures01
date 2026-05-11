@@ -207,12 +207,12 @@
   },
   "MultiTFConsensus": {
     "weight": 2.0,
-    "trades": 0,
+    "trades": 1,
     "wins": 0,
     "total_pnl": 0.0,
     "avg_pnl": 0.0,
     "winrate": 0.0,
-    "consecutive_losses": 0,
+    "consecutive_losses": 1,
     "disabled": false,
     "disabled_reason": null
   }

@@ -5,12 +5,12 @@ api_secret =
 [ENGINE]
 scan_interval = 30
 signal_threshold = 0.3
-max_positions = 2
+max_positions = 1
 timeframes = 5m,15m,1h,4h,1d
 top_symbols = 60
 
 [RISK]
-profile = User
+profile = Micro
 risk_per_trade = 5.0
 max_leverage = 5
 use_day_profile = False
