@@ -2,6 +2,7 @@
 Trade executor: places orders, handles trailing stop, breakeven, partial close,
 slippage protection and sound notifications.
 Fixed: round entry_price and TP/SL to symbol's pricePrecision.
+Now uses LIMIT orders with slight price offset to save maker fees.
 """
 import time
 import logging
@@ -68,6 +69,14 @@ class TradeExecutor:
         # Округляем цену входа до допустимой точности
         entry_price = _round_to_precision(entry_price, price_precision)
 
+        # --- ИЗМЕНЕНО: используем лимитный ордер с небольшим смещением для экономии комиссии ---
+        # Для BUY – чуть ниже текущей цены (0.1%), для SELL – чуть выше
+        price_offset = entry_price * 0.001  # 0.1% смещение
+        if side == 'BUY':
+            limit_price = _round_to_precision(entry_price - price_offset, price_precision)
+        else:
+            limit_price = _round_to_precision(entry_price + price_offset, price_precision)
+
         # Повтор с увеличением количества при ошибке минимального лота
         max_attempts = 3
         for attempt in range(max_attempts):
@@ -79,7 +88,7 @@ class TradeExecutor:
 
                 order = self.engine.api.place_order(
                     symbol=signal.symbol, side=side, position_side=pos_side,
-                    order_type='LIMIT', quantity=quantity, price=entry_price
+                    order_type='LIMIT', quantity=quantity, price=limit_price
                 )
                 if order.get('code') == 101400:
                     if min_qty > 0:
@@ -103,7 +112,7 @@ class TradeExecutor:
             logger.error(f"Failed to place order after {max_attempts} attempts")
             return
 
-        # Ожидание исполнения
+        # Ожидание исполнения (если за timeout не исполнилось – переходим в MARKET)
         timeout = getattr(self.engine, 'slippage_timeout_sec', 10.0)
         if timeout > 0:
             executed = False

@@ -30,10 +30,11 @@ REGIME_STRATEGIES = {
         'Breakout', 'BreakoutSwing', 'SuperTrendSwing', 'Range',
         'TrendFollowing', 'Momentum', 'DualThrust', 'TurtleTrading'
     ],
+    # === ИЗМЕНЕНО: добавлены мягкие трендовые стратегии, чтобы бот не засыпал ===
     MarketRegime.LOW_VOLATILITY: [
         'MeanReversion', 'RSIDivergence', 'Squeeze', 'Range',
         'DynamicRebalance', 'Ichimoku', 'TrendFollowing', 'Momentum',
-        'DualThrust', 'GridStrategy'
+        'DualThrust', 'GridStrategy', 'Breakout', 'SuperTrendSwing'
     ],
     MarketRegime.UNKNOWN: [
         'TrendFollowing', 'Momentum', 'MeanReversion', 'Ichimoku',
@@ -67,6 +68,7 @@ REGIME_FILTERS = {
         'DrawdownLimiter', 'AdaptiveLeverage', 'SessionFilter',
         'CandlestickPattern', 'TrendFilter'
     ],
+    # === ИЗМЕНЕНО: убрали часть строгих фильтров, оставили VolumeProfile и ослабленный OrderFlowImbalance ===
     MarketRegime.LOW_VOLATILITY: [
         'ATRFilter', 'VolumeFilter', 'LiquidityFilter',
         'OrderFlowImbalance', 'VolumeProfile', 'CandlestickPattern',

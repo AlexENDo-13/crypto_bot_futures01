@@ -19,7 +19,7 @@ class VolumeProfileFilter(BaseFilter):
         'lookback_bars': 100,
         'value_area_pct': 0.70,   # 70% объёма для Value Area
         'poc_tolerance': 0.005,   # 0.5% близость к POC
-        'vah_penalty': 0.7,       # коэффициент при нахождении выше VAH для BUY / ниже VAL для SELL
+        'vah_penalty': 0.9,       # ИЗМЕНЕНО: было 0.7 – теперь меньше штрафа за пробой VAH
         'poc_boost': 1.1,         # усиление при нахождении вблизи POC
     }
 

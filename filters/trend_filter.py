@@ -6,7 +6,7 @@ class TrendFilter(BaseFilter):
     NAME = "TrendFilter"
     DESCRIPTION = "Blocks counter-trend signals using real ADX"
     PRIORITY = 25
-    PARAMS = {'enabled': True, 'adx_period': 14, 'min_adx': 20}
+    PARAMS = {'enabled': True, 'adx_period': 14, 'min_adx': 15}  # ИЗМЕНЕНО: было 20
 
     def __init__(self, params=None):
         super().__init__(params)
@@ -16,9 +16,8 @@ class TrendFilter(BaseFilter):
         if not self.enabled:
             return signal.confidence
 
-        # === FIX: Используем реальный ADX вместо ATR ===
         candle_data = data.get('candle_data')
-        adx_val = data.get('current_atr', 0)  # fallback
+        adx_val = data.get('current_atr', 0)
 
         if candle_data and '1h' in candle_data:
             try:

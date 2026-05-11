@@ -22,7 +22,7 @@
     "disabled_reason": null
   },
   "Ichimoku": {
-    "weight": 1.0136939939653682,
+    "weight": 1.3697378370649411,
     "trades": 2,
     "wins": 0,
     "total_pnl": 0.0,
@@ -33,7 +33,7 @@
     "disabled_reason": null
   },
   "MeanReversion": {
-    "weight": 1.017948584727854,
+    "weight": 1.0676550663751638,
     "trades": 5,
     "wins": 0,
     "total_pnl": 0.0,
@@ -46,18 +46,18 @@
   },
   "Momentum": {
     "weight": 1.2,
-    "trades": 38,
+    "trades": 40,
     "wins": 0,
     "total_pnl": 0.0,
     "avg_pnl": 0.0,
     "winrate": 0.0,
-    "consecutive_losses": 2,
+    "consecutive_losses": 4,
     "disabled": true,
     "disabled_reason": "winrate 0.0% < 40%",
     "disabled_at": 1778504877.9761841
   },
   "RSIDivergence": {
-    "weight": 0.8939314221048617,
+    "weight": 0.736148396831264,
     "trades": 5,
     "wins": 0,
     "total_pnl": 0.0,
@@ -80,7 +80,7 @@
     "disabled_reason": null
   },
   "TrendFollowing": {
-    "weight": 1.503995294774869,
+    "weight": 1.0530346534222736,
     "trades": 3,
     "wins": 0,
     "total_pnl": 0.0,
@@ -91,7 +91,7 @@
     "disabled_reason": null
   },
   "SmartPyramiding": {
-    "weight": 0.8988172872869429,
+    "weight": 0.8680667567474571,
     "trades": 7,
     "wins": 0,
     "total_pnl": 0.0,
@@ -114,7 +114,7 @@
     "disabled_reason": null
   },
   "Range": {
-    "weight": 1.0072620053236065,
+    "weight": 1.614131517083927,
     "trades": 5,
     "wins": 0,
     "total_pnl": 0.0,
@@ -148,7 +148,7 @@
     "disabled_reason": null
   },
   "EMACrossoverSwing": {
-    "weight": 0.9949151208499238,
+    "weight": 0.8627082629479437,
     "trades": 5,
     "wins": 0,
     "total_pnl": 0.0,
@@ -160,7 +160,7 @@
     "disabled_at": 1778484674.1629007
   },
   "SuperTrendSwing": {
-    "weight": 0.996335778592819,
+    "weight": 0.9010660220061121,
     "trades": 1,
     "wins": 0,
     "total_pnl": 0.0,
@@ -182,7 +182,7 @@
     "disabled_reason": null
   },
   "TurtleTrading": {
-    "weight": 1.003717390057142,
+    "weight": 1.100369531542831,
     "trades": 0,
     "wins": 0,
     "total_pnl": 0.0,

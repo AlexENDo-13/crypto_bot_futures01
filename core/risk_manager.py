@@ -60,7 +60,8 @@ class RiskManager:
             'Adaptive':     {'risk_pct': 2.0, 'max_lev': 3, 'max_pos': 5, 'atr_mult': {'sl': 2.0, 'tp': 3.5}},
             'Turbo':        {'risk_pct': 8.0, 'max_lev': 10, 'max_pos': 3, 'atr_mult': {'sl': 1.2, 'tp': 2.5}},
             'SmartTurbo':   {'risk_pct': 2.0, 'max_lev': 3, 'max_pos': 3, 'atr_mult': {'sl': 1.5, 'tp': 3.0}},
-            'User':         {'risk_pct': 5.0, 'max_lev': 5, 'max_pos': 5, 'atr_mult': {'sl': 2.0, 'tp': 3.5}},
+            # ИЗМЕНЕНО: профиль User – более близкие SL/TP для микро-баланса
+            'User':         {'risk_pct': 5.0, 'max_lev': 5, 'max_pos': 5, 'atr_mult': {'sl': 1.0, 'tp': 2.0}},
         }
         self._load_state()
         self.set_profile('SmartTurbo')
@@ -99,6 +100,12 @@ class RiskManager:
             return
         self._last_adaptation_time = now
 
+        # === Микро-режим для сверхмалого баланса ===
+        balance = engine.portfolio._balance or 0.0
+        if 0 < balance < 50:
+            self._apply_micro_mode(engine)
+            return
+
         regime = engine.regime_detector.get_current_regime().value
         winrate, pf = self._calculate_recent_stats()
         dd_pct = engine.portfolio.get_stats().get('current_drawdown_pct', 0)
@@ -120,6 +127,28 @@ class RiskManager:
         logger.debug(f"Dynamic (capped) risk={dyn_risk:.2f}%, lev={dyn_lev}, pos={dyn_pos}")
 
         self._adapt_atr_multipliers(regime, winrate)
+
+    def _apply_micro_mode(self, engine):
+        """Агрессивная адаптация при балансе < 50 USDT."""
+        self.risk_per_trade_pct = 5.0
+        self.max_leverage = 3
+        self._current_profile = 'User'
+        if engine:
+            engine.max_positions = 4
+            engine.signal_threshold = 0.2
+
+            # Ослабляем фильтры
+            f = engine.filters.get('OrderFlowImbalance')
+            if f and f.enabled:
+                f.config['min_delta_ratio'] = 0.5
+                f.config['strong_delta_ratio'] = 0.7
+            v = engine.filters.get('VolumeSurgeFilter')
+            if v and v.enabled:
+                v.config['min_volume_mult'] = 0.1
+            lf = engine.filters.get('LiquidityFilter')
+            if lf and lf.enabled:
+                lf.config['min_volume_ratio'] = 0.1
+        logger.info("Micro-mode activated (balance < 50): aggressive settings applied.")
 
     def _calculate_dynamic_parameters(self, regime, winrate, profit_factor, dd_pct):
         base = self._profiles.get('Adaptive', self._profiles['SmartTurbo'])
@@ -257,6 +286,7 @@ class RiskManager:
         return default['sl'], default['tp']
 
     def check_low_balance(self, balance: float):
+        """Вызывается из engine для дополнительных проверок (не влияет на микро-режим)."""
         pass
 
     def get_optimal_leverage(self, symbol: str, price: float, atr: float) -> int:

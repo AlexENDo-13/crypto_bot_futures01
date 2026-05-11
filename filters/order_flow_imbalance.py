@@ -15,8 +15,8 @@ class OrderFlowImbalanceFilter(BaseFilter):
         'enabled': True,
         'timeframe': '1h',
         'lookback_bars': 10,         # за сколько свечей считать дельту
-        'min_delta_ratio': 0.6,      # минимальная доля свечей в нужную сторону
-        'strong_delta_ratio': 0.8,   # порог для усиления сигнала
+        'min_delta_ratio': 0.5,      # ИЗМЕНЕНО: было 0.6 – теперь более мягкий порог
+        'strong_delta_ratio': 0.7,   # ИЗМЕНЕНО: было 0.8 – усиление при более слабом дисбалансе
     }
 
     def assess(self, signal: Signal, data: dict) -> float:
