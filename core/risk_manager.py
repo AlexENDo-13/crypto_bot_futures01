@@ -1,6 +1,6 @@
 """
 Risk Management – специальный микро-скальпинговый режим для баланса <100 USDT.
-Исправлено: принудительное количество в микро-режиме, если расчёт дал ноль.
+Добавлено: автоматическое уменьшение количества при Insufficient margin.
 """
 import logging, json, os, time
 from typing import Dict, List, Optional
@@ -160,24 +160,27 @@ class RiskManager:
         if required_margin > free_margin:
             logger.warning(f"Insufficient margin: need {required_margin:.2f}, have {free_margin:.2f}")
             if self._current_profile == 'Micro':
-                quantity = (free_margin * leverage) / entry_price
-                quantity = round(quantity, 8)
-                if quantity <= 0:
-                    return 0.0, 1
-                logger.info(f"Micro-mode forced quantity: {quantity}")
+                # Уменьшаем количество на 10% и пробуем снова (до 5 итераций)
+                for attempt in range(1, 6):
+                    quantity = quantity * 0.9
+                    quantity = round(quantity, 8)
+                    required_margin = (quantity * entry_price) / leverage
+                    if required_margin <= free_margin:
+                        logger.info(f"Micro-mode: reduced quantity to {quantity} (attempt {attempt})")
+                        break
+                else:
+                    # Если всё равно не хватает – берём максимальное возможное
+                    quantity = (free_margin * leverage) / entry_price
+                    quantity = round(quantity, 8)
+                    if quantity <= 0:
+                        return 0.0, 1
+                    logger.info(f"Micro-mode forced final quantity: {quantity}")
             else:
                 return 0.0, 1
 
         quantity = round(quantity, 8)
         if quantity <= 0:
-            if self._current_profile == 'Micro':
-                quantity = (free_margin * leverage) / entry_price
-                quantity = round(quantity, 8)
-                if quantity <= 0:
-                    return 0.0, 1
-                logger.warning(f"Micro-mode final forced quantity: {quantity}")
-            else:
-                return 0.0, 1
+            return 0.0, 1
 
         logger.debug(f"Calculated position: qty={quantity}, lev={leverage}, margin={required_margin:.2f}")
         return quantity, leverage
