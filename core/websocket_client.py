@@ -1,6 +1,6 @@
 """
 WebSocket client for BingX Perpetual Futures (USDT-M).
-Исправлена ошибка при получении списка вместо словаря.
+Сохраняет свечные данные в engine._candle_data.
 """
 import json
 import time
@@ -8,17 +8,16 @@ import threading
 import logging
 import gzip
 import io
-from typing import Optional, Union, List, Dict
+from typing import Optional
 
 import websocket
+import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-# Правильные URL из документации
 WS_MARKET = "wss://open-api-swap.bingx.com/swap-market"
 WS_ACCOUNT = "wss://open-api-swap.bingx.com/swap-market"
 
-# Потоки для маркет‑данных
 STREAMS = [
     'kline_5m', 'kline_15m', 'kline_1h', 'kline_4h', 'kline_1d',
     'depth5', 'bookTicker', 'trade', 'ticker'
@@ -34,7 +33,7 @@ class BingXWebSocketClient:
         self._ws_account: Optional[websocket.WebSocketApp] = None
         self._listen_key: Optional[str] = None
         self._last_listen_key_extend = 0.0
-        self._extend_interval = 30 * 60  # 30 минут
+        self._extend_interval = 30 * 60
 
     def start(self):
         if self._running:
@@ -124,7 +123,6 @@ class BingXWebSocketClient:
 
     def _on_market_message(self, ws, message):
         try:
-            # Распаковка gzip
             if isinstance(message, bytes):
                 try:
                     with gzip.GzipFile(fileobj=io.BytesIO(message)) as gz:
@@ -140,23 +138,19 @@ class BingXWebSocketClient:
                 return
 
             data = json.loads(message)
-            # Проверяем, что data является словарём
             if not isinstance(data, dict):
-                logger.warning(f"Received non-dict message: {type(data)} -> {str(data)[:200]}")
+                logger.warning(f"Non-dict message: {type(data)}")
                 return
 
-            # Поиск dataType: может быть в корне или в поле 'dataType'
             data_type = data.get('dataType')
             if not data_type:
-                # Возможно, это подтверждение подписки или другое служебное сообщение
                 if 'code' in data:
                     logger.debug(f"Subscription confirmation: {data.get('msg')}")
                 return
 
             payload = data.get('data')
-            # Если payload — список, это может быть массив ордеров или сделок. Игнорируем или обрабатываем особым образом
             if isinstance(payload, list):
-                logger.debug(f"Ignoring list payload for {data_type} (size {len(payload)})")
+                logger.debug(f"Ignoring list payload for {data_type}")
                 return
             if not isinstance(payload, dict):
                 logger.debug(f"Unexpected payload type for {data_type}: {type(payload)}")
@@ -168,7 +162,6 @@ class BingXWebSocketClient:
             logger.error(f"Error processing market message: {e}")
 
     def _process_market_data(self, data_type: str, payload: dict):
-        """Обновляет кэши свечей и цен."""
         parts = data_type.split('@')
         if len(parts) != 2:
             return
@@ -177,11 +170,38 @@ class BingXWebSocketClient:
 
         if stream.startswith('kline_'):
             interval = stream.split('_')[1]
-            t = payload.get('t')
+            t = payload.get('t')  # start time in ms
             if t is None:
                 return
-            # Можно обновить свечные данные, но для микро-режима это не критично
-            logger.debug(f"Kline {symbol} {interval}: o={payload.get('o')} c={payload.get('c')}")
+            # Преобразуем в timestamp pandas
+            ts = pd.to_datetime(t, unit='ms', utc=True)
+            o = float(payload.get('o', 0))
+            h = float(payload.get('h', 0))
+            l = float(payload.get('l', 0))
+            c = float(payload.get('c', 0))
+            v = float(payload.get('v', 0))
+
+            # Создаём или обновляем DataFrame
+            if symbol not in self.engine._candle_data:
+                self.engine._candle_data[symbol] = {}
+            if interval not in self.engine._candle_data[symbol]:
+                # Пустой DataFrame с колонками
+                self.engine._candle_data[symbol][interval] = pd.DataFrame(columns=['open','high','low','close','volume'])
+            df = self.engine._candle_data[symbol][interval]
+
+            if ts in df.index:
+                # Обновляем существующую свечу (обычно не требуется, но на всякий случай)
+                df.loc[ts, ['open','high','low','close','volume']] = [o, max(h, df.loc[ts,'high']), min(l, df.loc[ts,'low']), c, v]
+            else:
+                # Добавляем новую свечу
+                new_row = pd.DataFrame({'open': o, 'high': h, 'low': l, 'close': c, 'volume': v}, index=[ts])
+                df = pd.concat([df, new_row])
+                # Оставляем последние 200 свечей
+                if len(df) > 200:
+                    df = df.iloc[-200:]
+                self.engine._candle_data[symbol][interval] = df
+            logger.debug(f"Kline {symbol} {interval}: t={t}, c={c}")
+
         elif stream == 'ticker':
             last_price = payload.get('c')
             if last_price:
@@ -238,10 +258,8 @@ class BingXWebSocketClient:
 
             event_type = data.get('e')
             if event_type == 'ORDER_TRADE_UPDATE':
-                # Обновление ордера – можно обновлять кэш, но не обязательно
                 pass
             elif event_type == 'ACCOUNT_UPDATE':
-                # Обновление баланса/позиций – можно синхронизировать, но для простоты игнорируем
                 pass
         except Exception as e:
             logger.error(f"Account message error: {e}")

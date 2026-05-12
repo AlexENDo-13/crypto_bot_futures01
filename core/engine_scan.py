@@ -1,7 +1,6 @@
 """
 Market scan task – core of the trading bot.
-Fetches candles for each symbol (priority: WebSocket cache -> REST),
-runs strategies, combines signals, applies filters, and delegates to signal_processor.
+Fetches candles for each symbol (priority: WebSocket cache -> REST).
 """
 import time
 import logging
@@ -13,7 +12,6 @@ logger = logging.getLogger(__name__)
 
 
 def market_scan_task(engine):
-    """Main scanning function called by scheduler or manually."""
     if engine._paused or not engine._running:
         logger.debug("Market scan skipped: bot paused or not running")
         return
@@ -54,24 +52,21 @@ def market_scan_task(engine):
 
 
 def _process_symbol(engine, symbol: str):
-    """Process a single symbol: fetch candles (WebSocket first), run strategies."""
     if symbol in engine._blacklist:
         logger.debug(f"Symbol {symbol} in blacklist, skipping")
         return
 
     all_candles = {}
     for tf in engine.timeframes:
-        # Сначала проверяем WebSocket кэш
+        # Сначала пытаемся взять из WebSocket кэша
         if symbol in engine._candle_data and tf in engine._candle_data[symbol]:
             df = engine._candle_data[symbol][tf]
-            # Проверяем, что данные свежие (последняя свеча не старше 2 минут для коротких ТФ)
             if not df.empty:
+                # Проверяем свежесть данных: последняя свеча не старше 2 минут для коротких ТФ
                 try:
                     last_time = df.index[-1]
                     age = (datetime.now(timezone.utc) - last_time).total_seconds()
-                    # Для 5m и 15m свечей считаем свежими, если не старше 2 минут
-                    # Для более крупных ТФ можно больше, но оставим 2 минуты для простоты
-                    if age < 120:
+                    if age < 120:  # 2 минуты
                         all_candles[tf] = df
                         logger.debug(f"Using WebSocket cache for {symbol} {tf} (age {age:.1f}s)")
                         continue
@@ -84,7 +79,7 @@ def _process_symbol(engine, symbol: str):
             df = engine.api.get_klines_dataframe(symbol, tf, limit=200)
             if not df.empty:
                 all_candles[tf] = df
-                # Сохраняем в кэш для будущих использований
+                # Сохраняем в кэш
                 engine._candle_data.setdefault(symbol, {})[tf] = df
                 logger.debug(f"Fetched {tf} for {symbol} via REST, rows={len(df)}")
             else:
@@ -96,7 +91,7 @@ def _process_symbol(engine, symbol: str):
         logger.warning(f"No candle data for {symbol}, skipping")
         return
 
-    # Определяем рыночный режим (на основе 1h, если есть)
+    # Определяем рыночный режим на основе 1h, если есть
     regime = MarketRegime.UNKNOWN
     if '1h' in all_candles:
         regime = engine.regime_detector.detect(all_candles['1h'])
