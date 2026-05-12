@@ -1,11 +1,8 @@
 """
 Position sync manager: synchronises local portfolio with exchange,
 applies trailing/breakeven, partial close, trailing take profit,
-corrects TP/SL orders, enforces maximum position limit, records closed trades,
-and supports smart replacement of weakest positions.
-Optimised for micro-mode: reduces API calls, respects rate limits.
-Fixed: only cancels/recreates TP/SL when truly needed, with tolerance.
-Also fixed int/float conversion for order quantities.
+corrects TP/SL orders, enforces maximum position limit, records closed trades.
+Fixed: properly removes positions that no longer exist on exchange.
 """
 import logging
 import re
@@ -37,12 +34,6 @@ class PositionSyncManager:
     def full_sync(self):
         if self.engine.auth.demo_mode:
             return
-        # В микро-режиме не делаем полную синхронизацию слишком часто
-        balance = self.engine.portfolio._balance or 0.0
-        if balance < 100:
-            logger.debug("Full sync skipped in micro-mode")
-            return
-
         try:
             api_positions = self.engine.api.get_positions()
             self.engine.portfolio.clear()
@@ -83,21 +74,35 @@ class PositionSyncManager:
     def background_sync(self):
         if self.engine.auth.demo_mode:
             return
-
         try:
             api_positions = self.engine.api.get_positions()
-            api_keys = {f"{p.get('symbol')}_{p.get('positionSide')}" for p in api_positions if abs(float(p.get('positionAmt', 0))) > 0}
+            api_keys = {f"{p.get('symbol')}_{p.get('positionSide')}" for p in api_positions}
 
-            # Удаляем локальные позиции, которых нет на бирже
+            # Remove positions that don't exist on exchange
             for pos in list(self.engine.portfolio.get_positions()):
-                if f"{pos.symbol}_{pos.side}" not in api_keys:
-                    logger.info(f"Sync: removing position {pos.symbol} {pos.side} (no longer on exchange)")
+                key = f"{pos.symbol}_{pos.side}"
+                if key not in api_keys:
+                    # Position closed externally or by stop loss
+                    pnl = pos.unrealized_pnl
+                    exit_price = (pos.entry_price + (pnl / pos.quantity) if pos.side == 'LONG'
+                                  else pos.entry_price - (pnl / pos.quantity))
+                    trade = TradeRecord(
+                        symbol=pos.symbol, side=pos.side, action='CLOSE',
+                        entry_price=pos.entry_price, exit_price=exit_price,
+                        quantity=pos.quantity, leverage=pos.leverage, pnl=pnl,
+                        close_reason='External/TP/SL',
+                        open_time=pos.open_time,
+                        close_time=datetime.now(timezone.utc).isoformat()
+                    )
+                    self.engine.portfolio.record_trade(trade)
+                    self.engine.risk_manager.record_trade_result(pnl)
                     self.engine.portfolio.remove_position(pos.symbol, pos.side)
                     cache_key = f"{pos.symbol}_{pos.side}"
                     if cache_key in self._tpsl_cache:
                         del self._tpsl_cache[cache_key]
+                    logger.info(f"Removed closed position: {pos.symbol} {pos.side} (PnL {pnl:.2f})")
 
-            # Обрабатываем позиции, которые есть на бирже
+            # Update existing positions and add new ones
             for p in api_positions:
                 pos_side = p.get('positionSide', 'LONG')
                 symbol = p.get('symbol', '')
@@ -107,9 +112,6 @@ class PositionSyncManager:
                 current_price = float(p.get('markPrice', 0))
                 unrealized = float(p.get('unrealizedProfit', 0))
 
-                if qty == 0:
-                    continue
-
                 existing = next((pos for pos in self.engine.portfolio.get_positions()
                                  if pos.symbol == symbol and pos.side == pos_side), None)
 
@@ -118,7 +120,7 @@ class PositionSyncManager:
                     if existing.margin > 0:
                         existing.pnl_pct = (unrealized / existing.margin) * 100
 
-                    # Трейлинг стоп
+                    # Trailing stop
                     if current_price > 0 and existing.sl_price is not None:
                         if self.engine.trailing_sl_enabled:
                             if not hasattr(self.engine, 'adaptive_trailing_stop'):
@@ -131,11 +133,12 @@ class PositionSyncManager:
                                     existing.tp_price, existing.sl_price
                                 )
 
-                        if self.engine.breakeven_enabled:
-                            atr = self.engine._get_current_atr(symbol)
-                            self.engine.executor.apply_breakeven(existing, current_price, atr)
+                    # Breakeven
+                    if self.engine.breakeven_enabled:
+                        atr = self.engine._get_current_atr(symbol)
+                        self.engine.executor.apply_breakeven(existing, current_price, atr)
 
-                    # Трейлинг TP
+                    # Trailing TP
                     if hasattr(self.engine, 'trailing_tp') and self.engine.trailing_tp:
                         if existing.tp_price and existing.tp_price > 0:
                             updated = self.engine.trailing_tp.update(existing, current_price)
@@ -144,29 +147,30 @@ class PositionSyncManager:
                                     symbol, pos_side, existing.quantity, existing.tp_price
                                 )
 
-                    # Частичное закрытие
+                    # Partial close
                     if self.engine.partial_close_enabled and existing.tp_price is not None:
                         self.engine.executor.apply_partial_close(existing, current_price)
 
-                    # Синхронизация TP/SL
+                    # Sync TP/SL orders if changed
                     self._sync_tpsl_orders(symbol, pos_side, existing.quantity,
                                            existing.tp_price, existing.sl_price)
                 else:
-                    # Новая позиция – добавляем
-                    atr = self.engine._get_current_atr(symbol)
-                    trade_side = 'BUY' if pos_side == 'LONG' else 'SELL'
-                    sl_tp = self.engine.risk_manager.get_sl_tp_levels(entry, trade_side, atr, symbol)
-                    pos = Position(
-                        symbol=symbol, side=pos_side, entry_price=entry,
-                        quantity=qty, leverage=lev,
-                        margin=(qty * entry) / lev,
-                        tp_price=sl_tp['tp2'], sl_price=sl_tp['sl'],
-                        open_time=datetime.now(timezone.utc).isoformat()
-                    )
-                    self.engine.portfolio.add_position(pos)
-                    self._tpsl_cache[f"{symbol}_{pos_side}"] = {
-                        'tp': sl_tp['tp2'], 'sl': sl_tp['sl'], 'qty': qty
-                    }
+                    # New position (shouldn't happen often because we create in executor)
+                    if qty > 0:
+                        atr = self.engine._get_current_atr(symbol)
+                        trade_side = 'BUY' if pos_side == 'LONG' else 'SELL'
+                        sl_tp = self.engine.risk_manager.get_sl_tp_levels(entry, trade_side, atr, symbol)
+                        pos = Position(
+                            symbol=symbol, side=pos_side, entry_price=entry,
+                            quantity=qty, leverage=lev,
+                            margin=(qty * entry) / lev,
+                            tp_price=sl_tp['tp2'], sl_price=sl_tp['sl'],
+                            open_time=datetime.now(timezone.utc).isoformat()
+                        )
+                        self.engine.portfolio.add_position(pos)
+                        self._tpsl_cache[f"{symbol}_{pos_side}"] = {
+                            'tp': sl_tp['tp2'], 'sl': sl_tp['sl'], 'qty': qty
+                        }
 
             self._remove_duplicate_positions()
             self._enforce_limit()

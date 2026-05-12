@@ -1,8 +1,8 @@
 """
 Trade executor: places MARKET orders, handles TP/SL, trailing stop, breakeven, partial close.
 Fixed: respects rate limits, handles 110406/110407 errors, auto-closes after timeout in micro-mode.
-Added: fatal error codes (101204, 110424, etc.) prevent position creation.
-Added: forced sync after auto-close.
+Added: fatal error codes (101204, 110424, 110422, 101400, 101419, 101202) – do not create position.
+After auto-close forces sync.
 """
 import time
 import logging
@@ -71,7 +71,7 @@ class TradeExecutor:
         step_size = contract_info.get('stepSize', 0.001)
         entry_price = _round_to_precision(entry_price, price_precision)
 
-        # Установка плеча
+        # --- Set leverage ---
         max_attempts = 3
         for attempt in range(max_attempts):
             try:
@@ -86,7 +86,7 @@ class TradeExecutor:
                     return
                 time.sleep(1)
 
-        # Рыночный ордер
+        # --- Market order ---
         for attempt in range(max_attempts):
             try:
                 order = self.engine.api.place_order(
@@ -95,17 +95,19 @@ class TradeExecutor:
                 )
                 code = order.get('code', 0)
                 if code != 0:
-                    # Фатальные ошибки, после которых не нужно создавать позицию
+                    # Fatal errors – do not retry, do not create position
                     fatal_codes = {101204, 110424, 110422, 101400, 101419, 101202}
                     if code in fatal_codes:
                         logger.error(f"Market order failed with fatal error {code}: {order.get('msg')}")
                         return
+                    # Min amount error – increase quantity and retry
                     if code == 101400 and min_qty > 0:
                         quantity = quantity + step_size
                         if quantity < min_qty:
                             quantity = min_qty
                         logger.info(f"Increasing quantity to {quantity} due to min order amount")
                         continue
+                    # Other errors – retry
                     if attempt < max_attempts - 1:
                         logger.warning(f"Market order error {code}, retrying in 1s")
                         time.sleep(1)
@@ -114,6 +116,7 @@ class TradeExecutor:
                         logger.error(f"Market order failed after {max_attempts} attempts: {order}")
                         return
                 else:
+                    # Success
                     break
             except Exception as e:
                 logger.error(f"Order attempt {attempt+1} failed: {e}")
@@ -123,7 +126,7 @@ class TradeExecutor:
 
         time.sleep(1)
 
-        # Фактическая цена входа
+        # --- Actual entry price ---
         actual_entry = entry_price
         try:
             positions = self.engine.api.get_positions(signal.symbol)
@@ -136,7 +139,7 @@ class TradeExecutor:
 
         logger.info(f"Actual entry price for {signal.symbol}: {actual_entry} (requested: {entry_price})")
 
-        # TP/SL
+        # --- TP/SL ---
         if signal.suggested_tp is not None and signal.suggested_sl is not None:
             final_tp = signal.suggested_tp
             final_sl = signal.suggested_sl
@@ -150,7 +153,7 @@ class TradeExecutor:
         final_tp = _round_to_precision(final_tp, price_precision)
         final_sl = _round_to_precision(final_sl, price_precision)
 
-        # Корректировка
+        # --- Corrections ---
         if pos_side == 'LONG':
             if final_sl >= actual_entry:
                 final_sl = actual_entry * 0.99
@@ -170,8 +173,10 @@ class TradeExecutor:
             logger.error(f"Invalid SL/TP after corrections for {signal.symbol}: SL={final_sl}, TP={final_tp}. Aborting.")
             return
 
+        # --- Place TP/SL orders ---
         self._place_tpsl_orders(signal.symbol, pos_side, quantity, final_tp, final_sl)
 
+        # --- Save position to portfolio ---
         position = Position(
             symbol=signal.symbol, side=pos_side, entry_price=actual_entry,
             quantity=quantity, leverage=leverage,
@@ -188,7 +193,7 @@ class TradeExecutor:
         self._play_sound('trade_open')
         logger.info(f"Trade executed: {signal.symbol} {side} @ {actual_entry}, TP={final_tp}, SL={final_sl}")
 
-        # Авто-закрытие для микро-режима
+        # --- Auto-close timer for micro-mode ---
         if self.engine.risk_manager._current_profile == 'Micro':
             timeout = 90
             logger.info(f"Starting auto-close timer for {signal.symbol} {pos_side} after {timeout}s")
@@ -205,14 +210,14 @@ class TradeExecutor:
             if pos:
                 logger.warning(f"Auto-closing {symbol} {pos_side} after {timeout_seconds}s timeout (TP/SL not hit)")
                 self.engine.api.close_position(symbol, pos_side, quantity)
-                # Принудительная синхронизация, чтобы локальный портфель обновился
+                # Force sync to remove position from local portfolio
                 self.engine.sync_manager.background_sync()
             else:
                 logger.info(f"Auto-close: position {symbol} {pos_side} already closed")
         except Exception as e:
             logger.error(f"Auto-close failed for {symbol}: {e}")
 
-    # ------------------------------------------------------------------
+    # --- Trailing stop, breakeven, partial close (unchanged) ---
     def apply_trailing_stop(self, pos, current_price: float):
         atr = self.engine._get_current_atr(pos.symbol)
         price = current_price or pos.entry_price
