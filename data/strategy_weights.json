@@ -22,7 +22,7 @@
     "disabled_reason": null
   },
   "Ichimoku": {
-    "weight": 1.0136939939653682,
+    "weight": 1.0100954015947468,
     "trades": 5,
     "wins": 0,
     "total_pnl": 0.0,
@@ -34,7 +34,7 @@
     "disabled_at": 1778524873.2403111
   },
   "MeanReversion": {
-    "weight": 1.0191346391471439,
+    "weight": 1.0201609142707309,
     "trades": 5,
     "wins": 0,
     "total_pnl": 0.0,
@@ -81,7 +81,7 @@
     "disabled_reason": null
   },
   "TrendFollowing": {
-    "weight": 1.501674567563273,
+    "weight": 1.5018211883358403,
     "trades": 5,
     "wins": 0,
     "total_pnl": 0.0,
@@ -93,7 +93,7 @@
     "disabled_at": 1778517024.1590161
   },
   "SmartPyramiding": {
-    "weight": 0.8991006304677519,
+    "weight": 0.8992139980959035,
     "trades": 7,
     "wins": 0,
     "total_pnl": 0.0,
@@ -128,7 +128,7 @@
     "disabled_at": 1778584309.139833
   },
   "BreakoutSwing": {
-    "weight": 1.0,
+    "weight": 2.073170731707317,
     "trades": 0,
     "wins": 0,
     "total_pnl": 0.0,
@@ -184,7 +184,7 @@
     "disabled_reason": null
   },
   "TurtleTrading": {
-    "weight": 1.0006822414869512,
+    "weight": 0.9974547705442561,
     "trades": 0,
     "wins": 0,
     "total_pnl": 0.0,
@@ -207,12 +207,12 @@
   },
   "MultiTFConsensus": {
     "weight": 2.0,
-    "trades": 2,
+    "trades": 3,
     "wins": 0,
     "total_pnl": 0.0,
     "avg_pnl": 0.0,
     "winrate": 0.0,
-    "consecutive_losses": 2,
+    "consecutive_losses": 3,
     "disabled": false,
     "disabled_reason": null
   }

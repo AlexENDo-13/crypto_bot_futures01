@@ -1,13 +1,13 @@
 """
 Market scan task – core of the trading bot.
-Fetches candles for each symbol, runs strategies, combines signals,
-applies filters, and delegates to signal_processor.
-Added detailed logging for diagnosis of missing trades.
+Fetches candles for each symbol (priority: WebSocket cache -> REST),
+runs strategies, combines signals, applies filters, and delegates to signal_processor.
 """
 import time
 import logging
 from strategies.base import Signal
 from ml.market_regime import MarketRegime
+from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -36,19 +36,14 @@ def market_scan_task(engine):
     logger.info(f"Market scan: processing {len(symbols)} symbols")
 
     last_hb = time.time()
-
     for idx, symbol in enumerate(symbols):
         if not engine._running or engine._paused:
             break
-
         if time.time() - last_hb > 30:
             engine.watchdog.heartbeat()
             last_hb = time.time()
-
-        # Лог для каждого 10-го символа, чтобы не засорять
         if idx % 10 == 0:
             logger.debug(f"Scanning symbol {idx+1}/{len(symbols)}: {symbol}")
-
         try:
             _process_symbol(engine, symbol)
         except Exception as e:
@@ -59,20 +54,39 @@ def market_scan_task(engine):
 
 
 def _process_symbol(engine, symbol: str):
-    """Process a single symbol: fetch candles, run strategies, combine signals."""
+    """Process a single symbol: fetch candles (WebSocket first), run strategies."""
     if symbol in engine._blacklist:
         logger.debug(f"Symbol {symbol} in blacklist, skipping")
         return
 
     all_candles = {}
     for tf in engine.timeframes:
+        # Сначала проверяем WebSocket кэш
+        if symbol in engine._candle_data and tf in engine._candle_data[symbol]:
+            df = engine._candle_data[symbol][tf]
+            # Проверяем, что данные свежие (последняя свеча не старше 2 минут для коротких ТФ)
+            if not df.empty:
+                try:
+                    last_time = df.index[-1]
+                    age = (datetime.now(timezone.utc) - last_time).total_seconds()
+                    # Для 5m и 15m свечей считаем свежими, если не старше 2 минут
+                    # Для более крупных ТФ можно больше, но оставим 2 минуты для простоты
+                    if age < 120:
+                        all_candles[tf] = df
+                        logger.debug(f"Using WebSocket cache for {symbol} {tf} (age {age:.1f}s)")
+                        continue
+                except Exception:
+                    pass
+
+        # Если нет в кэше или данные устарели – fallback на REST
         try:
             engine.antidetect.pre_request_delay()
             df = engine.api.get_klines_dataframe(symbol, tf, limit=200)
             if not df.empty:
                 all_candles[tf] = df
+                # Сохраняем в кэш для будущих использований
                 engine._candle_data.setdefault(symbol, {})[tf] = df
-                logger.debug(f"Fetched {tf} for {symbol}, rows={len(df)}")
+                logger.debug(f"Fetched {tf} for {symbol} via REST, rows={len(df)}")
             else:
                 logger.warning(f"Empty DataFrame for {symbol} {tf}")
         except Exception as e:
@@ -87,26 +101,18 @@ def _process_symbol(engine, symbol: str):
     if '1h' in all_candles:
         regime = engine.regime_detector.detect(all_candles['1h'])
     elif '15m' in all_candles:
-        # временно используем 15m
-        class FakeCandles:
-            close = all_candles['15m']['close']
         regime = engine.regime_detector.detect(all_candles['15m'])
     logger.debug(f"Market regime for {symbol}: {regime.value}")
 
     signals = []
     for name, strategy in engine.strategies.items():
         if not strategy.enabled:
-            logger.debug(f"Strategy {name} disabled, skipping")
             continue
-
         # В микро-режиме оставляем только MultiTFConsensus и MicroScalper
-        # (это уже настроено в risk_manager, но проверим)
         if engine.risk_manager._current_profile == 'Micro':
             if name not in ('MultiTFConsensus', 'MicroScalper'):
                 continue
-
         try:
-            # Перебираем таймфреймы, которые поддерживает стратегия
             tf_list = strategy.config.get('timeframes', engine.timeframes)
             for tf in tf_list:
                 if tf not in all_candles:
@@ -127,7 +133,6 @@ def _process_symbol(engine, symbol: str):
                         'regime': regime.value,
                     })
                     logger.info(f"Signal from {name} on {symbol} {tf}: {signal.action} conf={signal.confidence:.2f}")
-                    # Выходим после первого найденного сигнала для этой стратегии
                     break
         except Exception as e:
             logger.warning(f"Strategy {name} error on {symbol}: {e}", exc_info=True)

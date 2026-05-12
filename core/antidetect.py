@@ -1,6 +1,6 @@
 """
 Anti-detection measures: random delays, User-Agent rotation, human-like behavior.
-Fixed: can_trade_now correctly blocks trades when interval is too short.
+Enhanced for micro-mode: longer delays, lower request frequency.
 """
 import random
 import time
@@ -19,14 +19,16 @@ class AntiDetect:
     
     # Pool of realistic browser User-Agents
     USER_AGENTS = [
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36 Edg/119.0.0.0",
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15",
-        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36 OPR/104.0.0.0",
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:125.0) Gecko/20100101 Firefox/125.0",
+        "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:125.0) Gecko/20100101 Firefox/125.0",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Edg/124.0.0.0",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 OPR/108.0.0.0",
     ]
     
     def __init__(self, night_mode_slowdown: float = 2.0):
@@ -37,7 +39,7 @@ class AntiDetect:
         self._night_mode: bool = False
         self._request_count: int = 0
         self._skipped_count: int = 0
-        self._trade_delay_min: float = 15.0  # Minimum minutes between trades
+        self._trade_delay_min: float = 2.0   # увеличен до 2 минут между сделками
         self._last_trade_time: float = 0
         
     def get_user_agent(self) -> str:
@@ -51,7 +53,6 @@ class AntiDetect:
     
     def _rotate_user_agent(self):
         """Select a new random User-Agent."""
-        # Don't pick the same one
         new_ua = self._current_ua
         while new_ua == self._current_ua:
             new_ua = random.choice(self.USER_AGENTS)
@@ -60,11 +61,11 @@ class AntiDetect:
         self._ua_update_interval = timedelta(hours=random.uniform(1, 2))
     
     def pre_request_delay(self):
-        """Add random delay before API request."""
+        """Add random delay before API request. In micro-mode, delays are longer."""
         self._request_count += 1
         
-        # Base delay 200-800ms
-        base_delay = random.uniform(0.2, 0.8)
+        # Base delay: 800-2000ms (увеличено с 200-800ms)
+        base_delay = random.uniform(0.8, 2.0)
         
         # Night mode multiplier
         if self._night_mode:
@@ -74,31 +75,28 @@ class AntiDetect:
     
     def should_skip_update(self) -> bool:
         """
-        Randomly skip data updates (5% chance) to appear human.
+        Randomly skip data updates (15% chance) to appear human.
         Returns True if this update should be skipped.
         """
-        if random.random() < 0.05:
+        if random.random() < 0.15:
             self._skipped_count += 1
             return True
         return False
     
     def post_trade_delay(self):
         """Add delay after trade to simulate human reaction time."""
-        delay = random.uniform(1.0, 3.0)
+        delay = random.uniform(3.0, 8.0)
         if self._night_mode:
             delay *= 1.5
         time.sleep(delay)
     
     def can_trade_now(self) -> bool:
-        """
-        Check if enough time has passed since last trade.
-        Enforces minimum interval between trades (anti-scalping).
-        """
+        """Check if enough time has passed since last trade."""
         now = time.time()
         min_interval = self._trade_delay_min * 60  # Convert to seconds
         
         if now - self._last_trade_time < min_interval:
-            return False  # <-- ИСПРАВЛЕНО: не даём торговать, если интервал не выдержан
+            return False
         
         self._last_trade_time = now
         return True

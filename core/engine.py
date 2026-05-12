@@ -1,7 +1,7 @@
 """
 Trading Engine – coordinator.
 Исправлено: баланс v3 — массив объектов, ищем USDT.
-Добавлено: диагностика сканирования, синхронный manual_scan, проверка _candle_data.
+Добавлено: WebSocket клиент, микро-режим отключает лишние модули.
 """
 import os, sys, time, json, logging, threading
 from collections import deque
@@ -109,6 +109,7 @@ class TradingEngine:
 
         self.adaptive_threshold = None
         self.micro_lot_filter = None
+        self.ws_client = None   # для WebSocket
 
         load_config(self)
         self._init_components()
@@ -175,12 +176,42 @@ class TradingEngine:
             except Exception as e:
                 logger.warning(f"NativeBingXTrailingStop not initialized: {e}")
 
+        # --- Запуск WebSocket клиента (если не демо, есть символы) ---
+        if not self.auth.demo_mode and self._top_symbols:
+            try:
+                from core.websocket_client import BingXWebSocketClient
+                self.ws_client = BingXWebSocketClient(self)
+                self.ws_client.start()
+                logger.info("WebSocket client started")
+            except Exception as e:
+                logger.warning(f"WebSocket client failed to start: {e}")
+
+        # --- Остановка ненужных модулей в микро-режиме ---
+        if self.risk_manager._current_profile == 'Micro':
+            # Отключаем задачи планировщика, создающие лишние запросы
+            self.scheduler.disable_task('weight_update')
+            self.scheduler.disable_task('grid_renew')
+            self.scheduler.disable_task('position_sync')  # OrderGuard и так выключен
+            logger.info("Micro-mode: disabled weight_update, grid_renew, position_sync tasks")
+            
+            # Останавливаем модули, которые делают дополнительные API-вызовы
+            for attr in ['tf_selector', 'capital_alloc', 'bayes_opt', 'backtest', 
+                         'auto_selector', 'alert_mgr', 'voice', 'github_backup', 
+                         'moonshot', 'stress_test', 'adaptive_threshold']:
+                obj = getattr(self, attr, None)
+                if obj is not None and hasattr(obj, 'stop'):
+                    try:
+                        obj.stop()
+                        logger.info(f"Micro-mode: stopped {attr}")
+                    except Exception as e:
+                        logger.debug(f"Failed to stop {attr}: {e}")
+
         logger.info("Trading engine started")
         if not self.auth.demo_mode:
             threading.Thread(target=self.risk_controller.connection_monitor, daemon=True).start()
         threading.Thread(target=self._state_autosave, daemon=True).start()
 
-        # После старта принудительно запускаем одно сканирование для заполнения _candle_data
+        # Принудительное сканирование для заполнения _candle_data
         logger.info("Starting initial market scan...")
         self._market_scan_task()
         logger.info(f"Initial scan completed. _candle_data has {len(self._candle_data)} symbols")
@@ -191,6 +222,14 @@ class TradingEngine:
         self.scheduler.stop()
         self.watchdog.stop()
         self._save_state()
+
+        # Остановка WebSocket клиента
+        if self.ws_client:
+            try:
+                self.ws_client.stop()
+                logger.info("WebSocket client stopped")
+            except Exception as e:
+                logger.error(f"Failed to stop WebSocket client: {e}")
 
         for attr in ['adaptive_threshold', 'moonshot', 'order_guard', 'whale_shield',
                      'backup_mgr', 'github_backup', 'voice', 'stress_test',
@@ -221,127 +260,8 @@ class TradingEngine:
 
     # ---------- обновления по расписанию ----------
     def _market_scan_task(self):
-        """Вызывается планировщиком или вручную."""
-        logger.info("market_scan_task called, engine._running=%s, engine._paused=%s", self._running, self._paused)
-        # Не используем отдельную функцию из engine_scan, чтобы иметь прямой контроль
-        # Вызываем встроенную логику, но с логами
-        self._perform_scan()
+        market_scan_task(self)
 
-    def _perform_scan(self):
-        """Реальная логика сканирования, чтобы можно было вызвать синхронно."""
-        if self._paused or not self._running:
-            logger.debug("Scan skipped: paused or not running")
-            return
-        self.watchdog.heartbeat()
-
-        if self.antidetect.should_skip_update():
-            logger.debug("Scan skipped: antidetect skip")
-            return
-
-        if not self._top_symbols:
-            logger.warning("No top symbols, discovering...")
-            self._discover_symbols()
-            self._load_contracts_info()
-            if not self._top_symbols:
-                logger.error("Still no symbols, aborting scan")
-                return
-
-        symbols = self.antidetect.shuffle_scan_order(self._top_symbols)
-        logger.info(f"Market scan: processing {len(symbols)} symbols")
-
-        last_hb = time.time()
-        for idx, symbol in enumerate(symbols):
-            if not self._running or self._paused:
-                break
-            if time.time() - last_hb > 30:
-                self.watchdog.heartbeat()
-                last_hb = time.time()
-            if idx % 10 == 0:
-                logger.debug(f"Scanning {idx+1}/{len(symbols)}: {symbol}")
-            try:
-                self._process_symbol(symbol)
-            except Exception as e:
-                logger.error(f"Error processing {symbol}: {e}", exc_info=True)
-
-        self._last_scan_time = time.time()
-        logger.info(f"Market scan finished, last_scan_time={self._last_scan_time}, _candle_data symbols={len(self._candle_data)}")
-
-    def _process_symbol(self, symbol: str):
-        """Обработка одного символа — перенесено из engine_scan для наглядности."""
-        if symbol in self._blacklist:
-            logger.debug(f"Symbol {symbol} in blacklist, skipping")
-            return
-
-        all_candles = {}
-        for tf in self.timeframes:
-            try:
-                self.antidetect.pre_request_delay()
-                df = self.api.get_klines_dataframe(symbol, tf, limit=200)
-                if not df.empty:
-                    all_candles[tf] = df
-                    self._candle_data.setdefault(symbol, {})[tf] = df
-                else:
-                    logger.warning(f"Empty DataFrame for {symbol} {tf}")
-            except Exception as e:
-                logger.debug(f"Failed to fetch {symbol} {tf}: {e}")
-
-        if not all_candles:
-            logger.warning(f"No candle data for {symbol}, skipping")
-            return
-
-        # Определение режима
-        regime = MarketRegime.UNKNOWN
-        if '1h' in all_candles:
-            regime = self.regime_detector.detect(all_candles['1h'])
-        elif '15m' in all_candles:
-            regime = self.regime_detector.detect(all_candles['15m'])
-        logger.debug(f"Regime for {symbol}: {regime.value}")
-
-        signals = []
-        for name, strategy in self.strategies.items():
-            if not strategy.enabled:
-                continue
-            # Микро-режим: оставляем только MultiTFConsensus и MicroScalper
-            if self.risk_manager._current_profile == 'Micro':
-                if name not in ('MultiTFConsensus', 'MicroScalper'):
-                    continue
-            try:
-                tf_list = strategy.config.get('timeframes', self.timeframes)
-                for tf in tf_list:
-                    if tf not in all_candles:
-                        continue
-                    signal = strategy.evaluate(symbol, tf, all_candles[tf])
-                    if signal and signal.action in ('BUY', 'SELL'):
-                        signal.meta['strategy'] = name
-                        signal.meta['timeframe'] = tf
-                        signal.meta['regime'] = regime.value
-                        signals.append(signal)
-                        self._recent_signals.append({
-                            'time': time.strftime('%H:%M:%S'),
-                            'symbol': symbol,
-                            'action': signal.action,
-                            'confidence': signal.confidence,
-                            'price': self._get_current_price(symbol),
-                            'strategy': name,
-                            'regime': regime.value,
-                        })
-                        logger.info(f"Signal from {name} on {symbol} {tf}: {signal.action} conf={signal.confidence:.2f}")
-                        break
-            except Exception as e:
-                logger.warning(f"Strategy {name} error on {symbol}: {e}")
-                strategy.record_error()
-
-        if signals:
-            combined = self.voting.evaluate_signals(signals)
-            if combined and combined.confidence >= self.signal_threshold:
-                logger.info(f"Combined signal: {combined.symbol} {combined.action} conf={combined.confidence:.2f}")
-                self.signal_processor.process(combined, all_candles)
-            else:
-                logger.debug(f"Combined confidence {combined.confidence if combined else 0:.2f} < threshold {self.signal_threshold}")
-        else:
-            logger.debug(f"No signals for {symbol}")
-
-    # ---------- остальные методы (без изменений) ----------
     def _equity_update_task(self):
         try:
             if self.auth.demo_mode:
@@ -429,6 +349,9 @@ class TradingEngine:
         load_contracts_info(self)
 
     def _get_current_price(self, symbol):
+        # Сначала проверяем WebSocket кэш
+        if hasattr(self, '_current_prices') and symbol in self._current_prices:
+            return self._current_prices[symbol]
         return get_current_price(self, symbol)
 
     def _get_current_atr(self, symbol, candles_dict=None):
@@ -451,12 +374,10 @@ class TradingEngine:
         if not self._running:
             logger.warning("Engine is not running – cannot scan")
             return
-
         logger.info("Manual scan started (synchronous for debugging)")
         try:
-            self._perform_scan()  # прямой вызов, не в потоке
+            self._market_scan_task()
             logger.info(f"Manual scan completed. _candle_data contains {len(self._candle_data)} symbols")
-            # Вывод первых символов и их таймфреймов для диагностики
             for sym in list(self._candle_data.keys())[:5]:
                 logger.info(f"  {sym} timeframes: {list(self._candle_data[sym].keys())}")
         except Exception as e:
