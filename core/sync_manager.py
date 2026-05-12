@@ -83,37 +83,21 @@ class PositionSyncManager:
     def background_sync(self):
         if self.engine.auth.demo_mode:
             return
-        # В микро-режиме синхронизируемся редко, полагаясь на авто-закрытие
-        balance = self.engine.portfolio._balance or 0.0
-        if balance < 100:
-            return
 
         try:
             api_positions = self.engine.api.get_positions()
-            api_keys = {f"{p.get('symbol')}_{p.get('positionSide')}" for p in api_positions}
+            api_keys = {f"{p.get('symbol')}_{p.get('positionSide')}" for p in api_positions if abs(float(p.get('positionAmt', 0))) > 0}
 
-            # Закрытые позиции
-            for pos in self.engine.portfolio.get_positions():
+            # Удаляем локальные позиции, которых нет на бирже
+            for pos in list(self.engine.portfolio.get_positions()):
                 if f"{pos.symbol}_{pos.side}" not in api_keys:
-                    pnl = pos.unrealized_pnl
-                    exit_price = (pos.entry_price + (pnl / pos.quantity) if pos.side == 'LONG'
-                                  else pos.entry_price - (pnl / pos.quantity))
-                    trade = TradeRecord(
-                        symbol=pos.symbol, side=pos.side, action='CLOSE',
-                        entry_price=pos.entry_price, exit_price=exit_price,
-                        quantity=pos.quantity, leverage=pos.leverage, pnl=pnl,
-                        close_reason='TP/SL' if pnl != 0 else 'Manual',
-                        open_time=pos.open_time,
-                        close_time=datetime.now(timezone.utc).isoformat()
-                    )
-                    self.engine.portfolio.record_trade(trade)
-                    self.engine.risk_manager.record_trade_result(pnl)
+                    logger.info(f"Sync: removing position {pos.symbol} {pos.side} (no longer on exchange)")
                     self.engine.portfolio.remove_position(pos.symbol, pos.side)
                     cache_key = f"{pos.symbol}_{pos.side}"
                     if cache_key in self._tpsl_cache:
                         del self._tpsl_cache[cache_key]
 
-            # Активные позиции
+            # Обрабатываем позиции, которые есть на бирже
             for p in api_positions:
                 pos_side = p.get('positionSide', 'LONG')
                 symbol = p.get('symbol', '')
@@ -122,6 +106,9 @@ class PositionSyncManager:
                 lev = float(p.get('leverage', 1))
                 current_price = float(p.get('markPrice', 0))
                 unrealized = float(p.get('unrealizedProfit', 0))
+
+                if qty == 0:
+                    continue
 
                 existing = next((pos for pos in self.engine.portfolio.get_positions()
                                  if pos.symbol == symbol and pos.side == pos_side), None)
@@ -165,7 +152,7 @@ class PositionSyncManager:
                     self._sync_tpsl_orders(symbol, pos_side, existing.quantity,
                                            existing.tp_price, existing.sl_price)
                 else:
-                    # Новая позиция
+                    # Новая позиция – добавляем
                     atr = self.engine._get_current_atr(symbol)
                     trade_side = 'BUY' if pos_side == 'LONG' else 'SELL'
                     sl_tp = self.engine.risk_manager.get_sl_tp_levels(entry, trade_side, atr, symbol)

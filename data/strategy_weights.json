@@ -196,12 +196,12 @@
   },
   "MicroScalper": {
     "weight": 1.0,
-    "trades": 2,
+    "trades": 3,
     "wins": 0,
     "total_pnl": 0.0,
     "avg_pnl": 0.0,
     "winrate": 0.0,
-    "consecutive_losses": 2,
+    "consecutive_losses": 3,
     "disabled": false,
     "disabled_reason": null
   },
