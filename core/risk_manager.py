@@ -1,6 +1,6 @@
 """
-Risk Management – специальный микро-скальпинговый режим для баланса <100 USDT.
-Добавлено: автоматическое уменьшение количества при Insufficient margin.
+Risk Management – микро-скальпинг с принудительным минимальным количеством.
+Баланс < 100 USDT: риск 30%, плечо 3.
 """
 import logging, json, os, time
 from typing import Dict, List, Optional
@@ -9,6 +9,7 @@ logger = logging.getLogger(__name__)
 
 class RiskManager:
     STATE_FILE = 'data/risk_state.json'
+
     def __init__(self, engine=None):
         self.engine = engine
         self.risk_per_trade_pct = 5.0
@@ -30,7 +31,7 @@ class RiskManager:
         self._last_trade_time = 0.0
 
         self._profiles = {
-            'Micro': {'risk_pct': 20.0, 'max_lev': 3, 'max_pos': 1, 'atr_mult': {'sl': 0.15, 'tp': 0.3}},
+            'Micro': {'risk_pct': 30.0, 'max_lev': 3, 'max_pos': 1, 'atr_mult': {'sl': 0.15, 'tp': 0.3}},
             'User':  {'risk_pct': 5.0,  'max_lev': 5, 'max_pos': 1, 'atr_mult': {'sl': 0.8, 'tp': 1.6}},
         }
         self._load_state()
@@ -79,7 +80,7 @@ class RiskManager:
                 engine.max_positions = 3
 
     def _apply_micro_mode(self, engine):
-        self.risk_per_trade_pct = 20.0
+        self.risk_per_trade_pct = 30.0   # увеличено с 20% до 30%
         self.max_leverage = 3
         self._current_profile = 'Micro'
         self._atr_multipliers['__default__'] = {'sl': 0.15, 'tp': 0.3}
@@ -92,7 +93,7 @@ class RiskManager:
             for name, s in engine.strategies.items():
                 if name not in ('MultiTFConsensus', 'MicroScalper'):
                     s.enabled = False
-        logger.info("Micro-mode for scalping: TP=0.3%%, SL=0.15%%, 1 position, threshold=0.2")
+        logger.info("Micro-mode for scalping: TP=0.3%%, SL=0.15%%, 1 position, threshold=0.2, risk=30%%")
 
     def set_night_mode(self, enabled: bool):
         self._night_mode = enabled
@@ -123,12 +124,12 @@ class RiskManager:
                                 min_qty=0.0, step_size=0.0):
         now = time.time()
         if now - self._last_trade_time < self._min_trade_interval_seconds:
-            logger.debug(f"Trade cooldown active")
+            logger.debug("Trade cooldown active")
             return 0.0, 1
         self._last_trade_time = now
 
         if entry_price <= 0 or free_margin <= 0:
-            logger.warning(f"Invalid entry or margin: entry={entry_price}, margin={free_margin}")
+            logger.warning(f"Invalid entry or margin")
             return 0.0, 1
 
         risk_amount = free_margin * (self.risk_per_trade_pct / 100.0) * confidence
@@ -139,16 +140,19 @@ class RiskManager:
         quantity = risk_amount / sl_distance
         leverage = self.max_leverage
 
-        if self._current_profile == 'Micro':
-            min_position_value = 5.0
-            min_qty_needed = min_position_value / entry_price
-            if quantity < min_qty_needed:
-                quantity = min_qty_needed
+        # Принудительная минимальная стоимость позиции 5 USDT
+        min_position_value = 5.0
+        min_qty_needed = min_position_value / entry_price
+        if quantity < min_qty_needed:
+            quantity = min_qty_needed
+            logger.debug(f"Increased quantity to {quantity} to meet min position value")
 
+        # Ограничение по марже
         max_qty_by_margin = (free_margin * leverage) / entry_price
         if quantity > max_qty_by_margin:
             quantity = max_qty_by_margin
 
+        # Применяем minQty и stepSize
         if min_qty > 0 and quantity < min_qty:
             quantity = min_qty
         if step_size > 0:
@@ -156,27 +160,16 @@ class RiskManager:
             if min_qty > 0 and quantity < min_qty:
                 quantity = min_qty
 
+        # Проверка маржи после округления
         required_margin = (quantity * entry_price) / leverage
         if required_margin > free_margin:
             logger.warning(f"Insufficient margin: need {required_margin:.2f}, have {free_margin:.2f}")
-            if self._current_profile == 'Micro':
-                # Уменьшаем количество на 10% и пробуем снова (до 5 итераций)
-                for attempt in range(1, 6):
-                    quantity = quantity * 0.9
-                    quantity = round(quantity, 8)
-                    required_margin = (quantity * entry_price) / leverage
-                    if required_margin <= free_margin:
-                        logger.info(f"Micro-mode: reduced quantity to {quantity} (attempt {attempt})")
-                        break
-                else:
-                    # Если всё равно не хватает – берём максимальное возможное
-                    quantity = (free_margin * leverage) / entry_price
-                    quantity = round(quantity, 8)
-                    if quantity <= 0:
-                        return 0.0, 1
-                    logger.info(f"Micro-mode forced final quantity: {quantity}")
-            else:
+            # Принудительно уменьшаем количество до максимально возможного
+            quantity = (free_margin * leverage) / entry_price
+            quantity = round(quantity, 8)
+            if quantity <= 0:
                 return 0.0, 1
+            logger.info(f"Micro-mode forced quantity: {quantity}")
 
         quantity = round(quantity, 8)
         if quantity <= 0:

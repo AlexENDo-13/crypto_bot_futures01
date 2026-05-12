@@ -1,6 +1,7 @@
 """
 Trading Engine – coordinator.
-WebSocket включён, синхронизация позиций активна.
+WebSocket отключён (закомментирован). Синхронизация позиций активна.
+Микро-режим: position_sync работает, тяжёлые модули отключены.
 """
 import os, sys, time, json, logging, threading
 from collections import deque
@@ -108,7 +109,7 @@ class TradingEngine:
 
         self.adaptive_threshold = None
         self.micro_lot_filter = None
-        self.ws_client = None
+        self.ws_client = None  # WebSocket не используется
 
         load_config(self)
         self._init_components()
@@ -175,15 +176,15 @@ class TradingEngine:
             except Exception as e:
                 logger.warning(f"NativeBingXTrailingStop not initialized: {e}")
 
-        # --- WebSocket client (ВКЛЮЧЁН) ---
-        if not self.auth.demo_mode and self._top_symbols:
-            try:
-                from core.websocket_client import BingXWebSocketClient
-                self.ws_client = BingXWebSocketClient(self)
-                self.ws_client.start()
-                logger.info("WebSocket client started")
-            except Exception as e:
-                logger.warning(f"WebSocket client failed to start: {e}")
+        # --- WebSocket client ОТКЛЮЧЁН (работаем только через REST) ---
+        # if not self.auth.demo_mode and self._top_symbols:
+        #     try:
+        #         from core.websocket_client import BingXWebSocketClient
+        #         self.ws_client = BingXWebSocketClient(self)
+        #         self.ws_client.start()
+        #         logger.info("WebSocket client started")
+        #     except Exception as e:
+        #         logger.warning(f"WebSocket client failed to start: {e}")
 
         # --- Микро-режим: отключаем тяжёлые модули, но НЕ position_sync ---
         if self.risk_manager._current_profile == 'Micro':
@@ -345,9 +346,6 @@ class TradingEngine:
         load_contracts_info(self)
 
     def _get_current_price(self, symbol):
-        # Если есть WebSocket-кэш, используем его
-        if hasattr(self, '_current_prices') and symbol in self._current_prices:
-            return self._current_prices[symbol]
         return get_current_price(self, symbol)
 
     def _get_current_atr(self, symbol, candles_dict=None):
