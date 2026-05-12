@@ -22,7 +22,7 @@
     "disabled_reason": null
   },
   "Ichimoku": {
-    "weight": 1.0100954015947468,
+    "weight": 1.0073540682746243,
     "trades": 5,
     "wins": 0,
     "total_pnl": 0.0,
@@ -93,7 +93,7 @@
     "disabled_at": 1778517024.1590161
   },
   "SmartPyramiding": {
-    "weight": 0.8992139980959035,
+    "weight": 0.8993043717218416,
     "trades": 7,
     "wins": 0,
     "total_pnl": 0.0,
@@ -128,7 +128,7 @@
     "disabled_at": 1778584309.139833
   },
   "BreakoutSwing": {
-    "weight": 2.073170731707317,
+    "weight": 1.0,
     "trades": 0,
     "wins": 0,
     "total_pnl": 0.0,

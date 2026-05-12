@@ -1,7 +1,7 @@
 """
 Trade executor: places MARKET orders, handles TP/SL, trailing stop, breakeven, partial close.
 Fixed: respects rate limits, handles 110406/110407 errors, auto-closes after timeout in micro-mode.
-Added detailed logging for auto-close.
+Increased auto-close timeout to 90 seconds for better reliability.
 """
 import time
 import logging
@@ -183,9 +183,9 @@ class TradeExecutor:
         self._play_sound('trade_open')
         logger.info(f"Trade executed: {signal.symbol} {side} @ {actual_entry}, TP={final_tp}, SL={final_sl}")
 
-        # Авто-закрытие для микро-режима (45 секунд)
+        # Авто-закрытие для микро-режима (90 секунд)
         if self.engine.risk_manager._current_profile == 'Micro':
-            timeout = 45
+            timeout = 90
             logger.info(f"Starting auto-close timer for {signal.symbol} {pos_side} after {timeout}s")
             threading.Thread(target=self._auto_close_after_timeout,
                              args=(signal.symbol, pos_side, quantity, timeout),

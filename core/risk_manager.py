@@ -1,15 +1,11 @@
 """
 Risk Management – специальный микро-скальпинговый режим для баланса <100 USDT.
-Исправлено: гарантированный минимальный размер позиции (5 USDT), чтобы избежать "Zero quantity".
+Исправлено: принудительное количество в микро-режиме, если расчёт дал ноль.
 """
 import logging, json, os, time
-from datetime import datetime, timezone
-from typing import Dict, Tuple, Optional, List
-import numpy as np
+from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
-DEFAULT_ATR_MULT_SL = 1.0
-DEFAULT_ATR_MULT_TP = 2.0
 
 class RiskManager:
     STATE_FILE = 'data/risk_state.json'
@@ -127,7 +123,7 @@ class RiskManager:
                                 min_qty=0.0, step_size=0.0):
         now = time.time()
         if now - self._last_trade_time < self._min_trade_interval_seconds:
-            logger.debug(f"Trade cooldown active, need wait {self._min_trade_interval_seconds - (now - self._last_trade_time):.0f}s")
+            logger.debug(f"Trade cooldown active")
             return 0.0, 1
         self._last_trade_time = now
 
@@ -143,19 +139,16 @@ class RiskManager:
         quantity = risk_amount / sl_distance
         leverage = self.max_leverage
 
-        # Микро-режим: гарантируем минимальную сумму сделки (5 USDT)
         if self._current_profile == 'Micro':
-            min_position_value = 5.0  # минимальная стоимость позиции в USDT
+            min_position_value = 5.0
             min_qty_needed = min_position_value / entry_price
             if quantity < min_qty_needed:
                 quantity = min_qty_needed
-                logger.debug(f"Micro-mode: increased quantity to {quantity:.6f} to meet min position value {min_position_value} USDT")
 
         max_qty_by_margin = (free_margin * leverage) / entry_price
         if quantity > max_qty_by_margin:
             quantity = max_qty_by_margin
 
-        # Применяем minQty и stepSize
         if min_qty > 0 and quantity < min_qty:
             quantity = min_qty
         if step_size > 0:
@@ -166,19 +159,25 @@ class RiskManager:
         required_margin = (quantity * entry_price) / leverage
         if required_margin > free_margin:
             logger.warning(f"Insufficient margin: need {required_margin:.2f}, have {free_margin:.2f}")
-            # В микро-режиме всё равно пробуем открыть с максимально возможным количеством
             if self._current_profile == 'Micro':
                 quantity = (free_margin * leverage) / entry_price
                 quantity = round(quantity, 8)
                 if quantity <= 0:
                     return 0.0, 1
-                logger.info(f"Micro-mode: adjusted quantity to {quantity} due to margin limit")
+                logger.info(f"Micro-mode forced quantity: {quantity}")
             else:
                 return 0.0, 1
 
         quantity = round(quantity, 8)
         if quantity <= 0:
-            return 0.0, 1
+            if self._current_profile == 'Micro':
+                quantity = (free_margin * leverage) / entry_price
+                quantity = round(quantity, 8)
+                if quantity <= 0:
+                    return 0.0, 1
+                logger.warning(f"Micro-mode final forced quantity: {quantity}")
+            else:
+                return 0.0, 1
 
         logger.debug(f"Calculated position: qty={quantity}, lev={leverage}, margin={required_margin:.2f}")
         return quantity, leverage
