@@ -2,8 +2,8 @@
 BingX Perpetual Futures (Swap v2/v3) API client.
 Fixed: proper parameter ordering for signature validation.
 Added: rate limit headers parsing, exponential backoff for 429/418,
-special handling for 110406/110407, and global order limit check.
-Added: get_listen_key() method for WebSocket (no signature required).
+special handling for 110406/110407, global order limit check.
+Added: get_listen_key() for WebSocket using correct endpoint.
 """
 import hmac
 import hashlib
@@ -85,7 +85,7 @@ class BingXAPI:
     DEPTH = "/openApi/swap/v2/quote/depth"
     POSITION_MODE = "/openApi/swap/v1/positionSide/dual"
     TRADING_RULES = "/openApi/swap/v1/tradingRules"
-    LISTEN_KEY = "/openApi/swap/v1/user/listenKey"  # для WebSocket
+    LISTEN_KEY = "/openApi/user/auth/userDataStream"  # правильный эндпоинт для listenKey
 
     def __init__(self, auth_manager):
         self.auth = auth_manager
@@ -99,24 +99,20 @@ class BingXAPI:
     def get_listen_key(self) -> Optional[str]:
         """
         Получает listenKey для WebSocket Account Data.
-        Эндпоинт не требует подписи и API-ключа.
+        Требует подпись и API-ключ.
         """
         try:
-            url = f"{self.BASE_URL}{self.LISTEN_KEY}"
-            response = self.session.post(url, timeout=10)
-            if response.status_code == 200:
-                data = response.json()
-                if data.get('code') == 0:
-                    listen_key = data.get('data', {}).get('listenKey')
-                    if listen_key:
-                        logger.info(f"ListenKey obtained: {listen_key[:8]}...")
-                        return listen_key
-                    else:
-                        logger.error(f"No listenKey in response: {data}")
+            # Используем _request, который добавляет timestamp и подпись
+            response = self._request('POST', self.LISTEN_KEY, {})
+            if response.get('code') == 0:
+                listen_key = response.get('data', {}).get('listenKey')
+                if listen_key:
+                    logger.info(f"ListenKey obtained: {listen_key[:8]}...")
+                    return listen_key
                 else:
-                    logger.error(f"Failed to get listenKey: {data}")
+                    logger.error(f"No listenKey in response: {response}")
             else:
-                logger.error(f"HTTP {response.status_code}: {response.text}")
+                logger.error(f"Failed to get listenKey: {response}")
         except Exception as e:
             logger.error(f"ListenKey request error: {e}")
         return None

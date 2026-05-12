@@ -1,7 +1,6 @@
 """
 Trading Engine – coordinator.
-Исправлено: баланс v3 — массив объектов, ищем USDT.
-Добавлено: WebSocket клиент, микро-режим отключает лишние модули.
+WebSocket включён, синхронизация позиций активна.
 """
 import os, sys, time, json, logging, threading
 from collections import deque
@@ -109,7 +108,7 @@ class TradingEngine:
 
         self.adaptive_threshold = None
         self.micro_lot_filter = None
-        self.ws_client = None   # для WebSocket
+        self.ws_client = None
 
         load_config(self)
         self._init_components()
@@ -176,7 +175,7 @@ class TradingEngine:
             except Exception as e:
                 logger.warning(f"NativeBingXTrailingStop not initialized: {e}")
 
-        # --- Запуск WebSocket клиента (если не демо, есть символы) ---
+        # --- WebSocket client (ВКЛЮЧЁН) ---
         if not self.auth.demo_mode and self._top_symbols:
             try:
                 from core.websocket_client import BingXWebSocketClient
@@ -186,17 +185,15 @@ class TradingEngine:
             except Exception as e:
                 logger.warning(f"WebSocket client failed to start: {e}")
 
-        # --- Остановка ненужных модулей в микро-режиме ---
+        # --- Микро-режим: отключаем тяжёлые модули, но НЕ position_sync ---
         if self.risk_manager._current_profile == 'Micro':
-            # Отключаем задачи планировщика, создающие лишние запросы
             self.scheduler.disable_task('weight_update')
             self.scheduler.disable_task('grid_renew')
-            self.scheduler.disable_task('position_sync')  # OrderGuard и так выключен
-            logger.info("Micro-mode: disabled weight_update, grid_renew, position_sync tasks")
-            
-            # Останавливаем модули, которые делают дополнительные API-вызовы
-            for attr in ['tf_selector', 'capital_alloc', 'bayes_opt', 'backtest', 
-                         'auto_selector', 'alert_mgr', 'voice', 'github_backup', 
+            # НЕ отключаем position_sync, чтобы бот узнавал о закрытии позиций
+            logger.info("Micro-mode: disabled weight_update, grid_renew (position_sync remains active)")
+
+            for attr in ['tf_selector', 'capital_alloc', 'bayes_opt', 'backtest',
+                         'auto_selector', 'alert_mgr', 'voice', 'github_backup',
                          'moonshot', 'stress_test', 'adaptive_threshold']:
                 obj = getattr(self, attr, None)
                 if obj is not None and hasattr(obj, 'stop'):
@@ -223,7 +220,6 @@ class TradingEngine:
         self.watchdog.stop()
         self._save_state()
 
-        # Остановка WebSocket клиента
         if self.ws_client:
             try:
                 self.ws_client.stop()
@@ -349,7 +345,7 @@ class TradingEngine:
         load_contracts_info(self)
 
     def _get_current_price(self, symbol):
-        # Сначала проверяем WebSocket кэш
+        # Если есть WebSocket-кэш, используем его
         if hasattr(self, '_current_prices') and symbol in self._current_prices:
             return self._current_prices[symbol]
         return get_current_price(self, symbol)

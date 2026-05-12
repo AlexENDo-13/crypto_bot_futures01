@@ -22,7 +22,7 @@
     "disabled_reason": null
   },
   "Ichimoku": {
-    "weight": 1.0073540682746243,
+    "weight": 1.0031347269294966,
     "trades": 5,
     "wins": 0,
     "total_pnl": 0.0,
@@ -93,7 +93,7 @@
     "disabled_at": 1778517024.1590161
   },
   "SmartPyramiding": {
-    "weight": 0.8993043717218416,
+    "weight": 0.8994434708870656,
     "trades": 7,
     "wins": 0,
     "total_pnl": 0.0,
@@ -207,12 +207,12 @@
   },
   "MultiTFConsensus": {
     "weight": 2.0,
-    "trades": 3,
+    "trades": 4,
     "wins": 0,
     "total_pnl": 0.0,
     "avg_pnl": 0.0,
     "winrate": 0.0,
-    "consecutive_losses": 3,
+    "consecutive_losses": 4,
     "disabled": false,
     "disabled_reason": null
   }
