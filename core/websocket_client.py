@@ -1,7 +1,6 @@
 """
 WebSocket client for BingX Perpetual Futures (USDT-M).
-Использует правильные URL, обрабатывает Ping/Pong, автоматически продлевает listenKey.
-Поддерживает Market Data (без авторизации) и Account Data (с listenKey).
+Исправлена ошибка при получении списка вместо словаря.
 """
 import json
 import time
@@ -9,7 +8,7 @@ import threading
 import logging
 import gzip
 import io
-from typing import Optional
+from typing import Optional, Union, List, Dict
 
 import websocket
 
@@ -17,9 +16,9 @@ logger = logging.getLogger(__name__)
 
 # Правильные URL из документации
 WS_MARKET = "wss://open-api-swap.bingx.com/swap-market"
-WS_ACCOUNT = "wss://open-api-swap.bingx.com/swap-market"  # одинаковый, но с listenKey
+WS_ACCOUNT = "wss://open-api-swap.bingx.com/swap-market"
 
-# Потоки для маркет‑данных (подписываемся только на нужные)
+# Потоки для маркет‑данных
 STREAMS = [
     'kline_5m', 'kline_15m', 'kline_1h', 'kline_4h', 'kline_1d',
     'depth5', 'bookTicker', 'trade', 'ticker'
@@ -35,7 +34,7 @@ class BingXWebSocketClient:
         self._ws_account: Optional[websocket.WebSocketApp] = None
         self._listen_key: Optional[str] = None
         self._last_listen_key_extend = 0.0
-        self._extend_interval = 30 * 60  # 30 минут (рекомендовано документацией)
+        self._extend_interval = 30 * 60  # 30 минут
 
     def start(self):
         if self._running:
@@ -61,7 +60,7 @@ class BingXWebSocketClient:
                 self._ensure_listen_key()
                 self._connect_market_streams()
                 self._connect_account_stream()
-                retry_count = 0  # сброс при успешном подключении
+                retry_count = 0
                 time.sleep(5)
             except Exception as e:
                 logger.error(f"WebSocket main loop error: {e}")
@@ -71,18 +70,14 @@ class BingXWebSocketClient:
 
     def _ensure_listen_key(self):
         now = time.time()
-        # Если ключа нет или пора продлевать (каждые 30 мин)
         if self._listen_key is None or (now - self._last_listen_key_extend) > self._extend_interval:
             if self._listen_key:
-                # Пробуем продлить существующий ключ
                 if self.engine.api.extend_listen_key(self._listen_key):
                     self._last_listen_key_extend = now
                     logger.info("ListenKey extended")
                     return
                 else:
-                    # Если продлить не удалось, генерируем новый
                     self._listen_key = None
-            # Генерируем новый ключ
             listen_key = self.engine.api.get_listen_key()
             if listen_key:
                 self._listen_key = listen_key
@@ -92,10 +87,8 @@ class BingXWebSocketClient:
                 logger.error("Failed to obtain listenKey")
 
     def _connect_market_streams(self):
-        """Подключается к маркет‑данным (без listenKey)."""
         if not self._engine_ready():
             return
-
         self._ws_market = websocket.WebSocketApp(
             WS_MARKET,
             on_open=self._on_market_open,
@@ -103,7 +96,6 @@ class BingXWebSocketClient:
             on_error=self._on_market_error,
             on_close=self._on_market_close
         )
-        # run_forever с пингом каждые 30 секунд (дополнительная страховка)
         self._ws_market.run_forever(ping_interval=30, ping_timeout=10)
 
     def _on_market_open(self, ws):
@@ -113,9 +105,8 @@ class BingXWebSocketClient:
             logger.warning("No symbols, cannot subscribe")
             return
         for sym in symbols:
-            base = sym  # например "BTC-USDT"
             for stream in STREAMS:
-                data_type = f"{base}@{stream}"
+                data_type = f"{sym}@{stream}"
                 self._subscribe(ws, data_type)
                 time.sleep(0.05)
 
@@ -142,7 +133,6 @@ class BingXWebSocketClient:
                 except Exception:
                     message = message.decode('utf-8')
 
-            # Обработка Ping (сравниваем без учёта регистра, так как сервер может слать "Ping")
             msg_upper = message.strip().upper()
             if msg_upper == "PING":
                 ws.send("Pong")
@@ -150,10 +140,30 @@ class BingXWebSocketClient:
                 return
 
             data = json.loads(message)
-            if 'dataType' in data:
-                data_type = data['dataType']
-                payload = data.get('data', {})
-                self._process_market_data(data_type, payload)
+            # Проверяем, что data является словарём
+            if not isinstance(data, dict):
+                logger.warning(f"Received non-dict message: {type(data)} -> {str(data)[:200]}")
+                return
+
+            # Поиск dataType: может быть в корне или в поле 'dataType'
+            data_type = data.get('dataType')
+            if not data_type:
+                # Возможно, это подтверждение подписки или другое служебное сообщение
+                if 'code' in data:
+                    logger.debug(f"Subscription confirmation: {data.get('msg')}")
+                return
+
+            payload = data.get('data')
+            # Если payload — список, это может быть массив ордеров или сделок. Игнорируем или обрабатываем особым образом
+            if isinstance(payload, list):
+                logger.debug(f"Ignoring list payload for {data_type} (size {len(payload)})")
+                return
+            if not isinstance(payload, dict):
+                logger.debug(f"Unexpected payload type for {data_type}: {type(payload)}")
+                return
+
+            self._process_market_data(data_type, payload)
+
         except Exception as e:
             logger.error(f"Error processing market message: {e}")
 
@@ -170,15 +180,8 @@ class BingXWebSocketClient:
             t = payload.get('t')
             if t is None:
                 return
-            o = float(payload.get('o', 0))
-            h = float(payload.get('h', 0))
-            l = float(payload.get('l', 0))
-            c = float(payload.get('c', 0))
-            v = float(payload.get('v', 0))
-            # Сохраняем в engine._candle_data (упрощённо)
-            if symbol not in self.engine._candle_data:
-                self.engine._candle_data[symbol] = {}
-            logger.debug(f"Kline {symbol} {interval}: o={o} c={c}")
+            # Можно обновить свечные данные, но для микро-режима это не критично
+            logger.debug(f"Kline {symbol} {interval}: o={payload.get('o')} c={payload.get('c')}")
         elif stream == 'ticker':
             last_price = payload.get('c')
             if last_price:
@@ -194,7 +197,6 @@ class BingXWebSocketClient:
         logger.warning(f"Market WebSocket closed: {close_status_code} {close_msg}")
 
     def _connect_account_stream(self):
-        """Подключается к стриму аккаунта (требует listenKey)."""
         if not self._listen_key:
             logger.warning("No listenKey, cannot connect account stream")
             return
@@ -210,7 +212,6 @@ class BingXWebSocketClient:
 
     def _on_account_open(self, ws):
         logger.info("Account WebSocket opened")
-        # Сразу после открытия продлеваем listenKey, чтобы он точно был активен
         if self._listen_key:
             self.engine.api.extend_listen_key(self._listen_key)
             self._last_listen_key_extend = time.time()
@@ -232,12 +233,15 @@ class BingXWebSocketClient:
                 return
 
             data = json.loads(message)
+            if not isinstance(data, dict):
+                return
+
             event_type = data.get('e')
             if event_type == 'ORDER_TRADE_UPDATE':
-                # Здесь можно обновлять кэш ордеров
+                # Обновление ордера – можно обновлять кэш, но не обязательно
                 pass
             elif event_type == 'ACCOUNT_UPDATE':
-                # Здесь можно обновлять баланс/позиции
+                # Обновление баланса/позиций – можно синхронизировать, но для простоты игнорируем
                 pass
         except Exception as e:
             logger.error(f"Account message error: {e}")

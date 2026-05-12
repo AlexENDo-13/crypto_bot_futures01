@@ -53,8 +53,9 @@
     "avg_pnl": 0.0,
     "winrate": 0.0,
     "consecutive_losses": 0,
-    "disabled": false,
-    "disabled_reason": null
+    "disabled": true,
+    "disabled_reason": "winrate 0.0% < 40%",
+    "disabled_at": 1778591816.2835886
   },
   "RSIDivergence": {
     "weight": 0.8762925288814345,
@@ -92,15 +93,16 @@
     "disabled_at": 1778517024.1590161
   },
   "SmartPyramiding": {
-    "weight": 0.8995508256755611,
+    "weight": 0.8996309587330072,
     "trades": 7,
     "wins": 0,
     "total_pnl": 0.0,
     "avg_pnl": 0.0,
     "winrate": 0.0,
     "consecutive_losses": 0,
-    "disabled": false,
-    "disabled_reason": null
+    "disabled": true,
+    "disabled_reason": "winrate 0.0% < 40%",
+    "disabled_at": 1778591816.2845979
   },
   "Breakout": {
     "weight": 1.0,
@@ -194,12 +196,12 @@
   },
   "MicroScalper": {
     "weight": 1.0,
-    "trades": 1,
+    "trades": 2,
     "wins": 0,
     "total_pnl": 0.0,
     "avg_pnl": 0.0,
     "winrate": 0.0,
-    "consecutive_losses": 1,
+    "consecutive_losses": 2,
     "disabled": false,
     "disabled_reason": null
   },
