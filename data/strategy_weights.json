@@ -22,7 +22,7 @@
     "disabled_reason": null
   },
   "Ichimoku": {
-    "weight": 1.0038324458016359,
+    "weight": 1.0048150321422822,
     "trades": 5,
     "wins": 0,
     "total_pnl": 0.0,
@@ -52,10 +52,9 @@
     "total_pnl": 0.0,
     "avg_pnl": 0.0,
     "winrate": 0.0,
-    "consecutive_losses": 11,
-    "disabled": true,
-    "disabled_reason": "winrate 0.0% < 40%",
-    "disabled_at": 1778504877.9761841
+    "consecutive_losses": 0,
+    "disabled": false,
+    "disabled_reason": null
   },
   "RSIDivergence": {
     "weight": 0.8762925288814345,
@@ -81,7 +80,7 @@
     "disabled_reason": null
   },
   "TrendFollowing": {
-    "weight": 1.5018211883358403,
+    "weight": 1.5010797529251467,
     "trades": 5,
     "wins": 0,
     "total_pnl": 0.0,
@@ -93,16 +92,15 @@
     "disabled_at": 1778517024.1590161
   },
   "SmartPyramiding": {
-    "weight": 0.899420469166006,
+    "weight": 0.8995508256755611,
     "trades": 7,
     "wins": 0,
     "total_pnl": 0.0,
     "avg_pnl": 0.0,
     "winrate": 0.0,
     "consecutive_losses": 0,
-    "disabled": true,
-    "disabled_reason": "winrate 0.0% < 40%",
-    "disabled_at": 1778504877.980187
+    "disabled": false,
+    "disabled_reason": null
   },
   "Breakout": {
     "weight": 1.0,
@@ -184,7 +182,7 @@
     "disabled_reason": null
   },
   "TurtleTrading": {
-    "weight": 0.9974547705442561,
+    "weight": 1.0016601062744437,
     "trades": 0,
     "wins": 0,
     "total_pnl": 0.0,
@@ -196,12 +194,12 @@
   },
   "MicroScalper": {
     "weight": 1.0,
-    "trades": 0,
+    "trades": 1,
     "wins": 0,
     "total_pnl": 0.0,
     "avg_pnl": 0.0,
     "winrate": 0.0,
-    "consecutive_losses": 0,
+    "consecutive_losses": 1,
     "disabled": false,
     "disabled_reason": null
   },

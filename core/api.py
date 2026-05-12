@@ -1,6 +1,6 @@
 """
 BingX Perpetual Futures (Swap v2/v3) API client.
-Исправлен метод get_listen_key для корректной обработки ответа.
+Добавлены методы для работы с listenKey (получение, продление, закрытие).
 """
 import hmac
 import hashlib
@@ -94,10 +94,7 @@ class BingXAPI:
         self._cache_time = 0.0
 
     def get_listen_key(self) -> Optional[str]:
-        """
-        Получает listenKey для WebSocket Account Data.
-        Эндпоинт возвращает {"listenKey":"..."} без кода.
-        """
+        """Генерирует новый listenKey (действителен 1 час)."""
         try:
             url = f"{self.BASE_URL}{self.LISTEN_KEY}"
             timestamp = int(time.time() * 1000)
@@ -109,12 +106,10 @@ class BingXAPI:
             response = self.session.post(full_url, headers=headers, timeout=10)
             if response.status_code == 200:
                 data = response.json()
-                # Успешный ответ содержит listenKey
                 if 'listenKey' in data:
                     listen_key = data['listenKey']
                     logger.info(f"ListenKey obtained: {listen_key[:8]}...")
                     return listen_key
-                # Если есть поле code и оно 0, то тоже успех (на всякий случай)
                 elif data.get('code') == 0 and 'data' in data and 'listenKey' in data['data']:
                     listen_key = data['data']['listenKey']
                     logger.info(f"ListenKey obtained: {listen_key[:8]}...")
@@ -126,6 +121,48 @@ class BingXAPI:
         except Exception as e:
             logger.error(f"ListenKey request error: {e}")
         return None
+
+    def extend_listen_key(self, listen_key: str) -> bool:
+        """Продлевает listenKey ещё на 60 минут. Рекомендуется каждые 30 минут."""
+        try:
+            url = f"{self.BASE_URL}{self.LISTEN_KEY}"
+            timestamp = int(time.time() * 1000)
+            params = {'listenKey': listen_key, 'timestamp': timestamp}
+            signature = self._sign_params(params)
+            query_string = urlencode({**params, 'signature': signature})
+            full_url = f"{url}?{query_string}"
+            headers = {"X-BX-APIKEY": self.auth.api_key}
+            response = self.session.request('PUT', full_url, headers=headers, timeout=10)
+            if response.status_code == 200:
+                logger.info(f"ListenKey extended: {listen_key[:8]}...")
+                return True
+            else:
+                logger.error(f"Failed to extend listenKey: {response.status_code} {response.text}")
+                return False
+        except Exception as e:
+            logger.error(f"Extend listenKey error: {e}")
+            return False
+
+    def close_listen_key(self, listen_key: str) -> bool:
+        """Закрывает listenKey (опционально, при остановке бота)."""
+        try:
+            url = f"{self.BASE_URL}{self.LISTEN_KEY}"
+            timestamp = int(time.time() * 1000)
+            params = {'listenKey': listen_key, 'timestamp': timestamp}
+            signature = self._sign_params(params)
+            query_string = urlencode({**params, 'signature': signature})
+            full_url = f"{url}?{query_string}"
+            headers = {"X-BX-APIKEY": self.auth.api_key}
+            response = self.session.request('DELETE', full_url, headers=headers, timeout=10)
+            if response.status_code == 200:
+                logger.info(f"ListenKey closed: {listen_key[:8]}...")
+                return True
+            else:
+                logger.warning(f"Failed to close listenKey: {response.status_code}")
+                return False
+        except Exception as e:
+            logger.error(f"Close listenKey error: {e}")
+            return False
 
     def _get_max_orders(self, symbol: str) -> int:
         now = time.time()
