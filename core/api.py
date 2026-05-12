@@ -1,9 +1,6 @@
 """
 BingX Perpetual Futures (Swap v2/v3) API client.
-Fixed: proper parameter ordering for signature validation.
-Added: rate limit headers parsing, exponential backoff for 429/418,
-special handling for 110406/110407, global order limit check.
-Added: get_listen_key() for WebSocket using correct endpoint.
+Исправлен метод get_listen_key для корректной обработки ответа.
 """
 import hmac
 import hashlib
@@ -85,7 +82,7 @@ class BingXAPI:
     DEPTH = "/openApi/swap/v2/quote/depth"
     POSITION_MODE = "/openApi/swap/v1/positionSide/dual"
     TRADING_RULES = "/openApi/swap/v1/tradingRules"
-    LISTEN_KEY = "/openApi/user/auth/userDataStream"  # правильный эндпоинт для listenKey
+    LISTEN_KEY = "/openApi/user/auth/userDataStream"
 
     def __init__(self, auth_manager):
         self.auth = auth_manager
@@ -99,20 +96,33 @@ class BingXAPI:
     def get_listen_key(self) -> Optional[str]:
         """
         Получает listenKey для WebSocket Account Data.
-        Требует подпись и API-ключ.
+        Эндпоинт возвращает {"listenKey":"..."} без кода.
         """
         try:
-            # Используем _request, который добавляет timestamp и подпись
-            response = self._request('POST', self.LISTEN_KEY, {})
-            if response.get('code') == 0:
-                listen_key = response.get('data', {}).get('listenKey')
-                if listen_key:
+            url = f"{self.BASE_URL}{self.LISTEN_KEY}"
+            timestamp = int(time.time() * 1000)
+            params = {'timestamp': timestamp}
+            signature = self._sign_params(params)
+            query_string = urlencode({**params, 'signature': signature})
+            full_url = f"{url}?{query_string}"
+            headers = {"X-BX-APIKEY": self.auth.api_key}
+            response = self.session.post(full_url, headers=headers, timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                # Успешный ответ содержит listenKey
+                if 'listenKey' in data:
+                    listen_key = data['listenKey']
+                    logger.info(f"ListenKey obtained: {listen_key[:8]}...")
+                    return listen_key
+                # Если есть поле code и оно 0, то тоже успех (на всякий случай)
+                elif data.get('code') == 0 and 'data' in data and 'listenKey' in data['data']:
+                    listen_key = data['data']['listenKey']
                     logger.info(f"ListenKey obtained: {listen_key[:8]}...")
                     return listen_key
                 else:
-                    logger.error(f"No listenKey in response: {response}")
+                    logger.error(f"Unexpected listenKey response: {data}")
             else:
-                logger.error(f"Failed to get listenKey: {response}")
+                logger.error(f"HTTP {response.status_code}: {response.text}")
         except Exception as e:
             logger.error(f"ListenKey request error: {e}")
         return None
