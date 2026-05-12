@@ -34,16 +34,15 @@
     "disabled_at": 1778524873.2403111
   },
   "MeanReversion": {
-    "weight": 1.020777189796743,
+    "weight": 1.0184773269833962,
     "trades": 5,
     "wins": 0,
     "total_pnl": 0.0,
     "avg_pnl": 0.0,
     "winrate": 0.0,
     "consecutive_losses": 0,
-    "disabled": true,
-    "disabled_reason": "winrate 0.0% < 40%",
-    "disabled_at": 1778484674.1529028
+    "disabled": false,
+    "disabled_reason": null
   },
   "Momentum": {
     "weight": 1.2,
@@ -58,16 +57,15 @@
     "disabled_at": 1778504877.9761841
   },
   "RSIDivergence": {
-    "weight": 0.8939314221048617,
+    "weight": 0.8762925288814345,
     "trades": 5,
     "wins": 0,
     "total_pnl": 0.0,
     "avg_pnl": 0.0,
     "winrate": 0.0,
-    "consecutive_losses": 5,
-    "disabled": true,
-    "disabled_reason": "5 consecutive losses",
-    "disabled_at": 1778484742.9598525
+    "consecutive_losses": 0,
+    "disabled": false,
+    "disabled_reason": null
   },
   "Squeeze": {
     "weight": 0.8,
@@ -81,7 +79,7 @@
     "disabled_reason": null
   },
   "TrendFollowing": {
-    "weight": 1.502616507668806,
+    "weight": 1.501674567563273,
     "trades": 5,
     "wins": 0,
     "total_pnl": 0.0,
@@ -93,7 +91,7 @@
     "disabled_at": 1778517024.1590161
   },
   "SmartPyramiding": {
-    "weight": 0.8985876514014405,
+    "weight": 0.899012988845919,
     "trades": 7,
     "wins": 0,
     "total_pnl": 0.0,
@@ -123,9 +121,8 @@
     "avg_pnl": 0.0,
     "winrate": 0.0,
     "consecutive_losses": 0,
-    "disabled": true,
-    "disabled_reason": "winrate 0.0% < 40%",
-    "disabled_at": 1778484674.1579034
+    "disabled": false,
+    "disabled_reason": null
   },
   "BreakoutSwing": {
     "weight": 1.0,
@@ -150,16 +147,15 @@
     "disabled_reason": null
   },
   "EMACrossoverSwing": {
-    "weight": 1.000062062037567,
+    "weight": 1.000126017570792,
     "trades": 5,
     "wins": 0,
     "total_pnl": 0.0,
     "avg_pnl": 0.0,
     "winrate": 0.0,
     "consecutive_losses": 0,
-    "disabled": true,
-    "disabled_reason": "winrate 0.0% < 40%",
-    "disabled_at": 1778484674.1629007
+    "disabled": false,
+    "disabled_reason": null
   },
   "SuperTrendSwing": {
     "weight": 0.996335778592819,
@@ -184,7 +180,7 @@
     "disabled_reason": null
   },
   "TurtleTrading": {
-    "weight": 1.0040179456878335,
+    "weight": 1.0006822414869512,
     "trades": 0,
     "wins": 0,
     "total_pnl": 0.0,
@@ -207,12 +203,12 @@
   },
   "MultiTFConsensus": {
     "weight": 2.0,
-    "trades": 1,
+    "trades": 2,
     "wins": 0,
     "total_pnl": 0.0,
     "avg_pnl": 0.0,
     "winrate": 0.0,
-    "consecutive_losses": 1,
+    "consecutive_losses": 2,
     "disabled": false,
     "disabled_reason": null
   }

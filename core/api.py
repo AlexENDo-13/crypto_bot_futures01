@@ -1,6 +1,8 @@
 """
 BingX Perpetual Futures (Swap v2/v3) API client.
 Fixed: proper parameter ordering for signature validation.
+Added: rate limit headers parsing, exponential backoff for 429/418,
+special handling for 110406/110407, and global order limit check.
 """
 import hmac
 import hashlib
@@ -15,15 +17,42 @@ logger = logging.getLogger(__name__)
 
 
 class RateLimiter:
-    def __init__(self, requests_per_second: float = 10.0):
+    def __init__(self, requests_per_second: float = 8.0):
         self.min_interval = 1.0 / requests_per_second
         self.last_request_time = 0.0
         self.consecutive_errors = 0
         self.base_delay = 0.2
-        self.max_delay = 30.0
+        self.max_delay = 60.0        # увеличен до 60 секунд
+        self._ban_until = 0.0         # время окончания блокировки IP (418)
+        self._remaining = None
+        self._reset_time = None
+
+    def update_headers(self, headers: dict):
+        """Сохраняет информацию о лимитах из заголовков ответа."""
+        if 'X-RateLimit-Requests-Remain' in headers:
+            self._remaining = int(headers['X-RateLimit-Requests-Remain'])
+        if 'X-RateLimit-Requests-Expire' in headers:
+            self._reset_time = int(headers['X-RateLimit-Requests-Expire']) / 1000.0
 
     def wait(self):
         now = time.time()
+        # Если IP забанен (418) – ждём до конца бана
+        if now < self._ban_until:
+            wait_time = self._ban_until - now
+            logger.warning(f"IP banned until {self._ban_until}, sleeping {wait_time:.1f}s")
+            time.sleep(wait_time)
+            return
+
+        # Адаптивная задержка на основе оставшихся лимитов
+        if self._remaining is not None and self._remaining <= 5 and self._reset_time:
+            wait_until_reset = max(0, self._reset_time - now)
+            if wait_until_reset > 0 and wait_until_reset < 60:
+                logger.info(f"Rate limit low ({self._remaining}), waiting {wait_until_reset:.1f}s for reset")
+                time.sleep(wait_until_reset)
+                self._remaining = None
+                self._reset_time = None
+
+        # Обычная задержка с экспоненциальным ростом при ошибках
         elapsed = now - self.last_request_time
         current_delay = min(
             self.base_delay * (2 ** self.consecutive_errors),
@@ -40,6 +69,10 @@ class RateLimiter:
     def record_error(self, status_code: int):
         if status_code in (429, 418):
             self.consecutive_errors += 1
+            if status_code == 418:
+                # IP забанен на 5 минут (как указано в документации)
+                self._ban_until = time.time() + 300
+                logger.error("Received 418 (IP banned), will pause for 5 minutes")
 
 
 class BingXAPI:
@@ -55,6 +88,7 @@ class BingXAPI:
     TICKER = "/openApi/swap/v2/quote/ticker"
     DEPTH = "/openApi/swap/v2/quote/depth"
     POSITION_MODE = "/openApi/swap/v1/positionSide/dual"
+    TRADING_RULES = "/openApi/swap/v1/tradingRules"
 
     def __init__(self, auth_manager):
         self.auth = auth_manager
@@ -62,6 +96,47 @@ class BingXAPI:
         self.rate_limiter = RateLimiter(requests_per_second=8.0)
         self._connected = False
         self._last_ping_ms: Optional[float] = None
+        self._max_orders_cache: Dict[str, int] = {}  # symbol -> maxNumOrder
+        self._cache_time = 0.0
+
+    def _get_max_orders(self, symbol: str) -> int:
+        """Получает максимальное количество ордеров для символа (из Trading Rules)."""
+        now = time.time()
+        if now - self._cache_time < 300 and symbol in self._max_orders_cache:
+            return self._max_orders_cache[symbol]
+        try:
+            rules = self.get_trading_rules(symbol)
+            max_orders = int(rules.get('maxNumOrder', 200))
+            self._max_orders_cache[symbol] = max_orders
+            self._cache_time = now
+            return max_orders
+        except Exception:
+            return 200  # значение по умолчанию
+
+    def get_trading_rules(self, symbol: str) -> Dict:
+        """Вызывает эндпоинт /openApi/swap/v1/tradingRules (без подписи)."""
+        url = f"{self.BASE_URL}{self.TRADING_RULES}?symbol={symbol}"
+        try:
+            resp = self.session.get(url, timeout=10)
+            if resp.status_code == 200:
+                data = resp.json()
+                if data.get('code') == 0:
+                    return data.get('data', {})
+        except Exception as e:
+            logger.debug(f"Failed to get trading rules for {symbol}: {e}")
+        return {}
+
+    def _can_place_order(self, symbol: str) -> bool:
+        """Проверяет, не превышен ли лимит открытых ордеров."""
+        try:
+            current_orders = self.get_open_orders(symbol)
+            max_allowed = self._get_max_orders(symbol)
+            if len(current_orders) >= max_allowed:
+                logger.warning(f"Order limit reached for {symbol}: {len(current_orders)}/{max_allowed}")
+                return False
+        except Exception:
+            pass
+        return True
 
     def _sign_params(self, params: Dict[str, Any]) -> str:
         sorted_keys = sorted(params.keys())
@@ -74,7 +149,7 @@ class BingXAPI:
         return signature
 
     def _request(self, method: str, endpoint: str, params: Optional[Dict] = None,
-                 max_retries: int = 3) -> Dict:
+                 max_retries: int = 3, retry_delay: float = 0.5) -> Dict:
         if self.auth.demo_mode:
             raise RuntimeError("API keys not configured")
 
@@ -84,10 +159,8 @@ class BingXAPI:
 
                 params = params or {}
                 params['timestamp'] = int(time.time() * 1000)
-                # Compute signature from sorted params (without signature)
                 signature = self._sign_params(params)
 
-                # Build sorted parameter list for URL (including signature)
                 sorted_keys = sorted(params.keys())
                 param_items = [(k, params[k]) for k in sorted_keys]
                 param_items.append(('signature', signature))
@@ -105,19 +178,42 @@ class BingXAPI:
                 else:
                     response = self.session.get(full_url, headers=headers, timeout=15)
 
+                # Обновляем информацию о лимитах из заголовков
+                self.rate_limiter.update_headers(response.headers)
+
                 status_code = response.status_code
                 if status_code == 200:
+                    json_data = response.json()
+                    code = json_data.get('code', 0)
+                    # Специальная обработка для кодов 110406/110407 (TP/SL already exists)
+                    if code in (110406, 110407):
+                        logger.debug(f"TP/SL already exists (code {code}), treating as success")
+                        self.rate_limiter.record_success()
+                        return json_data
+                    if code != 0:
+                        # Ошибки, связанные с лимитами ордеров или маржой – не ретраим
+                        if code in (101204, 101202, 101400, 101419, 109403):
+                            logger.error(f"API permanent error {code}: {json_data.get('msg')}")
+                            return json_data
+                        # Остальные не-нулевые коды считаем ошибкой
+                        if attempt < max_retries - 1:
+                            logger.warning(f"API error {code}, retrying in {retry_delay}s")
+                            time.sleep(retry_delay)
+                            continue
+                        else:
+                            logger.error(f"API error after {max_retries} attempts: {json_data}")
+                            return json_data
                     self.rate_limiter.record_success()
                     self._connected = True
-                    return response.json()
+                    return json_data
                 elif status_code in (429, 418):
                     self.rate_limiter.record_error(status_code)
-                    wait_time = min(2 ** attempt, 30)
+                    wait_time = min(2 ** attempt, 60)
                     logger.warning(f"Rate limited (HTTP {status_code}), waiting {wait_time}s...")
                     time.sleep(wait_time)
                     continue
                 elif status_code >= 500:
-                    logger.warning(f"Server error {status_code}, retrying...")
+                    logger.warning(f"Server error {status_code}, retrying in {2 ** attempt}s...")
                     time.sleep(2 ** attempt)
                     continue
                 else:
@@ -171,9 +267,7 @@ class BingXAPI:
 
     # ---- Position mode ----
     def set_position_mode(self, dual_side: bool = True) -> Dict:
-        params = {
-            'dualSidePosition': 'true' if dual_side else 'false'
-        }
+        params = {'dualSidePosition': 'true' if dual_side else 'false'}
         return self._request('POST', self.POSITION_MODE, params)
 
     # ---- Trading ----
@@ -189,7 +283,12 @@ class BingXAPI:
                     order_type: str, quantity: float,
                     price: Optional[float] = None,
                     stop_price: Optional[float] = None,
-                    client_order_id: Optional[str] = None) -> Dict:
+                    client_order_id: Optional[str] = None,
+                    close_position: bool = False) -> Dict:
+        # Проверка лимита ордеров перед отправкой
+        if not self._can_place_order(symbol):
+            raise RuntimeError(f"Cannot place order for {symbol}: max open orders reached")
+
         params = {
             'symbol': symbol,
             'side': side,
@@ -203,6 +302,9 @@ class BingXAPI:
             params['stopPrice'] = stop_price
         if client_order_id:
             params['clientOrderID'] = client_order_id
+        if close_position:
+            params['closePosition'] = 'true'
+
         return self._request('POST', self.ORDER, params)
 
     def close_position(self, symbol: str, position_side: str,
@@ -215,7 +317,7 @@ class BingXAPI:
             quantity = abs(float(pos.get('positionAmt', 0)))
             if quantity == 0:
                 raise ValueError("Position amount is zero")
-        
+
         close_side = "SELL" if position_side == "LONG" else "BUY"
         params = {
             'symbol': symbol,

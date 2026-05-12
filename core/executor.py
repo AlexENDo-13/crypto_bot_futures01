@@ -1,13 +1,13 @@
 """
-Trade executor: places MARKET orders, handles trailing stop, breakeven, partial close,
-slippage protection and sound notifications.
-Fixed: round entry_price and TP/SL to symbol's pricePrecision.
+Trade executor: places MARKET orders, handles TP/SL, trailing stop, breakeven, partial close.
+Fixed: respects rate limits, handles 110406/110407 errors, auto-closes after timeout in micro-mode.
 Uses MARKET orders for instant execution.
 Prioritises signal.suggested_tp/sl when available (for micro-scalping).
 """
 import time
 import logging
 import re
+import threading
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -32,13 +32,12 @@ def _round_to_precision(value: float, precision: int) -> float:
 class TradeExecutor:
     def __init__(self, engine):
         self.engine = engine
+        self._last_trade_time = 0
+        self._min_trade_interval = 90  # секунд между сделками (защита от флуда)
 
     @staticmethod
     def _is_tpsl_already_exists_error(exception: Exception) -> bool:
-        """
-        Проверяет, является ли ошибка следствием уже существующего TP/SL ордера.
-        Парсит JSON из сообщения исключения и ищет коды 110406 или 110407.
-        """
+        """Проверяет, является ли ошибка следствием уже существующего TP/SL ордера (коды 110406/110407)."""
         try:
             error_str = str(exception)
             match = re.search(r'\{.*"code":\s*(\d+).*\}', error_str)
@@ -49,10 +48,22 @@ class TradeExecutor:
             pass
         return 'already exists' in str(exception).lower()
 
+    def _ensure_min_trade_interval(self):
+        """Защита от слишком частых сделок (не чаще 1 раза в 90 секунд)."""
+        now = time.time()
+        if now - self._last_trade_time < self._min_trade_interval:
+            wait = self._min_trade_interval - (now - self._last_trade_time)
+            logger.info(f"Trade cooldown: waiting {wait:.1f}s before next trade")
+            time.sleep(wait)
+        self._last_trade_time = time.time()
+
     def execute(self, signal, entry_price, quantity, leverage, tp_price, sl_price):
         side = signal.action
         pos_side = "LONG" if side == "BUY" else "SHORT"
         logger.info(f"Executing {side} {signal.symbol} @ {entry_price}, qty={quantity}, lev={leverage}")
+
+        # Защита от слишком частых сделок
+        self._ensure_min_trade_interval()
 
         if self.engine.auth.demo_mode:
             self._simulate(signal, entry_price, quantity, leverage, tp_price, sl_price)
@@ -65,7 +76,7 @@ class TradeExecutor:
 
         entry_price = _round_to_precision(entry_price, price_precision)
 
-        # Повтор с увеличением количества при ошибке минимального лота
+        # Установка плеча
         max_attempts = 3
         for attempt in range(max_attempts):
             try:
@@ -73,7 +84,16 @@ class TradeExecutor:
                 if resp.get('code') != 0:
                     logger.error(f"Set leverage failed: {resp}")
                     return
+                break
+            except Exception as e:
+                logger.error(f"Leverage attempt {attempt+1} failed: {e}")
+                if attempt == max_attempts-1:
+                    return
+                time.sleep(1)
 
+        # Рыночный ордер
+        for attempt in range(max_attempts):
+            try:
                 order = self.engine.api.place_order(
                     symbol=signal.symbol, side=side, position_side=pos_side,
                     order_type='MARKET', quantity=quantity
@@ -95,12 +115,11 @@ class TradeExecutor:
                     break
             except Exception as e:
                 logger.error(f"Order attempt {attempt+1} failed: {e}")
-                return
-        else:
-            logger.error(f"Failed to place order after {max_attempts} attempts")
-            return
+                if attempt == max_attempts-1:
+                    return
+                time.sleep(1)
 
-        # MARKET ордер исполняется мгновенно
+        # Даём время на исполнение
         time.sleep(1)
 
         # Фактическая цена входа
@@ -116,7 +135,7 @@ class TradeExecutor:
 
         logger.info(f"Actual entry price for {signal.symbol}: {actual_entry} (requested: {entry_price})")
 
-        # --------------- ПРИОРИТЕТ suggested TP/SL из стратегии ---------------
+        # --------------- TP/SL ---------------
         if signal.suggested_tp is not None and signal.suggested_sl is not None:
             final_tp = signal.suggested_tp
             final_sl = signal.suggested_sl
@@ -130,7 +149,7 @@ class TradeExecutor:
         final_tp = _round_to_precision(final_tp, price_precision)
         final_sl = _round_to_precision(final_sl, price_precision)
 
-        # Гарантируем корректность SL относительно TP
+        # Корректировка SL/TP для безопасности (согласно документации: для LONG SL должен быть ниже entry, TP выше)
         if pos_side == 'LONG':
             if final_sl >= actual_entry:
                 final_sl = actual_entry * 0.99
@@ -148,10 +167,17 @@ class TradeExecutor:
 
         if final_sl <= 0 or final_tp <= 0:
             logger.error(f"Invalid SL/TP after corrections for {signal.symbol}: SL={final_sl}, TP={final_tp}. Aborting trade.")
+            # Пытаемся закрыть позицию, чтобы не висеть
+            try:
+                self.engine.api.close_position(signal.symbol, pos_side, quantity)
+            except Exception:
+                pass
             return
 
+        # Устанавливаем TP/SL ордера (с предварительной отменой только отличающихся)
         self._place_tpsl_orders(signal.symbol, pos_side, quantity, final_tp, final_sl)
 
+        # Сохраняем позицию в портфель
         position = Position(
             symbol=signal.symbol, side=pos_side, entry_price=actual_entry,
             quantity=quantity, leverage=leverage,
@@ -167,6 +193,22 @@ class TradeExecutor:
 
         self._play_sound('trade_open')
         logger.info(f"Trade executed: {signal.symbol} {side} @ {actual_entry}, TP={final_tp}, SL={final_sl}")
+
+        # ---- Микро-скальпинг: принудительное закрытие через 60 секунд, если не закрылось ----
+        if self.engine.risk_manager._current_profile == 'Micro':
+            threading.Thread(target=self._auto_close_after_timeout, args=(signal.symbol, pos_side, quantity, 60), daemon=True).start()
+
+    def _auto_close_after_timeout(self, symbol: str, pos_side: str, quantity: float, timeout_seconds: int):
+        """Если позиция не закрылась за timeout_seconds, закрываем принудительно по рынку."""
+        time.sleep(timeout_seconds)
+        try:
+            positions = self.engine.api.get_positions(symbol)
+            pos = next((p for p in positions if p.get('positionSide') == pos_side and abs(float(p.get('positionAmt', 0))) > 0), None)
+            if pos:
+                logger.warning(f"Auto-closing {symbol} {pos_side} after {timeout_seconds}s timeout")
+                self.engine.api.close_position(symbol, pos_side, quantity)
+        except Exception as e:
+            logger.error(f"Auto-close failed for {symbol}: {e}")
 
     # ------------------------------------------------------------------
     def apply_trailing_stop(self, pos, current_price: float):
@@ -228,16 +270,37 @@ class TradeExecutor:
     def _place_tpsl_orders(self, symbol, pos_side, quantity, tp_price, sl_price):
         close_side = 'SELL' if pos_side == 'LONG' else 'BUY'
 
-        # 1. Отменяем все старые TP/SL ордера для этой стороны
+        # 1. Получаем текущие открытые ордера
         try:
             open_orders = self.engine.api.get_open_orders(symbol)
-            for o in open_orders:
-                if o.get('positionSide') == pos_side and o.get('type') in ('TAKE_PROFIT_MARKET', 'STOP_MARKET'):
-                    self.engine.api.cancel_order(symbol, o['orderId'])
         except Exception as e:
-            logger.warning(f"Не удалось отменить старые TP/SL для {symbol}: {e}")
+            logger.warning(f"Could not fetch open orders for {symbol}: {e}")
+            open_orders = []
 
-        # 2. Создаём новые TP/SL
+        # 2. Отменяем только те TP/SL, которые отличаются от новых
+        for o in open_orders:
+            if o.get('positionSide') != pos_side:
+                continue
+            o_type = o.get('type', '')
+            stop_price = o.get('stopPrice')
+            if stop_price is None:
+                continue
+            # Если TP уже существует и цена совпадает – не трогаем
+            if o_type == 'TAKE_PROFIT_MARKET' and tp_price is not None:
+                if abs(float(stop_price) - tp_price) < 1e-8:
+                    continue
+            if o_type == 'STOP_MARKET' and sl_price is not None:
+                if abs(float(stop_price) - sl_price) < 1e-8:
+                    continue
+            # Иначе отменяем
+            try:
+                self.engine.api.cancel_order(symbol, o['orderId'])
+                # Небольшая задержка, чтобы не превысить лимит отмен (10/сек)
+                time.sleep(0.2)
+            except Exception as e:
+                logger.warning(f"Failed to cancel order {o['orderId']}: {e}")
+
+        # 3. Создаём TP
         if tp_price is not None:
             try:
                 self.engine.api.place_order(
@@ -246,16 +309,17 @@ class TradeExecutor:
                 )
             except Exception as e:
                 if self._is_tpsl_already_exists_error(e):
-                    logger.debug(f"TP already exists for {symbol} {pos_side}, skipping creation")
+                    logger.debug(f"TP already exists for {symbol} {pos_side}, skipping")
                 else:
                     logger.error(f"Failed to place TP for {symbol}: {e}")
 
+        # 4. Создаём SL
         if sl_price is not None:
             if pos_side == 'LONG' and sl_price >= tp_price:
-                logger.error(f"Invalid SL for LONG: {sl_price} >= TP {tp_price}, skipping SL order")
+                logger.warning(f"Invalid SL for LONG: {sl_price} >= TP {tp_price}, skipping SL order")
                 return
             if pos_side == 'SHORT' and sl_price <= tp_price:
-                logger.error(f"Invalid SL for SHORT: {sl_price} <= TP {tp_price}, skipping SL order")
+                logger.warning(f"Invalid SL for SHORT: {sl_price} <= TP {tp_price}, skipping SL order")
                 return
             try:
                 self.engine.api.place_order(
@@ -264,7 +328,7 @@ class TradeExecutor:
                 )
             except Exception as e:
                 if self._is_tpsl_already_exists_error(e):
-                    logger.debug(f"SL already exists for {symbol} {pos_side}, skipping creation")
+                    logger.debug(f"SL already exists for {symbol} {pos_side}, skipping")
                 else:
                     logger.error(f"Failed to place SL for {symbol}: {e}")
 

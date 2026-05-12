@@ -3,6 +3,7 @@ Position sync manager: synchronises local portfolio with exchange,
 applies trailing/breakeven, partial close, trailing take profit,
 corrects TP/SL orders, enforces maximum position limit, records closed trades,
 and supports smart replacement of weakest positions.
+Optimised for micro-mode: reduces API calls, respects rate limits.
 Fixed: only cancels/recreates TP/SL when truly needed, with tolerance.
 Also fixed int/float conversion for order quantities.
 """
@@ -19,15 +20,10 @@ logger = logging.getLogger(__name__)
 class PositionSyncManager:
     def __init__(self, engine):
         self.engine = engine
-        # Кэш теперь хранит словари {'tp': ..., 'sl': ..., 'qty': ...}
         self._tpsl_cache = {}
 
     @staticmethod
     def _is_tpsl_already_exists_error(exception: Exception) -> bool:
-        """
-        Проверяет, является ли ошибка следствием уже существующего TP/SL ордера.
-        Парсит JSON из сообщения исключения и ищет коды 110406 или 110407.
-        """
         try:
             error_str = str(exception)
             match = re.search(r'\{.*"code":\s*(\d+).*\}', error_str)
@@ -41,6 +37,12 @@ class PositionSyncManager:
     def full_sync(self):
         if self.engine.auth.demo_mode:
             return
+        # В микро-режиме не делаем полную синхронизацию слишком часто
+        balance = self.engine.portfolio._balance or 0.0
+        if balance < 100:
+            logger.debug("Full sync skipped in micro-mode")
+            return
+
         try:
             api_positions = self.engine.api.get_positions()
             self.engine.portfolio.clear()
@@ -58,15 +60,7 @@ class PositionSyncManager:
                     trade_side = 'BUY' if pos_side == 'LONG' else 'SELL'
                     sl_tp = self.engine.risk_manager.get_sl_tp_levels(entry, trade_side, atr, symbol)
                     tp_price = tp_price or sl_tp['tp2']
-                    sl_price = sl_tp['sl'] if (sl_price is None or sl_price <= 0) else sl_price
-
-                if sl_price is None or sl_price <= 0:
-                    atr = self.engine._get_current_atr(symbol)
-                    min_sl_distance = entry * 0.005
-                    if pos_side == 'LONG':
-                        sl_price = entry - max(atr * 1.5, min_sl_distance)
-                    else:
-                        sl_price = entry + max(atr * 1.5, min_sl_distance)
+                    sl_price = sl_price if (sl_price is not None and sl_price > 0) else sl_tp['sl']
 
                 if qty > 0:
                     pos = Position(
@@ -89,10 +83,16 @@ class PositionSyncManager:
     def background_sync(self):
         if self.engine.auth.demo_mode:
             return
+        # В микро-режиме синхронизируемся редко, полагаясь на авто-закрытие
+        balance = self.engine.portfolio._balance or 0.0
+        if balance < 100:
+            return
+
         try:
             api_positions = self.engine.api.get_positions()
             api_keys = {f"{p.get('symbol')}_{p.get('positionSide')}" for p in api_positions}
 
+            # Закрытые позиции
             for pos in self.engine.portfolio.get_positions():
                 if f"{pos.symbol}_{pos.side}" not in api_keys:
                     pnl = pos.unrealized_pnl
@@ -113,6 +113,7 @@ class PositionSyncManager:
                     if cache_key in self._tpsl_cache:
                         del self._tpsl_cache[cache_key]
 
+            # Активные позиции
             for p in api_positions:
                 pos_side = p.get('positionSide', 'LONG')
                 symbol = p.get('symbol', '')
@@ -130,7 +131,7 @@ class PositionSyncManager:
                     if existing.margin > 0:
                         existing.pnl_pct = (unrealized / existing.margin) * 100
 
-                    # ---------- Адаптивный трейлинг стоп ----------
+                    # Трейлинг стоп
                     if current_price > 0 and existing.sl_price is not None:
                         if self.engine.trailing_sl_enabled:
                             if not hasattr(self.engine, 'adaptive_trailing_stop'):
@@ -138,7 +139,6 @@ class PositionSyncManager:
                                 self.engine.adaptive_trailing_stop = AdaptiveTrailingStop(self.engine)
                             updated = self.engine.adaptive_trailing_stop.update(existing, current_price)
                             if updated:
-                                # Если стоп изменился, синхронизируем ордер с биржей
                                 self._sync_tpsl_orders(
                                     symbol, pos_side, existing.quantity,
                                     existing.tp_price, existing.sl_price
@@ -148,6 +148,7 @@ class PositionSyncManager:
                             atr = self.engine._get_current_atr(symbol)
                             self.engine.executor.apply_breakeven(existing, current_price, atr)
 
+                    # Трейлинг TP
                     if hasattr(self.engine, 'trailing_tp') and self.engine.trailing_tp:
                         if existing.tp_price and existing.tp_price > 0:
                             updated = self.engine.trailing_tp.update(existing, current_price)
@@ -156,13 +157,15 @@ class PositionSyncManager:
                                     symbol, pos_side, existing.quantity, existing.tp_price
                                 )
 
+                    # Частичное закрытие
                     if self.engine.partial_close_enabled and existing.tp_price is not None:
                         self.engine.executor.apply_partial_close(existing, current_price)
 
-                    # Синхронизируем TP/SL только при изменении
+                    # Синхронизация TP/SL
                     self._sync_tpsl_orders(symbol, pos_side, existing.quantity,
                                            existing.tp_price, existing.sl_price)
                 else:
+                    # Новая позиция
                     atr = self.engine._get_current_atr(symbol)
                     trade_side = 'BUY' if pos_side == 'LONG' else 'SELL'
                     sl_tp = self.engine.risk_manager.get_sl_tp_levels(entry, trade_side, atr, symbol)
@@ -240,9 +243,9 @@ class PositionSyncManager:
                 hours_held = 99.0
             if pos.tp_price and pos.entry_price:
                 if pos.side == 'LONG' and pos.tp_price != pos.entry_price:
-                    progress = (pos.sl_price - pos.entry_price) / (pos.tp_price - pos.entry_price)
+                    progress = (pos.sl_price - pos.entry_price) / (pos.tp_price - pos.entry_price) if pos.tp_price != pos.entry_price else 0
                 elif pos.side == 'SHORT' and pos.tp_price != pos.entry_price:
-                    progress = (pos.entry_price - pos.sl_price) / (pos.entry_price - pos.tp_price)
+                    progress = (pos.entry_price - pos.sl_price) / (pos.entry_price - pos.tp_price) if pos.entry_price != pos.tp_price else 0
                 else:
                     progress = 0.0
             else:
@@ -250,6 +253,8 @@ class PositionSyncManager:
             score = progress * 0.7 - hours_held * 0.02
             scored.append((pos, score))
 
+        if not scored:
+            return False
         weakest_pos, weakest_score = min(scored, key=lambda x: x[1])
 
         if new_signal_confidence > 0.5 and (new_signal_confidence - 0.1) > weakest_score:
@@ -306,7 +311,6 @@ class PositionSyncManager:
         cache_key = f"{symbol}_{pos_side}"
         cached = self._tpsl_cache.get(cache_key)
 
-        # Допуск 0.1% для цен и допустимая разница в количестве (используем float)
         if cached and abs(cached['qty'] - quantity) < 1e-8:
             tp_close = True
             sl_close = True
@@ -317,27 +321,26 @@ class PositionSyncManager:
                 if abs(expected_sl - cached['sl']) / max(abs(expected_sl), 1e-8) < 0.001:
                     sl_close = False
             if not tp_close and not sl_close:
-                return  # всё совпадает, не надо обновлять
+                return
 
         try:
             orders = self.engine.api.get_open_orders(symbol)
-            # Отменяем только старые TP/SL, которые действительно отличаются
             for o in orders:
                 if o.get('positionSide') != pos_side:
                     continue
                 order_type = o.get('type', '')
                 if order_type in ('TAKE_PROFIT_MARKET', 'STOP_MARKET'):
                     existing_price = float(o.get('stopPrice', 0))
-                    # Исправлено: используем float для количества
                     order_qty = float(o.get('origQty', 0))
                     if order_type == 'TAKE_PROFIT_MARKET' and expected_tp is not None:
                         if abs(existing_price - expected_tp) / max(abs(expected_tp), 1e-8) < 0.001 and abs(quantity - order_qty) < 1e-8:
-                            continue  # этот TP не меняем
+                            continue
                     elif order_type == 'STOP_MARKET' and expected_sl is not None:
                         if abs(existing_price - expected_sl) / max(abs(expected_sl), 1e-8) < 0.001 and abs(quantity - order_qty) < 1e-8:
-                            continue  # этот SL не меняем
+                            continue
                     try:
                         self.engine.api.cancel_order(symbol, o.get('orderId', ''))
+                        time.sleep(0.2)
                     except Exception as e:
                         logger.warning(f"Failed to cancel order {o.get('orderId')}: {e}")
 

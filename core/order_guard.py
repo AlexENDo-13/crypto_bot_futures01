@@ -1,5 +1,6 @@
 """
 Order Guard – periodic check and repair of TP/SL orders on the exchange.
+Automatically disabled in micro-mode (balance < 100 USDT) to avoid unnecessary API calls.
 Fixed: no longer tries to set TP/SL on positions that don't exist on exchange.
 """
 import logging
@@ -18,10 +19,18 @@ class OrderGuard:
         self._thread: Optional[threading.Thread] = None
         self._last_repair_attempt: Dict[str, float] = {}
         self._min_repeat_interval = 300
+        self._disabled = False
 
     def start(self):
         if self._running:
             return
+        # Определяем, нужно ли включать OrderGuard
+        balance = self.engine.portfolio._balance or 0.0
+        if balance < 100:
+            self._disabled = True
+            logger.info("OrderGuard disabled (micro-mode: balance < 100 USDT)")
+            return
+
         self._running = True
         self._thread = threading.Thread(target=self._loop, daemon=True, name="OrderGuard")
         self._thread.start()
@@ -43,7 +52,14 @@ class OrderGuard:
     def _check_all_positions(self):
         if self.engine.auth.demo_mode:
             return
-        # Получаем реальные позиции с биржи
+        # Повторная проверка баланса на случай, если он вырос после запуска
+        balance = self.engine.portfolio._balance or 0.0
+        if balance < 100:
+            if not self._disabled:
+                self._disabled = True
+                logger.info("OrderGuard auto-disabled (balance dropped below 100 USDT)")
+            return
+
         try:
             api_positions = self.engine.api.get_positions()
         except Exception as e:
@@ -51,28 +67,24 @@ class OrderGuard:
             return
 
         if not api_positions:
-            # Если биржа не вернула позиций, значит ничего не открыто — чистим локально
             for pos in list(self.engine.portfolio.get_positions()):
                 self.engine.portfolio.remove_position(pos.symbol, pos.side)
             return
 
-        # Строим мапу реальных позиций: (symbol, positionSide) -> api_data
         real_positions = {}
         for p in api_positions:
             sym = p.get('symbol', '')
             side = p.get('positionSide', 'LONG')
             qty = abs(float(p.get('positionAmt', 0)))
-            if qty > 0:   # игнорируем позиции с нулевым объёмом (не открыты)
+            if qty > 0:
                 real_positions[(sym, side)] = p
 
-        # Удаляем локальные позиции, которых нет в реальных
         for pos in list(self.engine.portfolio.get_positions()):
             key = (pos.symbol, pos.side)
             if key not in real_positions:
                 logger.info(f"OrderGuard: Position {pos.symbol} {pos.side} no longer exists on exchange, removing")
                 self.engine.portfolio.remove_position(pos.symbol, pos.side)
 
-        # Для каждой реальной позиции проверяем и чиним TP/SL
         for (symbol, pos_side), api_pos in real_positions.items():
             try:
                 self._check_and_repair(symbol, pos_side, abs(float(api_pos.get('positionAmt', 0))))
@@ -80,15 +92,12 @@ class OrderGuard:
                 logger.error(f"OrderGuard error for {symbol} {pos_side}: {e}")
 
     def _check_and_repair(self, symbol, pos_side, quantity):
-        # Получаем локальную позицию (если есть)
         local_pos = None
         for pos in self.engine.portfolio.get_positions():
             if pos.symbol == symbol and pos.side == pos_side:
                 local_pos = pos
                 break
         if local_pos is None:
-            # Локальной позиции нет – создаём на основе биржевых данных (чтобы не потерять трейлинг)
-            # Но здесь можем просто пропустить, т.к. синхронизация добавит её в следующем цикле
             return
 
         expected_tp = local_pos.tp_price
@@ -146,7 +155,11 @@ class OrderGuard:
                 )
                 self._last_repair_attempt[repair_key] = now
             except Exception as e:
-                logger.error(f"OrderGuard failed to recreate TP for {symbol}: {e}")
+                # Игнорируем ошибку "already exists"
+                if 'already exists' in str(e).lower() or '110406' in str(e) or '110407' in str(e):
+                    logger.debug(f"TP/SL already exists for {symbol}, skip repair")
+                else:
+                    logger.error(f"OrderGuard failed to recreate TP for {symbol}: {e}")
 
         if not sl_found and expected_sl is not None:
             logger.warning(f"OrderGuard: SL missing for {symbol} {pos_side}, recreating SL={expected_sl}")
@@ -159,4 +172,7 @@ class OrderGuard:
                 )
                 self._last_repair_attempt[repair_key] = now
             except Exception as e:
-                logger.error(f"OrderGuard failed to recreate SL for {symbol}: {e}")
+                if 'already exists' in str(e).lower() or '110406' in str(e) or '110407' in str(e):
+                    logger.debug(f"TP/SL already exists for {symbol}, skip repair")
+                else:
+                    logger.error(f"OrderGuard failed to recreate SL for {symbol}: {e}")
