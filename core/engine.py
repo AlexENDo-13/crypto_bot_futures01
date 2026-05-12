@@ -1,6 +1,7 @@
 """
 Trading Engine – coordinator.
 Исправлено: баланс v3 — массив объектов, ищем USDT.
+Добавлено: диагностика сканирования, синхронный manual_scan, проверка _candle_data.
 """
 import os, sys, time, json, logging, threading
 from collections import deque
@@ -45,7 +46,6 @@ logger = logging.getLogger(__name__)
 
 
 def _safe_float(value, default=0.0):
-    """Преобразует значение в float, даже если пришла строка."""
     try:
         return float(value)
     except (ValueError, TypeError):
@@ -180,6 +180,11 @@ class TradingEngine:
             threading.Thread(target=self.risk_controller.connection_monitor, daemon=True).start()
         threading.Thread(target=self._state_autosave, daemon=True).start()
 
+        # После старта принудительно запускаем одно сканирование для заполнения _candle_data
+        logger.info("Starting initial market scan...")
+        self._market_scan_task()
+        logger.info(f"Initial scan completed. _candle_data has {len(self._candle_data)} symbols")
+
     def stop(self):
         self._running = False
         self._paused = False
@@ -204,19 +209,139 @@ class TradingEngine:
         logger.info("Trading engine stopped")
 
     def pause(self):
-        self._paused = True; logger.info("Trading paused")
+        self._paused = True
+        logger.info("Trading paused")
 
     def resume(self):
-        self._paused = False; logger.info("Trading resumed")
+        self._paused = False
+        logger.info("Trading resumed")
 
     def is_paused(self) -> bool:
         return self._paused
 
     # ---------- обновления по расписанию ----------
     def _market_scan_task(self):
-        market_scan_task(self)
+        """Вызывается планировщиком или вручную."""
+        logger.info("market_scan_task called, engine._running=%s, engine._paused=%s", self._running, self._paused)
+        # Не используем отдельную функцию из engine_scan, чтобы иметь прямой контроль
+        # Вызываем встроенную логику, но с логами
+        self._perform_scan()
 
-    # ИСПРАВЛЕНИЕ: баланс v3 – массив объектов, ищем USDT
+    def _perform_scan(self):
+        """Реальная логика сканирования, чтобы можно было вызвать синхронно."""
+        if self._paused or not self._running:
+            logger.debug("Scan skipped: paused or not running")
+            return
+        self.watchdog.heartbeat()
+
+        if self.antidetect.should_skip_update():
+            logger.debug("Scan skipped: antidetect skip")
+            return
+
+        if not self._top_symbols:
+            logger.warning("No top symbols, discovering...")
+            self._discover_symbols()
+            self._load_contracts_info()
+            if not self._top_symbols:
+                logger.error("Still no symbols, aborting scan")
+                return
+
+        symbols = self.antidetect.shuffle_scan_order(self._top_symbols)
+        logger.info(f"Market scan: processing {len(symbols)} symbols")
+
+        last_hb = time.time()
+        for idx, symbol in enumerate(symbols):
+            if not self._running or self._paused:
+                break
+            if time.time() - last_hb > 30:
+                self.watchdog.heartbeat()
+                last_hb = time.time()
+            if idx % 10 == 0:
+                logger.debug(f"Scanning {idx+1}/{len(symbols)}: {symbol}")
+            try:
+                self._process_symbol(symbol)
+            except Exception as e:
+                logger.error(f"Error processing {symbol}: {e}", exc_info=True)
+
+        self._last_scan_time = time.time()
+        logger.info(f"Market scan finished, last_scan_time={self._last_scan_time}, _candle_data symbols={len(self._candle_data)}")
+
+    def _process_symbol(self, symbol: str):
+        """Обработка одного символа — перенесено из engine_scan для наглядности."""
+        if symbol in self._blacklist:
+            logger.debug(f"Symbol {symbol} in blacklist, skipping")
+            return
+
+        all_candles = {}
+        for tf in self.timeframes:
+            try:
+                self.antidetect.pre_request_delay()
+                df = self.api.get_klines_dataframe(symbol, tf, limit=200)
+                if not df.empty:
+                    all_candles[tf] = df
+                    self._candle_data.setdefault(symbol, {})[tf] = df
+                else:
+                    logger.warning(f"Empty DataFrame for {symbol} {tf}")
+            except Exception as e:
+                logger.debug(f"Failed to fetch {symbol} {tf}: {e}")
+
+        if not all_candles:
+            logger.warning(f"No candle data for {symbol}, skipping")
+            return
+
+        # Определение режима
+        regime = MarketRegime.UNKNOWN
+        if '1h' in all_candles:
+            regime = self.regime_detector.detect(all_candles['1h'])
+        elif '15m' in all_candles:
+            regime = self.regime_detector.detect(all_candles['15m'])
+        logger.debug(f"Regime for {symbol}: {regime.value}")
+
+        signals = []
+        for name, strategy in self.strategies.items():
+            if not strategy.enabled:
+                continue
+            # Микро-режим: оставляем только MultiTFConsensus и MicroScalper
+            if self.risk_manager._current_profile == 'Micro':
+                if name not in ('MultiTFConsensus', 'MicroScalper'):
+                    continue
+            try:
+                tf_list = strategy.config.get('timeframes', self.timeframes)
+                for tf in tf_list:
+                    if tf not in all_candles:
+                        continue
+                    signal = strategy.evaluate(symbol, tf, all_candles[tf])
+                    if signal and signal.action in ('BUY', 'SELL'):
+                        signal.meta['strategy'] = name
+                        signal.meta['timeframe'] = tf
+                        signal.meta['regime'] = regime.value
+                        signals.append(signal)
+                        self._recent_signals.append({
+                            'time': time.strftime('%H:%M:%S'),
+                            'symbol': symbol,
+                            'action': signal.action,
+                            'confidence': signal.confidence,
+                            'price': self._get_current_price(symbol),
+                            'strategy': name,
+                            'regime': regime.value,
+                        })
+                        logger.info(f"Signal from {name} on {symbol} {tf}: {signal.action} conf={signal.confidence:.2f}")
+                        break
+            except Exception as e:
+                logger.warning(f"Strategy {name} error on {symbol}: {e}")
+                strategy.record_error()
+
+        if signals:
+            combined = self.voting.evaluate_signals(signals)
+            if combined and combined.confidence >= self.signal_threshold:
+                logger.info(f"Combined signal: {combined.symbol} {combined.action} conf={combined.confidence:.2f}")
+                self.signal_processor.process(combined, all_candles)
+            else:
+                logger.debug(f"Combined confidence {combined.confidence if combined else 0:.2f} < threshold {self.signal_threshold}")
+        else:
+            logger.debug(f"No signals for {symbol}")
+
+    # ---------- остальные методы (без изменений) ----------
     def _equity_update_task(self):
         try:
             if self.auth.demo_mode:
@@ -224,30 +349,24 @@ class TradingEngine:
                 self.portfolio.available_margin = 1000.0
             else:
                 response = self.api.get_balance()
-                # Структура v3: {"code":0, "data": [ { "asset":"USDT", "balance":"...", ... }, ... ]}
                 data_list = response.get('data', [])
                 if not data_list or not isinstance(data_list, list):
                     logger.warning("Balance data is empty or not a list")
                     return
-
-                # Ищем ассет USDT
                 usdt_info = None
                 for item in data_list:
                     if item.get('asset') == 'USDT':
                         usdt_info = item
                         break
                 if usdt_info is None and data_list:
-                    usdt_info = data_list[0]  # fallback
-
+                    usdt_info = data_list[0]
                 if usdt_info is None:
                     return
-
                 balance = _safe_float(usdt_info.get('balance', 0))
                 available = _safe_float(usdt_info.get('availableMargin', balance))
                 unrealized = _safe_float(usdt_info.get('unrealizedProfit', 0))
                 self.portfolio.update_equity(balance, unrealized)
                 self.portfolio.available_margin = available
-
                 self.risk_controller.update_drawdown(self.portfolio._equity)
                 self.risk_controller.check_daily_limits()
                 self.risk_manager.adapt_to_market(self)
@@ -269,15 +388,12 @@ class TradingEngine:
         except Exception as e:
             logger.error(f"Weight update error: {e}")
 
-    # ---------- Grid Strategy support ----------
     def _grid_renew_task(self):
-        """Периодически обновляет сетки GridStrategy."""
         if hasattr(self, 'strategies'):
             grid_strat = self.strategies.get('GridStrategy')
             if grid_strat and hasattr(grid_strat, 'check_grids'):
                 grid_strat.check_grids()
 
-    # ---------- колбэки ----------
     def _on_watchdog_restart(self):
         logger.warning("Watchdog restart triggered")
         try:
@@ -306,7 +422,6 @@ class TradingEngine:
             self._save_state()
             time.sleep(60)
 
-    # ---------- данные рынка ----------
     def _discover_symbols(self):
         discover_symbols(self)
 
@@ -319,7 +434,6 @@ class TradingEngine:
     def _get_current_atr(self, symbol, candles_dict=None):
         return get_current_atr(self, symbol, candles_dict)
 
-    # ---------- чёрный список ----------
     def add_to_blacklist(self, symbol, reason="manual"):
         if symbol not in self._blacklist:
             self._blacklist.append(symbol)
@@ -333,18 +447,20 @@ class TradingEngine:
     def get_blacklist(self):
         return self._blacklist.copy()
 
-    # ---------- ручное управление ----------
     def manual_scan(self):
         if not self._running:
             logger.warning("Engine is not running – cannot scan")
             return
-        def _scan():
-            try:
-                self._market_scan_task()
-            except Exception as e:
-                logger.error(f"Manual scan error: {e}")
-        threading.Thread(target=_scan, daemon=True, name="ManualScan").start()
-        logger.info("Manual scan started (async)")
+
+        logger.info("Manual scan started (synchronous for debugging)")
+        try:
+            self._perform_scan()  # прямой вызов, не в потоке
+            logger.info(f"Manual scan completed. _candle_data contains {len(self._candle_data)} symbols")
+            # Вывод первых символов и их таймфреймов для диагностики
+            for sym in list(self._candle_data.keys())[:5]:
+                logger.info(f"  {sym} timeframes: {list(self._candle_data[sym].keys())}")
+        except Exception as e:
+            logger.error(f"Manual scan error: {e}", exc_info=True)
 
     def close_position_manual(self, symbol, side, percent=None):
         try:
@@ -375,7 +491,6 @@ class TradingEngine:
     def sync_positions(self):
         self.sync_manager.full_sync()
 
-    # ---------- обновление настроек ----------
     def update_settings(self, settings: dict):
         old_max = self.max_positions
         if 'max_positions' in settings:
@@ -394,7 +509,6 @@ class TradingEngine:
         if 'max_positions' in settings and self.max_positions < old_max:
             self.sync_manager._enforce_limit()
 
-    # ---------- статус ----------
     def get_status(self):
         balance = self.portfolio._balance or 0.0
         equity = self.portfolio._equity or balance
@@ -438,7 +552,6 @@ class TradingEngine:
                 }
         return stats
 
-    # ---------- оптимизация стратегий ----------
     def optimize_strategies(self):
         if not self._candle_data:
             logger.warning("No candle data for optimization")

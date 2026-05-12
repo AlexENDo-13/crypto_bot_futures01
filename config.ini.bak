@@ -4,29 +4,29 @@ api_secret =
 
 [ENGINE]
 scan_interval = 45
-signal_threshold = 0.20
+signal_threshold = 0.2
 max_positions = 1
-timeframes = 5m,15m
+timeframes = 5m,15m,1h,4h,1d
 top_symbols = 15
 
 [RISK]
 profile = User
 risk_per_trade = 20.0
 max_leverage = 3
-use_day_profile = false
-kelly_enabled = false
+use_day_profile = False
+kelly_enabled = False
 kelly_winrate = 0.5
 kelly_avg_win_loss = 2.0
 
 [TRADING]
-trailing_sl = true
+trailing_sl = True
 trailing_distance_pct = 0.3
-partial_close = false
+partial_close = False
 partial_close_pct = 30.0
-breakeven = true
+breakeven = True
 breakeven_atr_mult = 0.3
 slippage_timeout = 0.5
-reinvest_profits = true
+reinvest_profits = True
 
 [MOONSHOT]
 capital_pct = 0.0
@@ -100,3 +100,4 @@ check_frequency_day = 1
 check_frequency_night = 1
 check_frequency_weekend = 1
 gradual_tweak_enabled = false
+

@@ -1,3 +1,9 @@
+"""
+Market scan task – core of the trading bot.
+Fetches candles for each symbol, runs strategies, combines signals,
+applies filters, and delegates to signal_processor.
+Added detailed logging for diagnosis of missing trades.
+"""
 import time
 import logging
 from strategies.base import Signal
@@ -7,38 +13,55 @@ logger = logging.getLogger(__name__)
 
 
 def market_scan_task(engine):
+    """Main scanning function called by scheduler or manually."""
     if engine._paused or not engine._running:
+        logger.debug("Market scan skipped: bot paused or not running")
         return
+
     engine.watchdog.heartbeat()
 
     if engine.antidetect.should_skip_update():
+        logger.debug("Market scan skipped: anti-detect random skip")
         return
 
     if not engine._top_symbols:
+        logger.warning("No symbols discovered, running discovery...")
         engine._discover_symbols()
         engine._load_contracts_info()
+        if not engine._top_symbols:
+            logger.error("Still no symbols after discovery, aborting scan")
+            return
 
     symbols = engine.antidetect.shuffle_scan_order(engine._top_symbols)
+    logger.info(f"Market scan: processing {len(symbols)} symbols")
+
     last_hb = time.time()
 
-    for symbol in symbols:
+    for idx, symbol in enumerate(symbols):
         if not engine._running or engine._paused:
             break
+
         if time.time() - last_hb > 30:
             engine.watchdog.heartbeat()
             last_hb = time.time()
 
+        # Лог для каждого 10-го символа, чтобы не засорять
+        if idx % 10 == 0:
+            logger.debug(f"Scanning symbol {idx+1}/{len(symbols)}: {symbol}")
+
         try:
             _process_symbol(engine, symbol)
         except Exception as e:
-            # exc_info=True отправляет traceback в лог-файл
             logger.error(f"Error processing {symbol}: {e}", exc_info=True)
 
     engine._last_scan_time = time.time()
+    logger.debug(f"Market scan finished, last scan time: {engine._last_scan_time}")
 
 
 def _process_symbol(engine, symbol: str):
+    """Process a single symbol: fetch candles, run strategies, combine signals."""
     if symbol in engine._blacklist:
+        logger.debug(f"Symbol {symbol} in blacklist, skipping")
         return
 
     all_candles = {}
@@ -49,22 +72,43 @@ def _process_symbol(engine, symbol: str):
             if not df.empty:
                 all_candles[tf] = df
                 engine._candle_data.setdefault(symbol, {})[tf] = df
+                logger.debug(f"Fetched {tf} for {symbol}, rows={len(df)}")
+            else:
+                logger.warning(f"Empty DataFrame for {symbol} {tf}")
         except Exception as e:
             logger.debug(f"Failed to fetch {symbol} {tf}: {e}")
 
     if not all_candles:
+        logger.warning(f"No candle data for {symbol}, skipping")
         return
 
+    # Определяем рыночный режим (на основе 1h, если есть)
     regime = MarketRegime.UNKNOWN
     if '1h' in all_candles:
         regime = engine.regime_detector.detect(all_candles['1h'])
+    elif '15m' in all_candles:
+        # временно используем 15m
+        class FakeCandles:
+            close = all_candles['15m']['close']
+        regime = engine.regime_detector.detect(all_candles['15m'])
+    logger.debug(f"Market regime for {symbol}: {regime.value}")
 
     signals = []
     for name, strategy in engine.strategies.items():
-        if strategy.is_disabled():
+        if not strategy.enabled:
+            logger.debug(f"Strategy {name} disabled, skipping")
             continue
+
+        # В микро-режиме оставляем только MultiTFConsensus и MicroScalper
+        # (это уже настроено в risk_manager, но проверим)
+        if engine.risk_manager._current_profile == 'Micro':
+            if name not in ('MultiTFConsensus', 'MicroScalper'):
+                continue
+
         try:
-            for tf in strategy.config.get('timeframes', engine.timeframes):
+            # Перебираем таймфреймы, которые поддерживает стратегия
+            tf_list = strategy.config.get('timeframes', engine.timeframes)
+            for tf in tf_list:
                 if tf not in all_candles:
                     continue
                 signal = strategy.evaluate(symbol, tf, all_candles[tf])
@@ -82,12 +126,19 @@ def _process_symbol(engine, symbol: str):
                         'strategy': name,
                         'regime': regime.value,
                     })
+                    logger.info(f"Signal from {name} on {symbol} {tf}: {signal.action} conf={signal.confidence:.2f}")
+                    # Выходим после первого найденного сигнала для этой стратегии
                     break
         except Exception as e:
-            logger.warning(f"Strategy {name} error on {symbol}: {e}")
+            logger.warning(f"Strategy {name} error on {symbol}: {e}", exc_info=True)
             strategy.record_error()
 
     if signals:
         combined = engine.voting.evaluate_signals(signals)
         if combined and combined.confidence >= engine.signal_threshold:
+            logger.info(f"Combined signal: {combined.symbol} {combined.action} conf={combined.confidence:.2f}")
             engine.signal_processor.process(combined, all_candles)
+        else:
+            logger.debug(f"Combined signal confidence {combined.confidence if combined else 0:.2f} below threshold {engine.signal_threshold}")
+    else:
+        logger.debug(f"No signals generated for {symbol}")
