@@ -1,6 +1,6 @@
 """
 Risk Management – специальный микро-скальпинговый режим для баланса <100 USDT.
-Не нарушает правила BingX: минимальный интервал между сделками, щадящее использование API.
+Исправлено: гарантированный минимальный размер позиции (5 USDT), чтобы избежать "Zero quantity".
 """
 import logging, json, os, time
 from datetime import datetime, timezone
@@ -30,11 +30,11 @@ class RiskManager:
         self._user_max_positions: Optional[int] = None
         self._user_risk_pct: Optional[float] = None
         self._user_max_leverage: Optional[int] = None
-        self._min_trade_interval_seconds = 90  # НЕ МЕНЕЕ 90 секунд между сделками (защита от спама)
+        self._min_trade_interval_seconds = 90
         self._last_trade_time = 0.0
 
         self._profiles = {
-            'Micro': {'risk_pct': 20.0, 'max_lev': 3, 'max_pos': 1, 'atr_mult': {'sl': 0.15, 'tp': 0.3}},  # TP/SL в %!
+            'Micro': {'risk_pct': 20.0, 'max_lev': 3, 'max_pos': 1, 'atr_mult': {'sl': 0.15, 'tp': 0.3}},
             'User':  {'risk_pct': 5.0,  'max_lev': 5, 'max_pos': 1, 'atr_mult': {'sl': 0.8, 'tp': 1.6}},
         }
         self._load_state()
@@ -83,20 +83,16 @@ class RiskManager:
                 engine.max_positions = 3
 
     def _apply_micro_mode(self, engine):
-        """Микро-скальпинг: фиксированный TP/SL в процентах, короткое удержание."""
         self.risk_per_trade_pct = 20.0
         self.max_leverage = 3
         self._current_profile = 'Micro'
-        # SL и TP задаются в процентах от цены (не ATR)
-        self._atr_multipliers['__default__'] = {'sl': 0.15, 'tp': 0.3}   # 0.15% SL, 0.3% TP
+        self._atr_multipliers['__default__'] = {'sl': 0.15, 'tp': 0.3}
         if engine:
             engine.max_positions = 1
-            engine.signal_threshold = 0.2   # низкий порог, чтобы ловить любые сигналы
-            # Включаем только один фильтр – ATRFilter (защита от экстремальной волатильности)
+            engine.signal_threshold = 0.2
             for name, f in engine.filters.items():
                 if name not in ('ATRFilter', 'MicroLotFilter'):
                     f.enabled = False
-            # Переключаем стратегии: только MultiTFConsensus и MicroScalper
             for name, s in engine.strategies.items():
                 if name not in ('MultiTFConsensus', 'MicroScalper'):
                     s.enabled = False
@@ -106,10 +102,8 @@ class RiskManager:
         self._night_mode = enabled
 
     def get_sl_tp_levels(self, entry_price, side, atr, symbol=None):
-        """Возвращает SL и TP в абсолютных ценах. В микро-режиме использует проценты."""
         sl_mult, tp_mult = self.get_atr_multipliers(symbol)
         if self._current_profile == 'Micro':
-            # sl_mult и tp_mult интерпретируются как проценты (0.15 = 0.15%)
             sl_pct = sl_mult / 100.0
             tp_pct = tp_mult / 100.0
             if side == 'BUY':
@@ -120,7 +114,6 @@ class RiskManager:
                 tp = entry_price * (1 - tp_pct)
             return {'sl': max(sl, 1e-8), 'tp': max(tp, 1e-8), 'tp2': tp}
         else:
-            # Обычный режим на основе ATR
             min_sl = entry_price * 0.003
             if side == 'BUY':
                 sl = entry_price - max(atr * sl_mult, min_sl)
@@ -132,11 +125,6 @@ class RiskManager:
 
     def calculate_position_size(self, free_margin, entry_price, sl_price, confidence,
                                 min_qty=0.0, step_size=0.0):
-        """
-        Расчёт количества с учётом микро-лотов и защиты от слишком частых сделок.
-        Возвращает (quantity, leverage).
-        """
-        # Защита от спама ордерами (не чаще 1 сделки в 90 секунд)
         now = time.time()
         if now - self._last_trade_time < self._min_trade_interval_seconds:
             logger.debug(f"Trade cooldown active, need wait {self._min_trade_interval_seconds - (now - self._last_trade_time):.0f}s")
@@ -144,20 +132,24 @@ class RiskManager:
         self._last_trade_time = now
 
         if entry_price <= 0 or free_margin <= 0:
+            logger.warning(f"Invalid entry or margin: entry={entry_price}, margin={free_margin}")
             return 0.0, 1
 
         risk_amount = free_margin * (self.risk_per_trade_pct / 100.0) * confidence
         sl_distance = abs(entry_price - sl_price)
         if sl_distance == 0:
-            sl_distance = entry_price * 0.001   # защита от деления на ноль
+            sl_distance = entry_price * 0.001
 
         quantity = risk_amount / sl_distance
         leverage = self.max_leverage
 
-        # Kelly не используем в микро-режиме
-        if self._kelly_enabled and self._current_profile != 'Micro':
-            f = self._kelly_winrate - ((1 - self._kelly_winrate) / self._kelly_avg_win_loss_ratio)
-            quantity *= max(0.1, f)
+        # Микро-режим: гарантируем минимальную сумму сделки (5 USDT)
+        if self._current_profile == 'Micro':
+            min_position_value = 5.0  # минимальная стоимость позиции в USDT
+            min_qty_needed = min_position_value / entry_price
+            if quantity < min_qty_needed:
+                quantity = min_qty_needed
+                logger.debug(f"Micro-mode: increased quantity to {quantity:.6f} to meet min position value {min_position_value} USDT")
 
         max_qty_by_margin = (free_margin * leverage) / entry_price
         if quantity > max_qty_by_margin:
@@ -171,17 +163,24 @@ class RiskManager:
             if min_qty > 0 and quantity < min_qty:
                 quantity = min_qty
 
-        # Дополнительная проверка: хватит ли маржи после округления?
         required_margin = (quantity * entry_price) / leverage
         if required_margin > free_margin:
             logger.warning(f"Insufficient margin: need {required_margin:.2f}, have {free_margin:.2f}")
-            return 0.0, 1
+            # В микро-режиме всё равно пробуем открыть с максимально возможным количеством
+            if self._current_profile == 'Micro':
+                quantity = (free_margin * leverage) / entry_price
+                quantity = round(quantity, 8)
+                if quantity <= 0:
+                    return 0.0, 1
+                logger.info(f"Micro-mode: adjusted quantity to {quantity} due to margin limit")
+            else:
+                return 0.0, 1
 
-        # Округляем до разумного количества знаков (чтобы не было 0.00000001)
         quantity = round(quantity, 8)
         if quantity <= 0:
             return 0.0, 1
 
+        logger.debug(f"Calculated position: qty={quantity}, lev={leverage}, margin={required_margin:.2f}")
         return quantity, leverage
 
     def get_atr_multipliers(self, symbol=None):

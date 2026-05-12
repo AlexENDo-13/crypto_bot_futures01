@@ -34,7 +34,7 @@
     "disabled_at": 1778524873.2403111
   },
   "MeanReversion": {
-    "weight": 1.018847323452927,
+    "weight": 1.0191346391471439,
     "trades": 5,
     "wins": 0,
     "total_pnl": 0.0,
@@ -93,7 +93,7 @@
     "disabled_at": 1778517024.1590161
   },
   "SmartPyramiding": {
-    "weight": 0.8990623217085231,
+    "weight": 0.8991006304677519,
     "trades": 7,
     "wins": 0,
     "total_pnl": 0.0,
